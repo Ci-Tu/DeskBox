@@ -225,13 +225,33 @@ public sealed partial class FileSurfaceContent
             }
         }
 
+        // A marquee spends most of its life not changing the selection: the
+        // pointer moves, the rectangle moves, but the same items stay inside it.
+        // Re-applying in that case would clear and re-add every item (one
+        // selection notification each) and walk the whole visual tree for
+        // visuals that are already correct.
+        var current = new HashSet<WidgetItem>(
+            listView.SelectedItems.OfType<WidgetItem>());
+        if (current.SetEquals(selected))
+        {
+            return;
+        }
+
         _isSynchronizingSelection = true;
         try
         {
-            listView.SelectedItems.Clear();
+            // Only the delta is touched, so crossing a few items costs a few
+            // notifications instead of one per item per pointer move.
+            foreach (WidgetItem item in current
+                         .Where(item => !selected.Contains(item))
+                         .ToArray())
+            {
+                listView.SelectedItems.Remove(item);
+            }
+
             foreach (WidgetItem item in listView.Items
                          .OfType<WidgetItem>()
-                         .Where(selected.Contains))
+                         .Where(item => selected.Contains(item) && !current.Contains(item)))
             {
                 listView.SelectedItems.Add(item);
             }
