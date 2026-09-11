@@ -1037,6 +1037,14 @@ public partial class App : Application
             _displayAreaWatcher = new DisplayAreaWatcherService(UiDispatcherQueue);
             _displayAreaWatcher.DisplaysChanged += OnDisplaysChanged;
             _displayAreaWatcher.Start();
+            if (_trayWindow is not null)
+            {
+                // The tray window outlives every widget window, so subscribing
+                // there is what retires the fallback poll. This runs after the
+                // recovery watcher's own attach, which is earlier in startup.
+                _displayAreaWatcher.AttachToMessageWindow(
+                    WindowNative.GetWindowHandle(_trayWindow));
+            }
             VirtualDisplayAdvisor.WarnIfPrimaryDisplayIsVirtual(
                 (titleKey, bodyKey) => ShowSettingsNotification(
                     titleKey,
