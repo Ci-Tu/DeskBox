@@ -1015,11 +1015,24 @@ public sealed partial class FileSurfaceContent :
             return;
         }
 
+        // The StorageItem broker call below is synchronous on the UI STA, and
+        // DragItemsStartingEventArgs carries no deferral to await it on. The
+        // drag path already bypasses the broker for .lnk payloads, so measure
+        // what it actually costs for ordinary files before restructuring this
+        // sequence; the number rides along on the existing protocol log.
+        long storageBrokerMs = 0;
+        var storageBrokerWatch = System.Diagnostics.Stopwatch.StartNew();
         if (!FileItemDragPackage.TryPrepare(
                 e.Data,
                 selectedItems,
                 WidgetId,
-                paths => _fileService.GetStorageItems(paths),
+                paths =>
+                {
+                    storageBrokerWatch.Restart();
+                    IReadOnlyList<IStorageItem> resolved = _fileService.GetStorageItems(paths);
+                    storageBrokerMs = storageBrokerWatch.ElapsedMilliseconds;
+                    return resolved;
+                },
                 paths => paths.Count == 1
                     ? Path.GetFileName(paths[0])
                     : paths.Count.ToString(),
@@ -1050,6 +1063,7 @@ public sealed partial class FileSurfaceContent :
             $"session={FormatDragSessionId(_activeDragSessionId)} " +
             $"kind=file popover={fromStackPopover} paths=" +
             $"{result.SourcePaths.Count} storage={result.HasStorageItems} " +
+            $"storageBrokerMs={storageBrokerMs} " +
             $"nativeShell={result.UsesNativeShellDataObject} requested=" +
             $"{e.Data.RequestedOperation} mode=" +
             $"{(sender is ListView ? "list" : "icons")} " +
