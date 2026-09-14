@@ -167,6 +167,7 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
         string temporaryPath = Path.Combine(
             Path.GetTempPath(),
             $"DeskBox-startup-{Guid.NewGuid():N}.xml");
+        SchtasksResult previousTask = RunSchtasks("/Query", "/TN", taskName, "/XML");
 
         try
         {
@@ -192,10 +193,24 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
                         ? $"The registered task could not be read back: {verificationReadError}"
                         : DescribePreferenceMismatch(verified, executablePath)
                     : LastError;
-                bool removedInvalidTask = TryDeleteTask(taskName, out string cleanupError);
-                LastError = removedInvalidTask
-                    ? verificationError
-                    : $"{verificationError} Cleanup also failed: {cleanupError}";
+                if (previousTask.ExitCode == 0)
+                {
+                    // An update must not destroy the previous registration if
+                    // Windows refuses or normalizes the replacement unexpectedly.
+                    File.WriteAllText(temporaryPath, previousTask.StandardOutput, Encoding.Unicode);
+                    SchtasksResult rollback = RunSchtasks(
+                        "/Create", "/TN", taskName, "/XML", temporaryPath, "/F");
+                    LastError = rollback.ExitCode == 0
+                        ? $"{verificationError} Previous task restored."
+                        : $"{verificationError} {FormatFailure("restore", rollback)}";
+                }
+                else
+                {
+                    bool removedInvalidTask = TryDeleteTask(taskName, out string cleanupError);
+                    LastError = removedInvalidTask
+                        ? verificationError
+                        : $"{verificationError} Cleanup also failed: {cleanupError}";
+                }
                 return false;
             }
 
@@ -445,7 +460,8 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             runLevel,
             priority,
             // Enabled=true is also commonly omitted from exported XML.
-            BooleanValue(settings, ns, "Enabled", defaultValue: true),
+            BooleanValue(settings, ns, "Enabled", defaultValue: true) &&
+                BooleanValue(trigger, ns, "Enabled", defaultValue: true),
             Value(settings, ns, "ExecutionTimeLimit"),
             Value(settings, ns, "MultipleInstancesPolicy"),
             BooleanValue(settings, ns, "StartWhenAvailable"),

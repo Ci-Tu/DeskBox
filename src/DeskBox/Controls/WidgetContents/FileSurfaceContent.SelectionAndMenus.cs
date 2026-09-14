@@ -160,8 +160,15 @@ public sealed partial class FileSurfaceContent
         }
     }
 
-    private void HandleItemsPointerCaptureLost(ListViewBase listView) =>
+    private void HandleItemsPointerCaptureLost(ListViewBase listView)
+    {
         FinishBoxSelection(listView);
+        // Capture loss ends the gesture that staged the drag snapshot. A
+        // stale snapshot keeps the deactivation selection clear guarded
+        // (it reads as an active drag) exactly when the app opened from a
+        // mid-press double-click has just taken the foreground away.
+        _pendingPointerDragItems = [];
+    }
 
     private bool CanStartBoxSelection(object? originalSource)
     {
@@ -338,6 +345,29 @@ public sealed partial class FileSurfaceContent
         _stackPopoverItemsView?.SelectedItems.Clear();
         UpdateSelectionCommandBar();
         RefreshItemSelectionVisuals();
+    }
+
+    private void RegisterOpenedItemSelectionSuppression(WidgetItem item)
+    {
+        _openedItemSelectionSuppression[item.Path] =
+            Environment.TickCount64 + OpenedSelectionSuppressionMs;
+    }
+
+    private bool IsOpenSelectionSuppressed(WidgetItem item)
+    {
+        if (_openedItemSelectionSuppression.TryGetValue(
+                item.Path,
+                out long until))
+        {
+            if (Environment.TickCount64 < until)
+            {
+                return true;
+            }
+
+            _openedItemSelectionSuppression.Remove(item.Path);
+        }
+
+        return false;
     }
 
     private void ClearSelection() => ClearItemSelection();
@@ -1393,6 +1423,7 @@ public sealed partial class FileSurfaceContent
     {
         ResetBoxSelectionState();
         _pendingPointerDragItems = [];
+        _openedItemSelectionSuppression.Clear();
         _pressedStack = null;
         _stackPointerDragStarted = false;
         ItemsGrid.SelectedItems.Clear();

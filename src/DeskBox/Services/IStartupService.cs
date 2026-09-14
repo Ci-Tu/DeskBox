@@ -7,7 +7,8 @@ public enum StartupRegistrationState
     NotRegistered,
     PathMismatch,
     Pending,
-    BlockedOrFailed
+    BlockedOrFailed,
+    DisabledByTaskScheduler
 }
 
 public sealed record StartupOperationResult(

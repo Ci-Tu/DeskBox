@@ -44,7 +44,7 @@ public sealed partial class DesktopOrganizationTransaction
         try
         {
             if (HasPendingRecovery)
-                throw new InvalidOperationException("A pending desktop operation must be recovered first.");
+                throw new DesktopOrganizationPendingRecoveryException();
             ValidatePlan(plan);
             ValidateAvailableSpace(plan);
 
@@ -302,31 +302,58 @@ public sealed partial class DesktopOrganizationTransaction
         }
     }
 
-    private static void ValidateAvailableSpace(DesktopOrganizationPlan plan)
+    internal const long FreeSpaceSafetyMarginBytes = 16L * 1024 * 1024;
+
+    internal static void ValidateAvailableSpace(
+        DesktopOrganizationPlan plan,
+        Func<string, long>? availableFreeBytesProvider = null)
     {
-        foreach (var driveGroup in plan.Targets
+        foreach (var requirement in ComputeRequiredSpaceByDrive(plan))
+        {
+            long availableFreeBytes = availableFreeBytesProvider is not null
+                ? availableFreeBytesProvider(requirement.Key)
+                : new DriveInfo(requirement.Key).AvailableFreeSpace;
+            if (availableFreeBytes < requirement.Value + FreeSpaceSafetyMarginBytes)
+            {
+                throw new DesktopOrganizationInsufficientSpaceException(requirement.Key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A same-volume move is a metadata rename and consumes no additional
+    /// space; only items crossing volumes are charged against the target
+    /// drive. Directory sizes are not recursed (existing behavior).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, long> ComputeRequiredSpaceByDrive(
+        DesktopOrganizationPlan plan)
+    {
+        var requiredByDrive = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in plan.Targets
                      .SelectMany(target => target.Items.Select(item => new
                      {
                          Target = target.TargetDirectoryPath,
-                         item.Size
-                     }))
-                     .GroupBy(item => Path.GetPathRoot(Path.GetFullPath(item.Target)),
-                         StringComparer.OrdinalIgnoreCase))
+                         Snapshot = item
+                     })))
         {
-            if (string.IsNullOrWhiteSpace(driveGroup.Key) ||
-                driveGroup.Key.StartsWith(@"\\", StringComparison.Ordinal))
+            string? targetRoot = Path.GetPathRoot(Path.GetFullPath(entry.Target));
+            if (string.IsNullOrWhiteSpace(targetRoot) ||
+                targetRoot.StartsWith(@"\\", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var drive = new DriveInfo(driveGroup.Key);
-            long required = driveGroup.Sum(item => item.Size);
-            const long safetyMargin = 16L * 1024 * 1024;
-            if (drive.AvailableFreeSpace < required + safetyMargin)
+            string? sourceRoot = Path.GetPathRoot(Path.GetFullPath(entry.Snapshot.SourcePath));
+            if (string.Equals(targetRoot, sourceRoot, StringComparison.OrdinalIgnoreCase))
             {
-                throw new IOException($"There is not enough free space on {drive.Name}.");
+                continue;
             }
+
+            requiredByDrive.TryGetValue(targetRoot, out long current);
+            requiredByDrive[targetRoot] = current + entry.Snapshot.Size;
         }
+
+        return requiredByDrive;
     }
 
     private static void RevalidateSource(DesktopOrganizationFileSnapshot item)

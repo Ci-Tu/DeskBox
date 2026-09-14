@@ -883,6 +883,96 @@ public static partial class Win32Helper
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHOpenWithDialog(IntPtr hwndParent, ref OpenAsInfo openAsInfo);
 
+    private const uint AssocfNone = 0;
+    private const uint AssocstrCommand = 1;
+    private const uint HResultEPointer = 0x80004003;
+
+    [LibraryImport("shlwapi.dll", EntryPoint = "AssocQueryStringW", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint AssocQueryString(
+        uint flags,
+        uint assocStr,
+        string assoc,
+        string? extra,
+        [Out] char[] outcome,
+        ref uint cchOut);
+
+    /// <summary>
+    /// Whether the shell has a registered command for opening this path.
+    /// URIs dispatch by protocol and directories through Explorer itself, so
+    /// both count as associated. Unassociated files must not go through any
+    /// Shell dispatch: every dispatch path answers its own Open With picker
+    /// with a silent success, hiding a user dismissal as a launch.
+    /// </summary>
+    internal static bool HasShellOpenAssociation(string path)
+    {
+        if (Uri.TryCreate(path, UriKind.Absolute, out Uri? uri) && !uri.IsFile)
+        {
+            return true;
+        }
+
+        if (Directory.Exists(path))
+        {
+            return true;
+        }
+
+        // Shortcuts are dispatched by the Shell itself: the lnkfile class has
+        // no shell\open\command string, so the association query below always
+        // reports "no association" for .lnk and every shortcut would be sent
+        // to the Open With picker instead of launching (measured 2026-09-14).
+        if (string.Equals(
+                Path.GetExtension(path),
+                ".lnk",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string extension = Path.GetExtension(path);
+        if (string.IsNullOrEmpty(extension))
+        {
+            return false;
+        }
+
+        var buffer = new char[1024];
+        uint length = (uint)buffer.Length;
+        uint queryResult = AssocQueryString(
+            AssocfNone,
+            AssocstrCommand,
+            extension,
+            "open",
+            buffer,
+            ref length);
+        if (queryResult == HResultEPointer && length > (uint)buffer.Length)
+        {
+            buffer = new char[length];
+            queryResult = AssocQueryString(
+                AssocfNone,
+                AssocstrCommand,
+                extension,
+                "open",
+                buffer,
+                ref length);
+        }
+
+        if (queryResult != 0)
+        {
+            return false;
+        }
+
+        string command = new string(
+                buffer,
+                0,
+                (int)Math.Min(length, (uint)buffer.Length))
+            .TrimEnd('\0');
+        // Windows resolves every unknown extension to the generic OpenWith
+        // launcher with S_OK; that fallback IS the picker, not an
+        // association.
+        return !string.IsNullOrWhiteSpace(command) &&
+               command.IndexOf(
+                   "OpenWith.exe",
+                   StringComparison.OrdinalIgnoreCase) < 0;
+    }
+
     private const int ShcneRenameItem = 0x00000001;
     private const int ShcneUpdateDir = 0x00001000;
     private const uint ShcnfPathW = 0x0005;
@@ -1951,17 +2041,34 @@ public static partial class Win32Helper
         const int ErrorNoAssociation = 1155;
 
         string directory = ResolveShellLaunchDirectory(path);
+        // Which implementation and branch handled this open is the only way to
+        // tell "Windows accepted it" from "the app actually started" after the
+        // fact; the release build only ever runs the Rust implementation.
+        string explorerBackend =
+            ExplorerShellLaunchBackendPolicy.Current ==
+                ExplorerShellLaunchBackendMode.Rust
+                ? "rust"
+                : "csharp";
         if (ExplorerShellLaunchService.TryOpen(
                 path,
                 directory,
                 "open",
-                out string? explorerLaunchError))
+                out string? explorerLaunchError,
+                out ExplorerShellLaunchNativeCallResult? explorerLaunchResult))
         {
+            App.Log(
+                $"[OpenFile] backend=explorer-hosted implementation={explorerBackend} " +
+                $"path='{path}'" +
+                (explorerLaunchResult is { } native
+                    ? $" applicationHr=0x{native.ApplicationHResult:X8}" +
+                      $" executeHr=0x{native.ExecuteHResult:X8}"
+                    : string.Empty));
             return true;
         }
 
         App.Log(
             $"[OpenFile] Explorer-hosted launch unavailable for '{path}': " +
+            $"implementation={explorerBackend} " +
             $"{explorerLaunchError ?? "unknown error"}. Falling back to local ShellExecuteEx.");
 
         var startInfo = new ProcessStartInfo
@@ -1989,6 +2096,8 @@ public static partial class Win32Helper
         try
         {
             Process.Start(startInfo);
+            App.Log(
+                $"[OpenFile] backend=local-shell-execute path='{path}'");
             return true;
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorNoAssociation)
@@ -2003,22 +2112,7 @@ public static partial class Win32Helper
             // Offer the system "Open With" dialog with the real owner window so the user
             // can pick an app instead of getting a silent no-op.
             App.Log($"[OpenFile] No association for '{path}' (ERROR_NO_ASSOCIATION). Falling back to Open With.");
-
-            var openAsInfo = new OpenAsInfo
-            {
-                File = path,
-                Class = null,
-                Flags = OpenAsInfoFlags.AllowRegistration | OpenAsInfoFlags.Execute
-            };
-
-            int hResult = SHOpenWithDialog(ownerWindow, ref openAsInfo);
-            if (hResult < 0)
-            {
-                App.Log($"[OpenFile] Open With failed with HRESULT 0x{hResult:X8} for '{path}'");
-                return false;
-            }
-
-            return true;
+            return ShowOpenWithDialog(ownerWindow, path);
         }
         catch (Exception ex)
         {
@@ -2038,6 +2132,29 @@ public static partial class Win32Helper
                 Environment.SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", savedElectronRunAsNode);
             }
         }
+    }
+
+    private static bool ShowOpenWithDialog(IntPtr ownerWindow, string path)
+    {
+        // Offer the system "Open With" dialog with the real owner window so
+        // the user can pick an app instead of getting a silent no-op. A user
+        // dismissal returns S_OK on current Windows, so it is reported as
+        // handled: no reliable cancellation signal exists.
+        var openAsInfo = new OpenAsInfo
+        {
+            File = path,
+            Class = null,
+            Flags = OpenAsInfoFlags.AllowRegistration | OpenAsInfoFlags.Execute
+        };
+
+        int hResult = SHOpenWithDialog(ownerWindow, ref openAsInfo);
+        if (hResult < 0)
+        {
+            App.Log($"[OpenFile] Open With failed with HRESULT 0x{hResult:X8} for '{path}'");
+            return false;
+        }
+
+        return true;
     }
 
     internal static string ResolveShellLaunchDirectory(string path)

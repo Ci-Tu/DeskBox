@@ -13,7 +13,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void ProductionInventory_IsFrozenAtTwentyEightFilesAndSixtyFourCalls()
+    public void ProductionInventory_IsFrozenAtTwentyNineFilesAndSixtyEightCalls()
     {
         var expected = new Dictionary<string, int>(StringComparer.Ordinal)
         {
@@ -35,6 +35,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             ["src/DeskBox/Services/DeskBoxDataBackupService.cs"] = 11,
             ["src/DeskBox/Services/DeskBoxDiagnosticsBundleService.cs"] = 1,
             ["src/DeskBox/Services/DesktopOrganizationRecoveryStore.cs"] = 2,
+            ["src/DeskBox/Services/FeedbackService.cs"] = 4,
             ["src/DeskBox/Services/GlanceImageService.cs"] = 2,
             ["src/DeskBox/Services/GlanceWidgetStore.cs"] = 7,
             ["src/DeskBox/Services/LocalizationService.cs"] = 1,
@@ -64,8 +65,8 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             Assert.Equal(expectedCount, actual[path]);
         }
 
-        Assert.Equal(28, actual.Count);
-        Assert.Equal(64, actual.Values.Sum());
+        Assert.Equal(29, actual.Count);
+        Assert.Equal(68, actual.Values.Sum());
 
         string[] expectedContextOwners =
         [
@@ -85,6 +86,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             "src/DeskBox/Services/DeskBoxDataBackupService.cs",
             "src/DeskBox/Services/DeskBoxDiagnosticsBundleService.cs",
             "src/DeskBox/Services/DesktopOrganizationRecoveryStore.cs",
+            "src/DeskBox/Services/FeedbackService.cs",
             "src/DeskBox/Services/GlanceImageService.cs",
             "src/DeskBox/Services/GlanceWidgetStore.cs",
             "src/DeskBox/Services/LocalizationService.cs",
@@ -104,7 +106,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             .Order()
             .ToArray();
 
-        Assert.Equal(26, actualContextOwners.Length);
+        Assert.Equal(27, actualContextOwners.Length);
         Assert.Equal(expectedContextOwners, actualContextOwners);
     }
 

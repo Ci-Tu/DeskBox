@@ -3,6 +3,7 @@ using DeskBox.Models;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO.Enumeration;
 using System.Runtime.InteropServices;
 using Windows.Storage;
 using System.Collections.Concurrent;
@@ -82,7 +83,20 @@ public sealed partial class FileService
         long? FileSize,
         DateTime? CreatedAt,
         DateTime? LastModified,
-        int? FolderItemCount);
+        int? FolderItemCount,
+        bool IsFiltered = false);
+
+    /// <summary>
+    /// A source file that a directory move copied to the destination, with
+    /// its size and write time captured BEFORE the copy started. Cleanup may
+    /// only delete files whose current state still matches this record; a
+    /// mismatch means someone wrote to the source mid-move and aborts the
+    /// cleanup before anything is deleted.
+    /// </summary>
+    internal readonly record struct CopiedSourceFileRecord(
+        string SourceFilePath,
+        long Length,
+        DateTime LastWriteTimeUtc);
 
     public sealed record FileTransferPlan(string SourcePath, string DestinationPath);
 
@@ -105,6 +119,26 @@ public sealed partial class FileService
                 "not finish. The complete destination was kept to protect " +
                 "the data.",
                 innerException)
+        {
+            CompletedResults =
+            [
+                new FileTransferResult(sourcePath, destinationPath)
+            ];
+        }
+
+        public IReadOnlyList<FileTransferResult> CompletedResults { get; }
+    }
+
+    public sealed class FileTransferSourceChangedException : IOException,
+        IFileTransferWithCompletedResults
+    {
+        internal FileTransferSourceChangedException(
+            string sourcePath,
+            string destinationPath)
+            : base(
+                "The source folder changed while its files were being " +
+                "copied. Nothing was deleted; both copies were kept to " +
+                "protect the data.")
         {
             CompletedResults =
             [
@@ -225,52 +259,40 @@ public sealed partial class FileService
         bool loadIcons = false,
         bool loadFolderItemCounts = false)
     {
-        FolderPathSnapshot before = await CaptureDirectChildSnapshotAsync(directoryPath);
-        if (!FolderSnapshotStatusPolicy.IsSuccessful(before.Status))
+        if (!TryResolveExistingPathForTraversal(directoryPath, out string normalizedRoot))
         {
-            return new FolderEnumerationResult(before.Status, []);
+            return new FolderEnumerationResult(FolderSnapshotStatus.Unavailable, []);
         }
 
-        var entries = new List<FileSystemEntrySnapshot>();
-        bool partial = false;
-        foreach (string path in before.Paths)
+        // One directory-stream pass returns names, attributes, sizes, and
+        // timestamps together on NTFS. The previous implementation listed
+        // bare paths first and then re-stat'ed every entry five to six times,
+        // which dominated large-folder load time (measured ~226 ms for 2088
+        // items, roughly 0.1 ms per item).
+        (List<FileSystemEntrySnapshot> Entries, FolderSnapshotStatus Status) enumeration =
+            await Task.Run(() => EnumerateSnapshotsFromDirectoryStream(
+                normalizedRoot,
+                loadFolderItemCounts));
+        if (!FolderSnapshotStatusPolicy.IsSuccessful(enumeration.Status))
         {
-            FolderEntryRefreshStatus state = ClassifyDirectChild(before, path);
-            if (state is FolderEntryRefreshStatus.Unavailable or
-                FolderEntryRefreshStatus.AccessDenied ||
-                state == FolderEntryRefreshStatus.NotFound)
-            {
-                partial = true;
-                continue;
-            }
-
-            if (state == FolderEntryRefreshStatus.Filtered)
-            {
-                continue;
-            }
-
-            FileSystemEntrySnapshot? entry = TryCreateEntrySnapshot(path, loadFolderItemCounts);
-            if (entry is null)
-            {
-                // The entry changed between the root snapshot and metadata read.
-                // Treat that as an incomplete view instead of silently deleting it.
-                partial = true;
-                continue;
-            }
-
-            entries.Add(entry);
+            return new FolderEnumerationResult(enumeration.Status, []);
         }
 
+        // Stability pass, same contract as before: entries that changed
+        // between the two passes mark the view partial instead of silently
+        // showing a torn snapshot. Both sets are unfiltered; hidden entries
+        // participate in the comparison and are dropped when items build.
         FolderPathSnapshot after = await CaptureDirectChildSnapshotAsync(directoryPath);
-        if (!FolderSnapshotStatusPolicy.IsSuccessful(after.Status) ||
-            !before.Paths.SetEquals(after.Paths))
-        {
-            partial = true;
-        }
+        bool partial =
+            !FolderSnapshotStatusPolicy.IsSuccessful(after.Status) ||
+            !enumeration.Entries.Select(entry => entry.Path)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(after.Paths);
 
-        var items = new List<WidgetItem>(entries.Count);
+        var items = new List<WidgetItem>(enumeration.Entries.Count);
         int sortOrder = 0;
-        foreach (FileSystemEntrySnapshot entry in entries
+        foreach (FileSystemEntrySnapshot entry in enumeration.Entries
+                     .Where(entry => !entry.IsFiltered)
                      .OrderBy(entry => !entry.IsFolder)
                      .ThenBy(entry => entry.Name, NaturalStringComparer.CurrentCultureIgnoreCase))
         {
@@ -294,6 +316,117 @@ public sealed partial class FileService
         return new FolderEnumerationResult(
             status,
             items);
+    }
+
+    /// <summary>
+    /// Materializes direct-child snapshots from a single NTFS directory
+    /// stream. The stream already carries attributes, sizes, and timestamps,
+    /// so no per-entry re-stat is needed for files. Folders keep the previous
+    /// per-folder stat behavior (junction-resolved timestamps and, when
+    /// requested, child counts), which is why they are re-read here — folders
+    /// are a small minority of a large directory.
+    /// </summary>
+    private static (List<FileSystemEntrySnapshot> Entries, FolderSnapshotStatus Status)
+        EnumerateSnapshotsFromDirectoryStream(
+            string normalizedRoot,
+            bool loadFolderItemCounts)
+    {
+        var entries = new List<FileSystemEntrySnapshot>();
+        try
+        {
+            var enumerable = new FileSystemEnumerable<FileSystemEntrySnapshot>(
+                normalizedRoot,
+                (ref FileSystemEntry entry) =>
+                {
+                    bool isFolder = entry.IsDirectory;
+                    string fullPath = entry.ToFullPath();
+                    string fileName = entry.FileName.ToString();
+                    // Hidden entries and desktop.ini stay in the snapshot so
+                    // the stability pass compares like-for-like path sets
+                    // (the plain re-enumeration does not filter); they are
+                    // dropped when the visible item list is built.
+                    // Stale Steam game shortcuts (.url whose game is
+                    // uninstalled) are deliberately NOT filtered: opening
+                    // them launches Steam's install flow, so they remain
+                    // useful and must stay visible in the box.
+                    bool isFiltered =
+                        entry.Attributes.HasFlag(System.IO.FileAttributes.Hidden) ||
+                        entry.FileName.Equals(
+                            "desktop.ini",
+                            StringComparison.OrdinalIgnoreCase);
+                    return new FileSystemEntrySnapshot(
+                        fullPath,
+                        isFolder
+                            ? fileName
+                            : Path.GetFileNameWithoutExtension(fileName),
+                        isFolder,
+                        ShortcutHelper.IsShortcutPath(fullPath),
+                        isFolder ? null : entry.Length,
+                        entry.CreationTimeUtc.LocalDateTime,
+                        entry.LastWriteTimeUtc.LocalDateTime,
+                        null,
+                        isFiltered);
+                },
+                new EnumerationOptions
+                {
+                    RecurseSubdirectories = false,
+                    // An unreadable entry is tolerated; the stability pass
+                    // still reports it as reduced visibility via Partial.
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = System.IO.FileAttributes.None,
+                    ReturnSpecialDirectories = false,
+                });
+
+            foreach (FileSystemEntrySnapshot entry in enumerable)
+            {
+                entries.Add(entry);
+            }
+
+            for (int index = 0; index < entries.Count; index++)
+            {
+                FileSystemEntrySnapshot entry = entries[index];
+                if (!entry.IsFolder || entry.IsFiltered)
+                {
+                    continue;
+                }
+
+                string folderAccessPath = entry.Path;
+                _ = TryResolveExistingPathForTraversal(entry.Path, out folderAccessPath);
+                try
+                {
+                    int? folderItemCount = loadFolderItemCounts
+                        ? CountVisibleChildren(folderAccessPath)
+                        : null;
+                    entries[index] = entry with
+                    {
+                        FolderItemCount = folderItemCount,
+                        CreatedAt = Directory.GetCreationTime(folderAccessPath),
+                        LastModified = Directory.GetLastWriteTime(folderAccessPath),
+                    };
+                }
+                catch
+                {
+                    entries[index] = entry with
+                    {
+                        FolderItemCount = loadFolderItemCounts ? 0 : null,
+                    };
+                }
+            }
+
+            return (entries, FolderSnapshotStatus.SuccessWithItems);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return (entries, FolderSnapshotStatus.AccessDenied);
+        }
+        catch (System.Security.SecurityException)
+        {
+            return (entries, FolderSnapshotStatus.AccessDenied);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            return (entries, FolderSnapshotStatus.Unavailable);
+        }
     }
 
     internal static Task<FolderPathSnapshot> CaptureDirectChildSnapshotAsync(string directoryPath)
@@ -369,10 +502,11 @@ public sealed partial class FileService
         {
             string name = Path.GetFileName(normalizedPath);
             System.IO.FileAttributes attributes = File.GetAttributes(normalizedPath);
+            // Stale Steam game shortcuts (.url whose game is uninstalled) are
+            // deliberately NOT filtered: opening them launches Steam's install
+            // flow, so they remain useful and must stay visible in the box.
             if (name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) ||
-                (attributes & System.IO.FileAttributes.Hidden) != 0 ||
-                (Path.GetExtension(normalizedPath).Equals(".url", StringComparison.OrdinalIgnoreCase) &&
-                 IsDeadSteamShortcut(normalizedPath)))
+                (attributes & System.IO.FileAttributes.Hidden) != 0)
             {
                 return FolderEntryRefreshStatus.Filtered;
             }
@@ -537,13 +671,6 @@ public sealed partial class FileService
     private static FileSystemEntrySnapshot? TryCreateEntrySnapshot(string path, bool loadFolderItemCount)
     {
         if (!ShouldDisplayEntry(path))
-        {
-            return null;
-        }
-
-        // Filter out dead Steam game shortcuts (game uninstalled but .url remains).
-        if (Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase) &&
-            IsDeadSteamShortcut(path))
         {
             return null;
         }
@@ -2289,14 +2416,23 @@ public sealed partial class FileService
         // Keep the source tree intact until a complete destination tree exists.
         // A recursive child-by-child move can leave an untracked split tree if
         // deleting a source directory fails after its children were moved.
-        await CopyDirectoryAsync(sourceDirectory, destinationDirectory);
+        var copiedSourceFiles = new List<CopiedSourceFileRecord>();
+        await CopyDirectoryAsync(
+            sourceDirectory,
+            destinationDirectory,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            copiedSourceFiles);
         try
         {
             await Task.Run(
-                () => Directory.Delete(sourceDirectory, recursive: true));
+                () => DeleteSourceTreeByManifest(
+                    sourceDirectory,
+                    destinationDirectory,
+                    copiedSourceFiles));
         }
         catch (Exception ex) when (
-            ex is UnauthorizedAccessException or IOException)
+            ex is UnauthorizedAccessException or
+                (IOException and not FileTransferSourceChangedException))
         {
             App.Log(
                 $"[FileTransfer] Directory copy completed but source cleanup " +
@@ -2306,6 +2442,227 @@ public sealed partial class FileService
                 sourceDirectory,
                 destinationDirectory,
                 ex);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a moved directory's source tree strictly against the manifest
+    /// of files that were copied to the destination. The current source tree
+    /// must match the manifest exactly: a file that appeared, disappeared, or
+    /// changed after the copy aborts the whole cleanup with
+    /// <see cref="FileTransferSourceChangedException"/> before anything is
+    /// deleted, so a concurrent writer can never lose data. Read-only files
+    /// are cleared before their delete and restored when it fails, matching
+    /// the single-file move path.
+    /// </summary>
+    internal static void DeleteSourceTreeByManifest(
+        string sourceDirectory,
+        string destinationDirectory,
+        IReadOnlyList<CopiedSourceFileRecord> copiedFiles)
+    {
+        var manifest = new Dictionary<string, CopiedSourceFileRecord>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (CopiedSourceFileRecord record in copiedFiles)
+        {
+            manifest[record.SourceFilePath] = record;
+        }
+
+        int currentFileCount = 0;
+        foreach (string filePath in Directory.EnumerateFiles(
+                     sourceDirectory,
+                     "*",
+                     SearchOption.AllDirectories))
+        {
+            currentFileCount++;
+            if (!manifest.TryGetValue(filePath, out CopiedSourceFileRecord record))
+            {
+                throw new FileTransferSourceChangedException(
+                    sourceDirectory,
+                    destinationDirectory);
+            }
+
+            var currentInfo = new FileInfo(filePath);
+            if (!currentInfo.Exists ||
+                currentInfo.Length != record.Length ||
+                currentInfo.LastWriteTimeUtc != record.LastWriteTimeUtc)
+            {
+                throw new FileTransferSourceChangedException(
+                    sourceDirectory,
+                    destinationDirectory);
+            }
+        }
+
+        if (currentFileCount != manifest.Count)
+        {
+            // Every remaining file matched, so a manifest entry is gone: the
+            // source was manipulated during the copy. Fail closed.
+            throw new FileTransferSourceChangedException(
+                sourceDirectory,
+                destinationDirectory);
+        }
+
+        foreach (CopiedSourceFileRecord record in copiedFiles)
+        {
+            string filePath = record.SourceFilePath;
+            if (!File.Exists(filePath))
+            {
+                throw new IOException(
+                    $"The copied source file disappeared before cleanup: '{filePath}'");
+            }
+
+            System.IO.FileAttributes originalAttributes = File.GetAttributes(filePath);
+            bool clearedReadOnly = originalAttributes.HasFlag(System.IO.FileAttributes.ReadOnly);
+            if (clearedReadOnly)
+            {
+                File.SetAttributes(
+                    filePath,
+                    originalAttributes & ~System.IO.FileAttributes.ReadOnly);
+            }
+
+            try
+            {
+                File.Delete(filePath);
+            }
+            catch
+            {
+                if (clearedReadOnly && File.Exists(filePath))
+                {
+                    File.SetAttributes(filePath, originalAttributes);
+                }
+
+                throw;
+            }
+        }
+
+        // Empty directories (original and newly created ones alike) are safe
+        // to remove: a non-empty directory fails the non-recursive delete, so
+        // unmanifested content can only survive, never disappear.
+        foreach (string directory in Directory.EnumerateDirectories(
+                     sourceDirectory,
+                     "*",
+                     SearchOption.AllDirectories)
+                     .OrderByDescending(path => path.Length))
+        {
+            Directory.Delete(directory, recursive: false);
+        }
+
+        Directory.Delete(sourceDirectory, recursive: false);
+    }
+
+    /// <summary>
+    /// Captures the current file manifest of a directory tree. Used by
+    /// best-effort deletions of DeskBox-owned copies, where "everything that
+    /// is there right now" is the exact set to remove.
+    /// </summary>
+    internal static List<CopiedSourceFileRecord> CollectCurrentFileManifest(
+        string directoryPath)
+    {
+        var records = new List<CopiedSourceFileRecord>();
+        foreach (string filePath in Directory.EnumerateFiles(
+                     directoryPath,
+                     "*",
+                     SearchOption.AllDirectories))
+        {
+            var info = new FileInfo(filePath);
+            records.Add(new CopiedSourceFileRecord(
+                filePath,
+                info.Length,
+                info.LastWriteTimeUtc));
+        }
+
+        return records;
+    }
+
+    /// <summary>
+    /// Restores a migrated directory copy back to its original location
+    /// without overwriting files that still exist there: a source twin may be
+    /// newer than the copy. Children whose original twin is gone are moved
+    /// back; children with an existing twin are removed from the copy. The
+    /// copy directory itself is deleted once it is fully restored.
+    /// </summary>
+    internal static async Task RestoreMigratedDirectoryPreservingExistingAsync(
+        string copiedDirectory,
+        string originalDirectory)
+    {
+        if (!Directory.Exists(copiedDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(originalDirectory);
+        var reporter = new TransferProgressReporter(progress: null, totalItems: 1);
+        foreach (string copiedChild in Directory.EnumerateFileSystemEntries(copiedDirectory).ToList())
+        {
+            string originalChild = Path.Combine(
+                originalDirectory,
+                Path.GetFileName(copiedChild));
+            try
+            {
+                if (File.Exists(originalChild) || Directory.Exists(originalChild))
+                {
+                    if (File.Exists(copiedChild))
+                    {
+                        DeleteSourceFileAfterCopy(
+                            copiedChild,
+                            File.GetAttributes(copiedChild));
+                    }
+                    else
+                    {
+                        await DeleteDirectoryTreeBestEffortAsync(copiedChild);
+                    }
+                }
+                else
+                {
+                    await MoveEntryWithProgressAsync(
+                        copiedChild,
+                        originalChild,
+                        estimate: null,
+                        reporter,
+                        CancellationToken.None);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log(
+                    $"[FileTransfer] Migration merge-back skipped " +
+                    $"'{copiedChild}' -> '{originalChild}': {ex.Message}");
+            }
+        }
+
+        if (Directory.Exists(copiedDirectory) &&
+            !Directory.EnumerateFileSystemEntries(copiedDirectory).Any())
+        {
+            Directory.Delete(copiedDirectory, recursive: false);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a DeskBox-owned directory copy as best effort: read-only
+    /// attributes are cleared, failures are logged, and the tree is only
+    /// ever removed file-by-file against its current manifest.
+    /// </summary>
+    internal static async Task DeleteDirectoryTreeBestEffortAsync(string directoryPath)
+    {
+        try
+        {
+            await Task.Run(() =>
+            {
+                if (!Directory.Exists(directoryPath))
+                {
+                    return;
+                }
+
+                DeleteSourceTreeByManifest(
+                    directoryPath,
+                    directoryPath,
+                    CollectCurrentFileManifest(directoryPath));
+            });
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[FileTransfer] Best-effort delete failed for " +
+                $"'{directoryPath}': {ex.Message}");
         }
     }
 
@@ -2377,8 +2734,23 @@ public sealed partial class FileService
     public enum OpenItemResult
     {
         OpenedOrHandled,
+
+        /// <summary>
+        /// The shortcut's stored target is missing, so the link was handed to
+        /// Windows instead of being launched. Nothing was opened here, which is
+        /// why this is not folded into <see cref="OpenedOrHandled"/>.
+        /// </summary>
+        ShortcutTargetMissing,
         ShortcutDeleted,
         Busy,
+
+        /// <summary>
+        /// No shell association exists for this item, so any Shell dispatch
+        /// would spawn its own picker and report a dismissal as a silent
+        /// success. The caller must show an observable picker instead.
+        /// </summary>
+        RequiresOpenWithPicker,
+
         Failed
     }
 
@@ -2400,13 +2772,15 @@ public sealed partial class FileService
         return CopyDirectoryAsync(
             sourceDirectory,
             destinationDirectory,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new List<CopiedSourceFileRecord>());
     }
 
     private static async Task CopyDirectoryAsync(
         string sourceDirectory,
         string destinationDirectory,
-        ISet<string> visitedSourceDirectories)
+        ISet<string> visitedSourceDirectories,
+        List<CopiedSourceFileRecord> copiedSourceFiles)
     {
         EnsureSafeRecursiveDirectoryCopy(
             sourceDirectory,
@@ -2420,7 +2794,17 @@ public sealed partial class FileService
             foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
             {
                 string destinationFilePath = GetAvailableDestinationPath(destinationDirectory, Path.GetFileName(filePath));
+                // Capture the pre-copy state: a mismatch during cleanup means
+                // the file changed while it was being copied. FileInfo stats
+                // lazily on first property access, so read both values now.
+                var sourceInfo = new FileInfo(filePath);
+                long sourceLength = sourceInfo.Length;
+                DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
                 await CopyEntryAsync(filePath, destinationFilePath);
+                copiedSourceFiles.Add(new CopiedSourceFileRecord(
+                    filePath,
+                    sourceLength,
+                    sourceLastWriteUtc));
                 completedChildOperations.Add(new TransferOperation(filePath, destinationFilePath));
             }
 
@@ -2431,7 +2815,8 @@ public sealed partial class FileService
                 await CopyDirectoryAsync(
                     subDirectory,
                     destinationSubDirectory,
-                    visitedSourceDirectories);
+                    visitedSourceDirectories,
+                    copiedSourceFiles);
                 completedChildOperations.Add(new TransferOperation(subDirectory, destinationSubDirectory));
             }
         }
@@ -2479,6 +2864,30 @@ public sealed partial class FileService
     private static extern int SHFileOperation(ref ShFileOperation fileOperation);
 
     // ─── Steam dead-shortcut detection ───────────────────────────────────
+
+    /// <summary>
+    /// True when the path is a Steam game shortcut (.url) whose game is no
+    /// longer installed. This is NOT a display filter: since 2026-09-13 such
+    /// shortcuts stay visible because opening them launches Steam's install
+    /// flow. The detection is kept as a data source for future organize-mode
+    /// cleanup suggestions ("N shortcuts of uninstalled games were found").
+    /// </summary>
+    internal static bool IsDeadSteamShortcutUrl(string path)
+    {
+        return Path.GetExtension(path).Equals(".url", StringComparison.OrdinalIgnoreCase) &&
+            IsDeadSteamShortcut(path);
+    }
+
+    /// <summary>
+    /// True when a widget item list can never display this path: missing
+    /// entries, desktop.ini, and hidden attributes are excluded by folder
+    /// enumeration and watcher refreshes. Steam .url shortcuts - even for
+    /// uninstalled games - are always displayable.
+    /// </summary>
+    internal static bool IsFilteredFromWidgetDisplay(string path)
+    {
+        return !ShouldDisplayEntry(path);
+    }
 
     private static readonly object s_steamLibLock = new();
     private static SteamLibrarySnapshot? s_steamLibrarySnapshot;

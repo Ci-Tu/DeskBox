@@ -558,7 +558,8 @@ public sealed partial class FileService
             destinationDirectory,
             reporter,
             cancellationToken,
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new List<CopiedSourceFileRecord>());
     }
 
     private static async Task CopyDirectoryWithProgressAsync(
@@ -566,7 +567,8 @@ public sealed partial class FileService
         string destinationDirectory,
         TransferProgressReporter reporter,
         CancellationToken cancellationToken,
-        ISet<string> visitedSourceDirectories)
+        ISet<string> visitedSourceDirectories,
+        List<CopiedSourceFileRecord> copiedSourceFiles)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureSafeRecursiveDirectoryCopy(
@@ -583,11 +585,21 @@ public sealed partial class FileService
                 string destinationFilePath = GetAvailableDestinationPath(
                     destinationDirectory,
                     Path.GetFileName(filePath));
+                // Capture the pre-copy state: a mismatch during cleanup means
+                // the file changed while it was being copied. FileInfo stats
+                // lazily on first property access, so read both values now.
+                var sourceInfo = new FileInfo(filePath);
+                long sourceLength = sourceInfo.Length;
+                DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
                 await CopyFileWithProgressAsync(
                     filePath,
                     destinationFilePath,
                     reporter,
                     cancellationToken);
+                copiedSourceFiles.Add(new CopiedSourceFileRecord(
+                    filePath,
+                    sourceLength,
+                    sourceLastWriteUtc));
                 completedChildOperations.Add(
                     new TransferOperation(filePath, destinationFilePath));
             }
@@ -603,7 +615,8 @@ public sealed partial class FileService
                     destinationSubDirectory,
                     reporter,
                     cancellationToken,
-                    visitedSourceDirectories);
+                    visitedSourceDirectories,
+                    copiedSourceFiles);
                 completedChildOperations.Add(
                     new TransferOperation(subDirectory, destinationSubDirectory));
             }
@@ -665,11 +678,14 @@ public sealed partial class FileService
         // while deleting an empty source directory split the tree between the
         // source and destination. Copy-first guarantees that every source
         // byte still exists in at least one complete tree.
+        var copiedSourceFiles = new List<CopiedSourceFileRecord>();
         await CopyDirectoryWithProgressAsync(
             sourceDirectory,
             destinationDirectory,
             reporter,
-            cancellationToken);
+            cancellationToken,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            copiedSourceFiles);
         if (cancellationToken.IsCancellationRequested)
         {
             // The destination is already complete while the source is still
@@ -684,11 +700,15 @@ public sealed partial class FileService
         try
         {
             await Task.Run(
-                () => Directory.Delete(sourceDirectory, recursive: true),
+                () => DeleteSourceTreeByManifest(
+                    sourceDirectory,
+                    destinationDirectory,
+                    copiedSourceFiles),
                 CancellationToken.None);
         }
         catch (Exception ex) when (
-            ex is UnauthorizedAccessException or IOException)
+            ex is UnauthorizedAccessException or
+                (IOException and not FileTransferSourceChangedException))
         {
             App.Log(
                 $"[FileTransfer] Directory copy completed but source cleanup " +

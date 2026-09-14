@@ -749,45 +749,92 @@ public partial class App
 
     internal async Task CreateFolderWidgetFromPickerAsync()
     {
-        if (WidgetManager is null)
-        {
-            return;
-        }
-
         string? folderPath = await FolderPickerService.PickFolderAsync(
             GetFolderPickerOwnerWindowHandle());
         if (!string.IsNullOrWhiteSpace(folderPath))
         {
+            await TryCreateFolderWidgetAsync(folderPath);
+        }
+    }
+
+    /// <summary>
+    /// Creates a mapped widget, or resolves a path conflict visibly: the
+    /// conflicting widget is revealed, or the storage settings open. A toast
+    /// alone was easy to miss and left users thinking mapping was broken.
+    /// </summary>
+    internal async Task TryCreateFolderWidgetAsync(string folderPath)
+    {
+        if (WidgetManager is not { } widgetManager)
+        {
+            return;
+        }
+
+        if (widgetManager.TryGetFileWidgetPathConflict(folderPath, out FileWidgetPathConflict? conflict) &&
+            conflict is not null)
+        {
+            await HandleFolderMappingConflictAsync(conflict);
+            return;
+        }
+
+        try
+        {
+            await widgetManager.CreateFolderWidgetAsync(folderPath);
+        }
+        catch (Exception ex)
+        {
+            ShowFolderMappingFailure(ex.Message);
+        }
+    }
+
+    private async Task HandleFolderMappingConflictAsync(FileWidgetPathConflict conflict)
+    {
+        if (conflict.Kind == FileWidgetPathConflictKind.ExistingWidget &&
+            conflict.ConflictingWidget is { } existing &&
+            WidgetManager is { } widgetManager)
+        {
+            ShowFolderMappingFailure(LocalizationService.Format(
+                "Widget.MapFolder.ConflictWidgetHint",
+                existing.Name));
             try
             {
-                await WidgetManager.CreateFolderWidgetAsync(folderPath);
+                await widgetManager.ShowWidgetAsync(existing.Id, reveal: true);
             }
             catch (Exception ex)
             {
-                string title = LocalizationService.T("Common.NewFolderMapping");
-                if (_nativeNotificationService?.TryShow(title, ex.Message) == true || _trayIcon is null)
-                {
-                    return;
-                }
-
-                try
-                {
-                    _trayIcon.ShowNotification(
-                        title,
-                        ex.Message,
-                        NotificationIcon.Info,
-                        customIconHandle: null,
-                        largeIcon: false,
-                        sound: false,
-                        respectQuietTime: true,
-                        realtime: false,
-                        timeout: TimeSpan.FromSeconds(7));
-                }
-                catch (Exception notificationException)
-                {
-                    Log($"[WidgetMapping] Failed to show path conflict: {notificationException.Message}");
-                }
+                Log($"[WidgetMapping] Could not reveal the conflicting widget: {ex.Message}");
             }
+
+            return;
+        }
+
+        ShowFolderMappingFailure(LocalizationService.T("Widget.MapFolder.ConflictRootHint"));
+        ShowSettings("FileStorageSettings");
+    }
+
+    private void ShowFolderMappingFailure(string message)
+    {
+        string title = LocalizationService.T("Common.NewFolderMapping");
+        if (_nativeNotificationService?.TryShow(title, message) == true || _trayIcon is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _trayIcon.ShowNotification(
+                title,
+                message,
+                NotificationIcon.Info,
+                customIconHandle: null,
+                largeIcon: false,
+                sound: false,
+                respectQuietTime: true,
+                realtime: false,
+                timeout: TimeSpan.FromSeconds(7));
+        }
+        catch (Exception notificationException)
+        {
+            Log($"[WidgetMapping] Failed to show path conflict: {notificationException.Message}");
         }
     }
 

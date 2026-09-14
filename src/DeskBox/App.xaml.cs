@@ -262,17 +262,9 @@ public partial class App : Application
         ResizeGuideOverlay = Services.GetRequiredService<ResizeGuideOverlayService>();
 
         StartupService.Configure(StartupServiceFactory.Create(DistributionService));
-        if (StartupService.Current is DirectStartupService directStartupService)
-        {
-            directStartupService.TryMigrateLegacyRegistration();
-        }
         AppUpdateService.CheckCompleted += OnUpdateCheckCompleted;
         UnhandledException += OnUnhandledException;
         Log($"Distribution channel={DistributionService.ChannelName} packaged={DistributionService.IsPackaged}");
-        Log($"Process integrity {GetProcessIntegrityReport()} pid={Environment.ProcessId} processPath={Environment.ProcessPath ?? "unknown"} baseDir={AppContext.BaseDirectory}");
-        Log($"Process parent {GetParentProcessReport()} commandLine={Environment.CommandLine}");
-        Log($"UAC {GetUacPolicyReport()}");
-        Log($"AppCompat {GetAppCompatReport()}");
     }
 
     private static string GetProcessIntegrityReport()
@@ -858,6 +850,23 @@ public partial class App : Application
 
     private bool _isLaunched;
 
+    private void ScheduleShellContextMenuPrewarm()
+    {
+        if (!SettingsService.Settings.FileItemSystemContextMenuEnabled)
+        {
+            return;
+        }
+
+        // Warm the native context-menu server in the background once startup
+        // work settles, so the first right-click in a widget does not pay the
+        // cold Shell handler-loading cost.
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            ShellContextMenuProxy.Prewarm();
+        });
+    }
+
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         if (_isLaunched)
@@ -884,6 +893,25 @@ public partial class App : Application
             UiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             WidgetSegmentedLayoutHelper.Initialize(UiDispatcherQueue);
 
+            // The diagnostic report walks a snapshot of every process on the
+            // machine plus several registry hives; none of it gates startup,
+            // so keep it off the UI thread's first-render path. The queued
+            // log writer is thread-safe.
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Log($"Process integrity {GetProcessIntegrityReport()} pid={Environment.ProcessId} processPath={Environment.ProcessPath ?? "unknown"} baseDir={AppContext.BaseDirectory}");
+                    Log($"Process parent {GetParentProcessReport()} commandLine={Environment.CommandLine}");
+                    Log($"UAC {GetUacPolicyReport()}");
+                    Log($"AppCompat {GetAppCompatReport()}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Startup diagnostics failed: {ex.Message}");
+                }
+            });
+
             // A prepared restore is applied before any service reads or normalizes app data.
             DeskBoxRestoreApplyResult restoreResult = await DataBackupService.ApplyPendingRestoreAsync();
             bool hadSettingsBeforeStartup = File.Exists(Path.Combine(
@@ -897,7 +925,16 @@ public partial class App : Application
             DataBackupService.UpdateAutomaticBackupOptions(
                 DataBackupSettingsPolicy.ReadStartupOptions(
                     Path.Combine(DeskBoxDataPathService.Current.DataDirectory, "settings.json")));
-            await DataBackupService.CreateAutomaticSnapshotIfDueAsync();
+            // The snapshot copy tolerates concurrent writers (per-file length
+            // and write-time stability checks with retries), so it runs
+            // alongside the early startup phases instead of gating the tray,
+            // theme, and settings load behind a full copy+zip of the data
+            // directory. It is awaited before the widget-restoration phase,
+            // whose normalization writes are the first bulk mutation of the
+            // session, so the captured snapshot still reflects the previous
+            // session.
+            Task<string?> startupAutomaticSnapshotTask =
+                DataBackupService.CreateAutomaticSnapshotIfDueAsync();
 
             // Phase 1: Load settings (must complete first)
             await SettingsService.LoadAsync();
@@ -949,6 +986,10 @@ public partial class App : Application
 
             WidgetManager = new WidgetManager(SettingsService, FileService, OrganizerService, themeService, quickCaptureService, localizationService);
             WidgetManager.TrayLayerStateChanged += UpdateTrayLayerStateText;
+            // Lets a quick-reveal raise promote already-open DeskBox surfaces
+            // (search popup, settings, desktop organization) above the raised
+            // widget group; the reverse order is handled per-window at show.
+            WidgetManager.AuxiliaryWindowProvider = GetRaisedBandAuxiliaryWindowHandles;
             DesktopDoubleClickActivationService = new DesktopDoubleClickActivationService(
                 SettingsService,
                 ToggleWidgetsFromDesktopDoubleClickAsync);
@@ -960,7 +1001,9 @@ public partial class App : Application
                     WidgetManager is null ||
                     await WidgetManager.RestoreWidgetPositionsAsync(generation, reasons));
 
-            // Phase 3: Restore widgets
+            // Phase 3: Restore widgets (the startup snapshot must finish
+            // before the restoration phase starts writing normalized state).
+            await startupAutomaticSnapshotTask;
             int recoveredDesktopItems = await new DesktopOrganizationTransaction(
                 SettingsService,
                 FileService).RecoverPendingAsync();
@@ -1000,6 +1043,7 @@ public partial class App : Application
             }
 
             InitializeGlobalHotkeyService(localizationService);
+            ScheduleShellContextMenuPrewarm();
 
             RefreshTodoReminderService();
             StartNativeNotificationService();
@@ -1072,6 +1116,17 @@ public partial class App : Application
             }
 
             Log("OnLaunched completed successfully");
+            // Startup registration does not gate the first usable widgets.
+            // DirectStartupService serializes migration with user toggle changes.
+            _ = Task.Run(() =>
+            {
+                if (StartupService.Current is DirectStartupService directStartupService)
+                {
+                    directStartupService.TryMigrateLegacyRegistration();
+                }
+
+                ApplyDefaultAutoStartOnce();
+            });
 #if DESKBOX_NATIVE_AOT && DESKBOX_AOT_SMOKE_HARNESS
             StartAotShortcutSmokeIfRequested();
             StartAotShellSmokeIfRequested();
@@ -1092,6 +1147,52 @@ public partial class App : Application
         catch (Exception ex)
         {
             Log($"Exception in OnLaunched: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// Applies the one-time autostart default. Runs off the UI thread because
+    /// registering the logon task shells out to schtasks; only the settings
+    /// write returns to the dispatcher. Development data roots (portable runs,
+    /// smoke harnesses) never touch the machine's startup registration.
+    /// </summary>
+    private void ApplyDefaultAutoStartOnce()
+    {
+        try
+        {
+            if (DeskBoxDataPathService.Current.IsDevelopmentRoot ||
+                !AutoStartDefaultPolicy.ShouldApply(SettingsService.Settings))
+            {
+                return;
+            }
+
+            StartupRegistrationState initialState = StartupService.Current.GetState();
+            StartupRegistrationState effective =
+                AutoStartDefaultPolicy.Resolve(StartupService.Current);
+            bool enabled = AutoStartDefaultPolicy.IsEnabledState(effective);
+
+            void Commit()
+            {
+                SettingsService.Settings.AutoStart = enabled;
+                SettingsService.Settings.AutoStartDefaultApplied = true;
+                SettingsService.SaveDebounced();
+            }
+
+            if (UiDispatcherQueue is { } dispatcher && !dispatcher.HasThreadAccess)
+            {
+                dispatcher.TryEnqueue(Commit);
+            }
+            else
+            {
+                Commit();
+            }
+
+            Log(
+                $"[AutoStart] One-time default applied: initial={initialState} effective={effective} mirror={enabled}");
+        }
+        catch (Exception ex)
+        {
+            Log($"[AutoStart] One-time default failed: {ex.Message}");
         }
     }
 
@@ -4286,6 +4387,7 @@ public partial class App : Application
             {
                 _searchHotkeyService = new SearchHotkeyService(
                     SettingsService,
+                    LocalizationService,
                     ToggleSearchPopupAsync);
                 if (_trayWindow is not null)
                 {
@@ -4502,6 +4604,27 @@ public partial class App : Application
         }
 
         // Everything is queried only after the user types and has explicitly enabled it.
+    }
+
+    private IReadOnlyList<IntPtr> GetRaisedBandAuxiliaryWindowHandles()
+    {
+        List<IntPtr> handles = new(3);
+        if (_settingsWindow is { IsVisibleToUser: true } settings)
+        {
+            handles.Add(WindowNative.GetWindowHandle(settings));
+        }
+
+        if (_searchPopupWindow is { IsPopupVisible: true } popup)
+        {
+            handles.Add(popup.WindowHandle);
+        }
+
+        if (_desktopOrganizationWindow is { } organize)
+        {
+            handles.Add(organize.WindowHandle);
+        }
+
+        return handles;
     }
 
     private void CreateSearchPopupWindow()

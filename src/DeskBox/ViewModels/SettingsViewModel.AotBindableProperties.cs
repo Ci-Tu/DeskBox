@@ -112,7 +112,6 @@ namespace DeskBox.ViewModels;
     nameof(ExistingWidgetGroupItems),
     nameof(ExistingWidgetGroupsEmptyVisibility),
     nameof(ExistingWidgetGroupsVisibility),
-    nameof(FeedbackEmailAddress),
     nameof(FileNameLineCount),
     nameof(FileNameWidthScale),
     nameof(FileNameWidthValueText),

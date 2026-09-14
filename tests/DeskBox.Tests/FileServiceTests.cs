@@ -1440,6 +1440,81 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task TryCreateWidgetItemAsync_ReturnsNullForHiddenEntry()
+    {
+        var service = new FileService();
+        string hiddenFile = Path.Combine(_tempRoot, "hidden.lnk");
+        File.WriteAllText(hiddenFile, "hidden");
+        File.SetAttributes(hiddenFile, File.GetAttributes(hiddenFile) | FileAttributes.Hidden);
+
+        // The import insert path must agree with folder enumeration: a hidden
+        // entry would otherwise be moved into managed storage while no tile
+        // can ever display it.
+        Assert.Null(await service.TryCreateWidgetItemAsync(hiddenFile));
+    }
+
+    [Fact]
+    public async Task TryCreateWidgetItemAsync_ReturnsItemForUrlShortcutsIncludingStaleSteamGames()
+    {
+        var service = new FileService();
+        string websiteUrl = Path.Combine(_tempRoot, "Website.url");
+        await File.WriteAllTextAsync(
+            websiteUrl,
+            "[InternetShortcut]\nURL=https://example.invalid/\n");
+        // A Steam game shortcut whose game is uninstalled must still display:
+        // opening it launches Steam's install flow, so it is never "dead"
+        // from the user's perspective. The app id is fake; the assertion
+        // holds regardless of this machine's Steam library state.
+        string steamGameUrl = Path.Combine(_tempRoot, "It Takes Two.url");
+        await File.WriteAllTextAsync(
+            steamGameUrl,
+            "[InternetShortcut]\nURL=steam://rungameid/999999999\n");
+
+        var websiteItem = await service.TryCreateWidgetItemAsync(
+            websiteUrl,
+            loadIcon: false,
+            loadFolderItemCount: false,
+            loadShortcutTarget: false);
+        var steamGameItem = await service.TryCreateWidgetItemAsync(
+            steamGameUrl,
+            loadIcon: false,
+            loadFolderItemCount: false,
+            loadShortcutTarget: false);
+
+        Assert.NotNull(websiteItem);
+        Assert.Equal(websiteUrl, websiteItem.Path);
+        Assert.NotNull(steamGameItem);
+        Assert.Equal(steamGameUrl, steamGameItem.Path);
+    }
+
+    [Fact]
+    public void IsFilteredFromWidgetDisplay_MatchesEnumerationFilters()
+    {
+        string visibleFile = Path.Combine(_tempRoot, "visible.txt");
+        string hiddenFile = Path.Combine(_tempRoot, "hidden.txt");
+        string desktopIni = Path.Combine(_tempRoot, "desktop.ini");
+        string missingFile = Path.Combine(_tempRoot, "missing.txt");
+        string websiteUrl = Path.Combine(_tempRoot, "Website.url");
+        string steamGameUrl = Path.Combine(_tempRoot, "Game.url");
+        File.WriteAllText(visibleFile, "visible");
+        File.WriteAllText(hiddenFile, "hidden");
+        File.WriteAllText(desktopIni, "ini");
+        File.SetAttributes(hiddenFile, File.GetAttributes(hiddenFile) | FileAttributes.Hidden);
+        File.WriteAllText(websiteUrl, "[InternetShortcut]\nURL=https://example.invalid/\n");
+        File.WriteAllText(
+            steamGameUrl,
+            "[InternetShortcut]\nURL=steam://rungameid/999999999\n");
+
+        Assert.False(FileService.IsFilteredFromWidgetDisplay(visibleFile));
+        Assert.True(FileService.IsFilteredFromWidgetDisplay(hiddenFile));
+        Assert.True(FileService.IsFilteredFromWidgetDisplay(desktopIni));
+        Assert.True(FileService.IsFilteredFromWidgetDisplay(missingFile));
+        Assert.False(FileService.IsFilteredFromWidgetDisplay(websiteUrl));
+        Assert.False(FileService.IsFilteredFromWidgetDisplay(steamGameUrl));
+        Assert.False(FileService.IsDeadSteamShortcutUrl(websiteUrl));
+    }
+
+    [Fact]
     public async Task CreateWidgetItemAsync_CanDeferBrokenShortcutTargetHydration()
     {
         var service = new FileService();

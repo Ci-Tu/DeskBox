@@ -102,6 +102,12 @@ public partial class SettingsViewModel
 
         _settingsService.Settings.FileItemSystemContextMenuEnabled = value;
         _settingsService.SaveDebounced();
+        if (value)
+        {
+            // Warm the native context-menu server so the first right-click in
+            // a widget does not pay the cold handler-loading cost.
+            ShellContextMenuProxy.Prewarm();
+        }
     }
 
     partial void OnResizeSnapEnabledChanged(bool value)

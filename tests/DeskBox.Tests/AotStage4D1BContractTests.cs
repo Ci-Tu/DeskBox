@@ -59,7 +59,7 @@ public sealed class AotStage4D1BContractTests
         // containers have no Header/Description property.
         IReadOnlyDictionary<string, int> usages = ReadLocalizedXamlUsages();
         Assert.Equal(10, usages.Count);
-        Assert.Equal(170, usages["toolkit:SettingsCard|HeaderKey"]);
+        Assert.Equal(171, usages["toolkit:SettingsCard|HeaderKey"]);
         Assert.Equal(142, usages["toolkit:SettingsCard|DescriptionKey"]);
         Assert.Equal(20, usages["toolkit:SettingsExpander|HeaderKey"]);
         Assert.Equal(7, usages["toolkit:SettingsExpander|DescriptionKey"]);
@@ -69,7 +69,7 @@ public sealed class AotStage4D1BContractTests
         Assert.Equal(1, usages["StackPanel|HeaderKey"]);
         Assert.Equal(1, usages["Expander|HeaderKey"]);
         Assert.Equal(1, usages["Expander|DescriptionKey"]);
-        Assert.Equal(347, usages.Values.Sum());
+        Assert.Equal(348, usages.Values.Sum());
     }
 
     [Fact]

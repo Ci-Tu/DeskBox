@@ -72,6 +72,27 @@ public partial class WidgetViewModel
 
         if (normalizedPaths.Count == 0)
         {
+            LastImportSkippedUndisplayableCount = 0;
+            return [];
+        }
+
+        // Entries the widget item list can never represent (hidden files)
+        // must not be moved into managed storage: the folder would hold an
+        // invisible file no tile can show. The probe does filesystem I/O, so
+        // partition off the dispatcher thread.
+        (List<string> displayablePaths, int skippedUndisplayableCount) =
+            await Task.Run(() => PartitionDisplayableImportPaths(normalizedPaths));
+        LastImportSkippedUndisplayableCount = skippedUndisplayableCount;
+        if (skippedUndisplayableCount > 0)
+        {
+            App.Log(
+                $"[Import] Refused undisplayable entries widget={Config.Id} " +
+                $"skipped={skippedUndisplayableCount} " +
+                $"requested={normalizedPaths.Count}");
+        }
+
+        if (displayablePaths.Count == 0)
+        {
             return [];
         }
 
@@ -89,7 +110,7 @@ public partial class WidgetViewModel
 
         string destinationFolderPath = CurrentFolderPath!;
         bool shouldMove = moveWhenMapped ?? ShouldMoveManagedItems(
-            normalizedPaths,
+            displayablePaths,
             destinationFolderPath);
         OrganizationHistoryEntry historyEntry;
         try
@@ -97,7 +118,7 @@ public partial class WidgetViewModel
             historyEntry = await _organizerService.OrganizeDropAsync(
                 Config,
                 Name,
-                normalizedPaths,
+                displayablePaths,
                 shouldMove,
                 useShellProgress,
                 ownerWindowHandle,
@@ -132,6 +153,34 @@ public partial class WidgetViewModel
             .Select(item => Path.GetFullPath(item.SourcePath))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    /// <summary>
+    /// Number of paths the most recent <see cref="ImportPathsAsync"/> call
+    /// refused because the widget item list can never display them. Import
+    /// surfaces read this to explain a short count instead of reporting
+    /// success for files that were never transferred.
+    /// </summary>
+    internal int LastImportSkippedUndisplayableCount { get; private set; }
+
+    private static (List<string> DisplayablePaths, int SkippedUndisplayableCount)
+        PartitionDisplayableImportPaths(IReadOnlyList<string> paths)
+    {
+        var displayablePaths = new List<string>(paths.Count);
+        int skippedCount = 0;
+        foreach (string path in paths)
+        {
+            if (FileService.IsFilteredFromWidgetDisplay(path))
+            {
+                skippedCount++;
+            }
+            else
+            {
+                displayablePaths.Add(path);
+            }
+        }
+
+        return (displayablePaths, skippedCount);
     }
 
     private async Task ApplyImportedTransferResultsAsync(
@@ -525,7 +574,18 @@ public partial class WidgetViewModel
             return false;
         }
 
+        var gateStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _folderRefreshGate.WaitAsync(cancellationToken);
+        gateStopwatch.Stop();
+        if (gateStopwatch.ElapsedMilliseconds > 300)
+        {
+            // A long gate wait means another load (usually a watcher-triggered
+            // full reload) still owned the folder while the user navigated.
+            App.Log(
+                $"[FolderLoad] Refresh gate waitMs={gateStopwatch.ElapsedMilliseconds} " +
+                $"path='{expectedFolderPath}'");
+        }
+
         try
         {
             cancellationToken.ThrowIfCancellationRequested();

@@ -48,7 +48,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private const string ShowDesktopBehaviorHideWithWindows = "HideWithWindows";
     private const string WeatherLocationModeAuto = "Auto";
     private const string WeatherLocationModeManual = "Manual";
-    private const string FeedbackEmail = "1047078635@qq.com";
     private const string RepositoryUrl = "https://github.com/Tianyu199509/DeskBox";
     private const string OfficialWebsiteUrl = "https://deskbox.fun";
     private const string MicrosoftStoreProductId = "9PBZSNB4D69H";
@@ -175,6 +174,8 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     {
         StartupRegistrationState.DisabledByUser =>
             _localizationService.T("Settings.AutoStart.WindowsDisabled"),
+        StartupRegistrationState.DisabledByTaskScheduler =>
+            _localizationService.T("Settings.AutoStart.TaskDisabled"),
         StartupRegistrationState.Pending =>
             _localizationService.T("Settings.AutoStart.Pending"),
         StartupRegistrationState.PathMismatch or
@@ -184,6 +185,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     };
     public Visibility AutoStartStatusVisibility =>
         _autoStartState is StartupRegistrationState.DisabledByUser or
+            StartupRegistrationState.DisabledByTaskScheduler or
             StartupRegistrationState.Pending or
             StartupRegistrationState.PathMismatch or
             StartupRegistrationState.BlockedOrFailed

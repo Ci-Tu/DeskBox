@@ -62,6 +62,12 @@ internal sealed class StackPopoverInlineRenameWindow : Window
             SystemBackdrop = _materialBackdrop;
         }
         Closed += (_, _) => _closed = true;
+        Activated += (_, args) => App.Log(
+            $"[DiagRename] Editor window activation={args.WindowActivationState}");
+        Editor.GotFocus += (_, _) =>
+            App.Log("[DiagRename] Editor GotFocus");
+        Editor.LostFocus += (_, _) =>
+            App.Log("[DiagRename] Editor LostFocus (raw)");
 
         WindowHandle = WindowNative.GetWindowHandle(this);
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(WindowHandle);
