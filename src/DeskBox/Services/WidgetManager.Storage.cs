@@ -341,9 +341,20 @@ public sealed partial class WidgetManager
 
             await _settingsService.SaveAsync();
             SyncStorageFolderEntries(oldRootPath);
-            if (App.Current?.ManagedStorageDesktopShortcutService is { } shortcutService)
+            try
             {
-                await shortcutService.SyncAsync(oldRootPath);
+                // The migration is already committed at this point; a
+                // desktop-shortcut sync failure (or a WinUI activation
+                // failure in a non-app test host, where Application.Current
+                // throws REGDB_E_CLASSNOTREG) must not roll it back.
+                if (App.Current?.ManagedStorageDesktopShortcutService is { } shortcutService)
+                {
+                    await shortcutService.SyncAsync(oldRootPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                App.Log($"[ManagedStorageMigration] Desktop shortcut sync skipped: {ex.Message}");
             }
 
             foreach (var widgetPlan in affectedWidgets)
