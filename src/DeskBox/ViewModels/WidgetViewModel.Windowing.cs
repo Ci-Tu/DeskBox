@@ -115,9 +115,10 @@ public partial class WidgetViewModel
     }
 
     /// <summary>
-    /// Expands the window in chunks until <paramref name="item"/> is
-    /// rendered (used before scrolling an item into view), without paying
-    /// the full-folder layout unless the item actually sits that deep.
+    /// Expands the window just far enough to cover <paramref name="item"/>
+    /// (used before scrolling an item into view), aligned up to a grow chunk.
+    /// The window size, not the whole folder, bounds the layout cost: a reveal
+    /// into a thousand-item folder must not realize every tile.
     /// </summary>
     internal void EnsureItemRendered(WidgetItem item)
     {
@@ -126,13 +127,18 @@ public partial class WidgetViewModel
             return;
         }
 
-        while (!RenderedItems.Contains(item) && CanGrowRenderWindow)
+        int targetIndex = IndexInVisibleItems(item);
+        if (targetIndex < 0)
         {
-            _renderWindowCount = Math.Min(
-                VisibleItemCount,
-                _renderWindowCount + RenderWindowGrowChunk);
+            // Reachable in the stack projection when the item is folded into a
+            // collapsed stack; there is nothing to render until it expands.
+            return;
         }
 
+        _renderWindowCount = ComputeRenderWindowTargetCount(
+            targetIndex,
+            _renderWindowCount,
+            VisibleItemCount);
         ReconcileRenderWindow();
         if (!UsesStackProjection)
         {
@@ -140,26 +146,85 @@ public partial class WidgetViewModel
         }
     }
 
+    private int IndexInVisibleItems(WidgetItem item)
+    {
+        int index = 0;
+        foreach (WidgetItem candidate in VisibleItems)
+        {
+            if (ReferenceEquals(candidate, item))
+            {
+                return index;
+            }
+
+            index++;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Window size that just covers <paramref name="itemIndex"/>, aligned up
+    /// to a grow chunk so nearby reveals do not re-trigger growth. Unknown
+    /// indices (<c>-1</c>) keep the current window.
+    /// </summary>
+    internal static int ComputeRenderWindowTargetCount(
+        int itemIndex,
+        int currentCount,
+        int visibleCount)
+    {
+        if (itemIndex < 0)
+        {
+            return currentCount;
+        }
+
+        int requiredCount = itemIndex + 1;
+        int aligned =
+            ((requiredCount + RenderWindowGrowChunk - 1) / RenderWindowGrowChunk) *
+            RenderWindowGrowChunk;
+        return Math.Min(
+            visibleCount,
+            Math.Max(currentCount + 1, aligned));
+    }
+
     /// <summary>
     /// Mirrors the current VisibleItems prefix into <see cref="RenderedItems"/>
     /// in place (move/insert/remove by index, never a Reset), mirroring the
     /// reconcile strategy the stack projection already uses so container
-    /// realization and selection survive content changes.
+    /// realization and selection survive content changes. Returns the window
+    /// size that actually applied.
     /// </summary>
     private void ReconcileRenderWindow()
     {
-        if (VisibleItemCount <= RenderWindowActivationThreshold)
+        _renderWindowCount = ReconcileRenderWindowPrefix(
+            VisibleItems,
+            RenderedItems,
+            _renderWindowCount,
+            VisibleItemCount);
+    }
+
+    /// <summary>
+    /// Pure prefix mirror shared with behavior tests: folders at or below the
+    /// activation threshold always render in full; larger folders render the
+    /// first <paramref name="windowCount"/> visible items.
+    /// </summary>
+    internal static int ReconcileRenderWindowPrefix(
+        IEnumerable<WidgetItem> visibleItems,
+        ObservableCollection<WidgetItem> renderedItems,
+        int windowCount,
+        int visibleItemCount)
+    {
+        if (visibleItemCount <= RenderWindowActivationThreshold)
         {
             // Folders within the activation threshold always render in full;
             // the incremental window only applies above it. Without this the
             // initial prefix caps every folder at RenderWindowInitialSize.
-            _renderWindowCount = VisibleItemCount;
+            windowCount = visibleItemCount;
         }
 
-        int targetCount = Math.Min(_renderWindowCount, VisibleItemCount);
+        int targetCount = Math.Min(windowCount, visibleItemCount);
         var desired = new List<WidgetItem>(targetCount);
         int collected = 0;
-        foreach (WidgetItem item in VisibleItems)
+        foreach (WidgetItem item in visibleItems)
         {
             if (collected >= targetCount)
             {
@@ -173,31 +238,33 @@ public partial class WidgetViewModel
         for (int targetIndex = 0; targetIndex < desired.Count; targetIndex++)
         {
             WidgetItem desiredItem = desired[targetIndex];
-            if (targetIndex < RenderedItems.Count &&
-                ReferenceEquals(RenderedItems[targetIndex], desiredItem))
+            if (targetIndex < renderedItems.Count &&
+                ReferenceEquals(renderedItems[targetIndex], desiredItem))
             {
                 continue;
             }
 
             int existingIndex = IndexOfReference(
-                RenderedItems,
+                renderedItems,
                 desiredItem,
                 targetIndex + 1);
             if (existingIndex >= 0)
             {
-                RenderedItems.Move(existingIndex, targetIndex);
+                renderedItems.Move(existingIndex, targetIndex);
             }
             else
             {
-                RenderedItems.Insert(
-                    Math.Min(targetIndex, RenderedItems.Count),
+                renderedItems.Insert(
+                    Math.Min(targetIndex, renderedItems.Count),
                     desiredItem);
             }
         }
 
-        while (RenderedItems.Count > desired.Count)
+        while (renderedItems.Count > desired.Count)
         {
-            RenderedItems.RemoveAt(RenderedItems.Count - 1);
+            renderedItems.RemoveAt(renderedItems.Count - 1);
         }
+
+        return windowCount;
     }
 }

@@ -22,6 +22,28 @@ public sealed partial class FileSurfaceContent
         ItemsList.LayoutUpdated += ItemsView_LayoutUpdatedForRenderWindow;
     }
 
+    /// <summary>
+    /// Releases the render-window event hooks. LayoutUpdated fires on every
+    /// layout pass of a live surface, so the tracking must not outlive it.
+    /// </summary>
+    internal void UnregisterRenderWindowTracking()
+    {
+        ItemsGrid.Loaded -= ItemsView_LoadedForRenderWindow;
+        ItemsList.Loaded -= ItemsView_LoadedForRenderWindow;
+        ItemsGrid.LayoutUpdated -= ItemsView_LayoutUpdatedForRenderWindow;
+        ItemsList.LayoutUpdated -= ItemsView_LayoutUpdatedForRenderWindow;
+        if (_gridRenderWindowScrollViewer is { } gridScrollViewer)
+        {
+            gridScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
+            _gridRenderWindowScrollViewer = null;
+        }
+        if (_listRenderWindowScrollViewer is { } listScrollViewer)
+        {
+            listScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
+            _listRenderWindowScrollViewer = null;
+        }
+    }
+
     private void ItemsView_LoadedForRenderWindow(object sender, RoutedEventArgs e)
     {
         HookRenderWindowScrollViewer(sender as ListViewBase, retry: true);
