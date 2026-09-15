@@ -202,4 +202,87 @@ public sealed class SettingsMigrationPipelineTests
         Assert.Equal(15 * 60, settings.VisibleIdleCacheCleanupDelaySeconds);
         Assert.Equal(10 * 60, settings.TransientWindowReleaseDelaySeconds);
     }
+
+    private sealed class TrackedMigration(int fromVersion) : ISettingsMigration
+    {
+        public int FromVersion => fromVersion;
+        public bool Applied { get; private set; }
+
+        public void Migrate(AppSettings settings)
+        {
+            Applied = true;
+        }
+    }
+
+    private sealed class ThrowingMigration(int fromVersion) : ISettingsMigration
+    {
+        public int FromVersion => fromVersion;
+
+        public void Migrate(AppSettings settings) =>
+            throw new InvalidOperationException("injected fault");
+    }
+
+    [Fact]
+    public void StepFailure_StopsTheChainAndKeepsTheLastSuccessfulCheckpoint()
+    {
+        var failing = new ThrowingMigration(5);
+        var afterFailure = new TrackedMigration(6);
+        var beforeFailure = new TrackedMigration(4);
+        var settings = new AppSettings { SchemaVersion = 4 };
+
+        bool anyApplied = new SettingsMigrationPipeline(
+            [beforeFailure, failing, afterFailure]).RunMigrations(settings);
+
+        // The failed step stops the chain: the final schema version must
+        // never claim migrations that did not run (the pre-fix pipeline
+        // stamped the current version unconditionally).
+        Assert.True(anyApplied);
+        Assert.True(beforeFailure.Applied);
+        Assert.Equal(5, settings.SchemaVersion);
+        Assert.False(afterFailure.Applied);
+    }
+
+    [Fact]
+    public void FirstStepFailure_KeepsTheOriginalVersionAndReportsNothing()
+    {
+        var failing = new ThrowingMigration(4);
+        var afterFailure = new TrackedMigration(5);
+        var settings = new AppSettings { SchemaVersion = 4 };
+
+        bool anyApplied = new SettingsMigrationPipeline(
+            [failing, afterFailure]).RunMigrations(settings);
+
+        Assert.False(anyApplied);
+        Assert.Equal(4, settings.SchemaVersion);
+        Assert.False(afterFailure.Applied);
+    }
+
+    [Fact]
+    public void FullChain_ReachesTheCurrentSchemaVersion()
+    {
+        var steps = Enumerable.Range(0, SettingsMigrationPipeline.CurrentSchemaVersion)
+            .Select(version => new TrackedMigration(version))
+            .ToArray();
+        var settings = new AppSettings { SchemaVersion = 0 };
+
+        bool anyApplied = new SettingsMigrationPipeline(steps).RunMigrations(settings);
+
+        Assert.True(anyApplied);
+        Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
+        Assert.All(steps, step => Assert.True(step.Applied));
+    }
+
+    [Fact]
+    public void GapInTheChain_StopsAtTheMissingStep()
+    {
+        // No migration from version 5: the chain cannot advance past 5 and
+        // must not stamp the current version over the gap.
+        var steps = new[] { new TrackedMigration(4), new TrackedMigration(6) };
+        var settings = new AppSettings { SchemaVersion = 4 };
+
+        new SettingsMigrationPipeline(steps).RunMigrations(settings);
+
+        Assert.Equal(5, settings.SchemaVersion);
+        Assert.False(steps[1].Applied);
+    }
 }

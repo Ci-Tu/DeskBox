@@ -39,6 +39,15 @@ public sealed class SettingsMigrationPipeline
     }
 
     /// <summary>
+    /// Test seam for fault-injection: the chain behavior (step failures,
+    /// checkpoints, ordering) is what the tests pin, not the real steps.
+    /// </summary>
+    internal SettingsMigrationPipeline(IEnumerable<ISettingsMigration> migrations)
+    {
+        _migrations.AddRange(migrations);
+    }
+
+    /// <summary>
     /// Runs all necessary migrations to bring the settings from their current
     /// schema version up to <see cref="CurrentSchemaVersion"/>.
     /// Returns true if any migration was applied.
@@ -55,23 +64,40 @@ public sealed class SettingsMigrationPipeline
 
         foreach (var migration in _migrations.OrderBy(m => m.FromVersion))
         {
-            if (migration.FromVersion >= version && migration.FromVersion < CurrentSchemaVersion)
+            if (migration.FromVersion != version)
             {
-                try
-                {
-                    migration.Migrate(settings);
-                    version = migration.FromVersion + 1;
-                    anyApplied = true;
-                    App.Log($"[SettingsMigration] Applied migration from version {migration.FromVersion} to {version}");
-                }
-                catch (Exception ex)
-                {
-                    App.Log($"[SettingsMigration] Migration from {migration.FromVersion} failed: {ex.Message}");
-                }
+                continue;
+            }
+
+            if (migration.FromVersion >= CurrentSchemaVersion)
+            {
+                break;
+            }
+
+            try
+            {
+                migration.Migrate(settings);
+                version = migration.FromVersion + 1;
+                anyApplied = true;
+                App.Log($"[SettingsMigration] Applied migration from version {migration.FromVersion} to {version}");
+            }
+            catch (Exception ex)
+            {
+                // A failed step must stop the chain: every later migration
+                // assumes the schema the failed step was supposed to produce,
+                // and stamping the final version anyway would permanently skip
+                // the failed step on every later launch.
+                App.Log(
+                    $"[SettingsMigration] Migration from version {migration.FromVersion} failed: {ex.Message}; " +
+                    $"stopping at schema version {version} (will retry on next launch)");
+                break;
             }
         }
 
-        settings.SchemaVersion = CurrentSchemaVersion;
+        // Record the checkpoint the chain actually reached. A partial run
+        // keeps the last successful version so the failed step retries next
+        // launch; only a full pass reaches CurrentSchemaVersion.
+        settings.SchemaVersion = version;
         return anyApplied;
     }
 }

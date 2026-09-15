@@ -438,7 +438,38 @@ public sealed partial class AppUpdateService : IAppUpdateService
         return manifest is not null &&
             manifest.SchemaVersion == 1 &&
             !string.IsNullOrWhiteSpace(manifest.Version) &&
-            Uri.TryCreate(manifest.DownloadUrl, UriKind.Absolute, out _);
+            Uri.TryCreate(manifest.DownloadUrl, UriKind.Absolute, out Uri? downloadUri) &&
+            IsTrustedInstallerDownloadUri(downloadUri) &&
+            (string.IsNullOrWhiteSpace(manifest.Arm64DownloadUrl) ||
+                (Uri.TryCreate(manifest.Arm64DownloadUrl, UriKind.Absolute, out Uri? arm64Uri) &&
+                    IsTrustedInstallerDownloadUri(arm64Uri)));
+    }
+
+    /// <summary>
+    /// The installer may only come from DeskBox's own distribution hosts over
+    /// HTTPS. The manifest hash proves integrity but not authenticity: a
+    /// compromised feed can serve a malicious installer together with its own
+    /// correct hash, so the origin itself has to be pinned.
+    /// </summary>
+    private static bool IsTrustedInstallerDownloadUri(Uri uri)
+    {
+        if (!string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return IsHostOrSubdomain(uri, "deskbox.fun") ||
+            IsHostOrSubdomain(uri, "github.com") ||
+            string.Equals(
+                uri.Host,
+                "objects.githubusercontent.com",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsHostOrSubdomain(Uri uri, string domain)
+    {
+        return uri.Host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+            uri.Host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
     }
 
     internal static bool TrySelectInstallerForArchitecture(
