@@ -1,6 +1,7 @@
 using DeskBox.Helpers;
 using DeskBox.Models;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO.Enumeration;
@@ -1051,20 +1052,31 @@ public sealed partial class FileService
     /// original attribute set (so the caller can restore them), and logs the
     /// action for diagnostics.
     /// </summary>
-    private static System.IO.FileAttributes? StripBlockingAttributes(string path)
+    /// <summary>
+    /// Serializes the strip/restore read-modify-write pairs across threads.
+    /// Without the gate, a second stripper can read the already-stripped
+    /// state as the "original" and restore it over the first one's restore,
+    /// permanently dropping the file's Hidden/System attributes.
+    /// </summary>
+    private static readonly object s_attributeStripGate = new();
+
+    internal static System.IO.FileAttributes? StripBlockingAttributes(string path)
     {
         try
         {
-            var attrs = File.GetAttributes(path);
-            var blocking = attrs & (System.IO.FileAttributes.Hidden | System.IO.FileAttributes.System);
-            if (blocking == 0)
+            lock (s_attributeStripGate)
             {
-                return null;
-            }
+                var attrs = File.GetAttributes(path);
+                var blocking = attrs & (System.IO.FileAttributes.Hidden | System.IO.FileAttributes.System);
+                if (blocking == 0)
+                {
+                    return null;
+                }
 
-            File.SetAttributes(path, attrs & ~blocking);
-            App.Log($"[StorageItems] Temporarily stripped {blocking} attributes from '{path}'");
-            return attrs; // return original so caller can restore
+                File.SetAttributes(path, attrs & ~blocking);
+                App.Log($"[StorageItems] Temporarily stripped {blocking} attributes from '{path}'");
+                return attrs; // return original so caller can restore
+            }
         }
         catch
         {
@@ -1072,7 +1084,7 @@ public sealed partial class FileService
         }
     }
 
-    private static void RestoreAttributes(string path, System.IO.FileAttributes? original)
+    internal static void RestoreAttributes(string path, System.IO.FileAttributes? original)
     {
         if (original is null)
         {
@@ -1081,11 +1093,17 @@ public sealed partial class FileService
 
         try
         {
-            File.SetAttributes(path, original.Value);
+            lock (s_attributeStripGate)
+            {
+                File.SetAttributes(path, original.Value);
+            }
         }
-        catch
+        catch (Exception ex)
         {
             // Best-effort restore; the file may have been moved/deleted.
+            App.Log(
+                $"[StorageItems] Failed to restore attributes on '{path}': " +
+                $"{ex.Message}");
         }
     }
 
@@ -2314,7 +2332,9 @@ public sealed partial class FileService
                 }
                 else
                 {
-                    await Task.Run(() => DeleteEntryAsync(operation.DestinationPath));
+                    await Task.Run(() => RollbackCopiedEntry(
+                        operation.SourcePath,
+                        operation.DestinationPath));
                 }
             }
             catch (Exception ex)
@@ -2324,24 +2344,135 @@ public sealed partial class FileService
         }
     }
 
+    /// <summary>
+    /// Rolls back one copied entry by receipt: a destination file is deleted
+    /// only while the source still holds a matching copy of it. Anything else
+    /// that now lives under the destination — files added by the user or a
+    /// sync tool after the copy completed — is kept. Residue beats deleting
+    /// someone else's data, so unmatched entries never block the rest.
+    /// </summary>
+    private static void RollbackCopiedEntry(string sourcePath, string destinationPath)
+    {
+        if (File.Exists(destinationPath))
+        {
+            if (File.Exists(sourcePath) &&
+                FilesLookLikeCopies(sourcePath, destinationPath))
+            {
+                File.Delete(destinationPath);
+            }
+            else
+            {
+                App.Log(
+                    $"[TransferRollback] Kept '{destinationPath}': the source " +
+                    $"copy no longer matches.");
+            }
+
+            return;
+        }
+
+        if (Directory.Exists(destinationPath))
+        {
+            RollbackCopiedDirectory(sourcePath, destinationPath);
+        }
+    }
+
+    private static bool FilesLookLikeCopies(string sourcePath, string destinationPath)
+    {
+        try
+        {
+            var source = new FileInfo(sourcePath);
+            var destination = new FileInfo(destinationPath);
+            return source.Length == destination.Length &&
+                source.LastWriteTimeUtc == destination.LastWriteTimeUtc;
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[TransferRollback] Copy identity check failed for " +
+                $"'{sourcePath}' -> '{destinationPath}': {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deletes the copied mirror of a source tree. Files whose source twin
+    /// still matches (length + timestamp) are removed; everything else stays.
+    /// Directories are only removed bottom-up while empty, so unknown content
+    /// always blocks deletion.
+    /// </summary>
+    private static void RollbackCopiedDirectory(string sourceDirectory, string destinationDirectory)
+    {
+        if (!Directory.Exists(sourceDirectory))
+        {
+            App.Log(
+                $"[TransferRollback] Kept '{destinationDirectory}': its " +
+                $"source directory no longer exists.");
+            return;
+        }
+
+        int kept = 0;
+        foreach (string sourceFilePath in Directory.EnumerateFiles(
+                     sourceDirectory,
+                     "*",
+                     SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(sourceDirectory, sourceFilePath);
+            string destinationFilePath = Path.Combine(destinationDirectory, relative);
+            if (!File.Exists(destinationFilePath))
+            {
+                continue;
+            }
+
+            if (FilesLookLikeCopies(sourceFilePath, destinationFilePath))
+            {
+                File.Delete(destinationFilePath);
+            }
+            else
+            {
+                kept++;
+            }
+        }
+
+        foreach (string sourceSubDirectory in Directory
+                     .EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(path =>
+                         path.Count(character => character == Path.DirectorySeparatorChar)))
+        {
+            string relative = Path.GetRelativePath(sourceDirectory, sourceSubDirectory);
+            string destinationSubDirectory = Path.Combine(destinationDirectory, relative);
+            if (Directory.Exists(destinationSubDirectory) &&
+                !Directory.EnumerateFileSystemEntries(destinationSubDirectory).Any())
+            {
+                Directory.Delete(destinationSubDirectory, recursive: false);
+            }
+        }
+
+        if (!Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
+        {
+            Directory.Delete(destinationDirectory, recursive: false);
+        }
+
+        if (kept > 0)
+        {
+            App.Log(
+                $"[TransferRollback] Kept {kept} unmatched file(s) under " +
+                $"'{destinationDirectory}'.");
+        }
+    }
+
     private static async Task CopyEntryAsync(string sourcePath, string destinationPath)
     {
         if (File.Exists(sourcePath))
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            try
-            {
-                await Task.Run(() => File.Copy(sourcePath, destinationPath, overwrite: false));
-            }
-            catch
-            {
-                if (File.Exists(destinationPath))
-                {
-                    File.Delete(destinationPath);
-                }
-
-                throw;
-            }
+            // The shared CreateNew-based core only ever deletes a destination
+            // stream it opened itself: a competing file that appeared at the
+            // planned path after planning fails the copy untouched, instead
+            // of being deleted by a blind catch.
+            await CopyFileWithProgressAsync(
+                sourcePath,
+                destinationPath,
+                new TransferProgressReporter(progress: null, totalItems: 1),
+                CancellationToken.None);
             return;
         }
 
@@ -2376,17 +2507,53 @@ public sealed partial class FileService
         catch (IOException)
         {
             bool copied = false;
+            long copiedLength = 0;
             try
             {
-                await Task.Run(() => File.Copy(sourceFilePath, destinationFilePath, overwrite: false));
+                FileTransferSourceIdentity? sourceIdentity =
+                    TryCaptureSourceIdentity(sourceFilePath);
+                if (sourceIdentity is { } capturedIdentity)
+                {
+                    copiedLength = capturedIdentity.Length;
+                }
+
+                // CreateNew-based core: a competing destination file fails
+                // the copy untouched, and this move's own partial copy is
+                // cleaned up by the core itself.
+                await CopyFileWithProgressAsync(
+                    sourceFilePath,
+                    destinationFilePath,
+                    new TransferProgressReporter(progress: null, totalItems: 1),
+                    CancellationToken.None);
                 copied = true;
-                await Task.Run(() => File.Delete(sourceFilePath));
+                if (sourceIdentity is { } identity &&
+                    !SourceFileMatchesIdentity(sourceFilePath, identity))
+                {
+                    // The path no longer holds the file that was just copied.
+                    // Keep both copies: deleting the source could remove
+                    // someone else's file, deleting the destination would
+                    // discard the original content.
+                    throw new FileTransferSourceChangedException(
+                        sourceFilePath,
+                        destinationFilePath);
+                }
+
+                await Task.Run(() => DeleteSourceFileAfterCopy(
+                    sourceFilePath,
+                    File.GetAttributes(sourceFilePath)));
+            }
+            catch (FileTransferSourceChangedException)
+            {
+                throw;
             }
             catch
             {
-                if (copied && File.Exists(destinationFilePath))
+                if (copied)
                 {
-                    File.Delete(destinationFilePath);
+                    // Only remove a destination that still carries this
+                    // move's own copy; the length check keeps files that
+                    // someone else may have placed there.
+                    TryDeletePartialFile(destinationFilePath, copiedLength);
                 }
 
                 throw;
@@ -2602,9 +2769,23 @@ public sealed partial class FileService
                 {
                     if (File.Exists(copiedChild))
                     {
-                        DeleteSourceFileAfterCopy(
-                            copiedChild,
-                            File.GetAttributes(copiedChild));
+                        // Delete the duplicate only while the surviving
+                        // original still matches it; a diverged pair means
+                        // someone touched one side and both stay.
+                        if (File.Exists(originalChild) &&
+                            FilesLookLikeCopies(originalChild, copiedChild))
+                        {
+                            DeleteSourceFileAfterCopy(
+                                copiedChild,
+                                File.GetAttributes(copiedChild));
+                        }
+                        else
+                        {
+                            App.Log(
+                                $"[FileTransfer] Migration merge-back kept " +
+                                $"diverged copy '{copiedChild}' (original " +
+                                $"'{originalChild}' no longer matches).");
+                        }
                     }
                     else
                     {
@@ -2862,6 +3043,94 @@ public sealed partial class FileService
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHFileOperation(ref ShFileOperation fileOperation);
+
+    // ─── Copy-then-delete source identity ───────────────────────────────
+
+    /// <summary>
+    /// Identity of a source file captured before a copy-then-delete move.
+    /// The NTFS file key survives path-based replacement (a new file created
+    /// at the same path gets a new key), which length/timestamp comparison
+    /// cannot detect. File systems without stable file keys report null and
+    /// matching falls back to length + timestamp only.
+    /// </summary>
+    internal readonly record struct FileTransferSourceIdentity(
+        long Length,
+        DateTime LastWriteTimeUtc,
+        ulong? FileKey);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ByHandleFileInformation
+    {
+        public uint FileAttributes;
+        public uint CreationTimeLow;
+        public uint CreationTimeHigh;
+        public uint LastAccessTimeLow;
+        public uint LastAccessTimeHigh;
+        public uint LastWriteTimeLow;
+        public uint LastWriteTimeHigh;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out ByHandleFileInformation information);
+
+    internal static FileTransferSourceIdentity? TryCaptureSourceIdentity(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read | FileShare.Write);
+            if (!GetFileInformationByHandle(
+                    stream.SafeFileHandle,
+                    out ByHandleFileInformation information))
+            {
+                return null;
+            }
+
+            ulong fileIndex =
+                ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
+            long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
+            long lastWrite =
+                ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
+            return new FileTransferSourceIdentity(
+                length,
+                DateTime.FromFileTimeUtc(lastWrite),
+                fileIndex == 0 ? null : fileIndex);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static bool SourceFileMatchesIdentity(
+        string path,
+        FileTransferSourceIdentity expected)
+    {
+        if (TryCaptureSourceIdentity(path) is not { } current)
+        {
+            // Unable to stat the source: assume the worst and keep both copies.
+            return false;
+        }
+
+        if (expected.FileKey is { } expectedKey && current.FileKey is { } currentKey)
+        {
+            return expectedKey == currentKey;
+        }
+
+        return current.Length == expected.Length &&
+            current.LastWriteTimeUtc == expected.LastWriteTimeUtc;
+    }
 
     // ─── Steam dead-shortcut detection ───────────────────────────────────
 

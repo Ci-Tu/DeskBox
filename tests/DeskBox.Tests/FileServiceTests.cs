@@ -1618,6 +1618,383 @@ public sealed class FileServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public void SourceIdentity_MatchesUnchangedFile()
+    {
+        string path = Path.Combine(_tempRoot, "identity-stable.txt");
+        File.WriteAllText(path, "unchanged content");
+
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+
+        Assert.NotNull(identity);
+        Assert.True(FileService.SourceFileMatchesIdentity(path, identity!.Value));
+    }
+
+    [Fact]
+    public void SourceIdentity_DetectsReplacementWithSameLengthAndTimestamp()
+    {
+        // Same path, same length, same timestamp — only the NTFS file key can
+        // tell this replacement apart from the file that was captured.
+        string path = Path.Combine(_tempRoot, "identity-replaced.txt");
+        File.WriteAllText(path, "AAAAAAAA");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+
+        DateTime lastWriteUtc = File.GetLastWriteTimeUtc(path);
+        File.Delete(path);
+        File.WriteAllText(path, "BBBBBBBB");
+        File.SetLastWriteTimeUtc(path, lastWriteUtc);
+
+        Assert.False(FileService.SourceFileMatchesIdentity(path, identity!.Value));
+    }
+
+    [Fact]
+    public async Task ExecuteTransferPlanAsync_CancelKeepsForeignFilesInCompletedDirectoryCopy()
+    {
+        // Canceling after one directory copy completed must roll that copy
+        // back by receipt: files added to the destination by anyone else stay.
+        var service = new FileService();
+        string sourceDirectory = Path.Combine(_tempRoot, "cancel-dir-src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "copied.txt"),
+            "copied content");
+        string bigSource = Path.Combine(_tempRoot, "cancel-big.bin");
+        await using (FileStream big = File.Create(bigSource))
+        {
+            big.SetLength(16L * 1024 * 1024);
+        }
+
+        string destinationDirectory = Path.Combine(_tempRoot, "cancel-dir-dest");
+        string bigDestination = Path.Combine(_tempRoot, "cancel-big-dest.bin");
+        string foreignFile = Path.Combine(destinationDirectory, "foreign.txt");
+
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<FileService.FileTransferProgress>(update =>
+        {
+            if (update.BytesTransferred > 1024 * 1024)
+            {
+                // Past the first, already-completed small directory entry: a
+                // foreign file lands in the copied directory right before the
+                // cancel rolls it back.
+                if (!File.Exists(foreignFile))
+                {
+                    Directory.CreateDirectory(destinationDirectory);
+                    File.WriteAllText(foreignFile, "not deskbox data");
+                }
+
+                cancellation.Cancel();
+            }
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ExecuteTransferPlanAsync(
+                [
+                    new FileService.FileTransferPlan(sourceDirectory, destinationDirectory),
+                    new FileService.FileTransferPlan(bigSource, bigDestination),
+                ],
+                move: false,
+                progress: progress,
+                cancellationToken: cancellation.Token));
+
+        Assert.True(File.Exists(foreignFile), "foreign file must survive the rollback");
+        Assert.False(
+            File.Exists(Path.Combine(destinationDirectory, "copied.txt")),
+            "the copied twin must still be removed");
+        Assert.True(Directory.Exists(destinationDirectory), "the directory stays for its foreign content");
+        Assert.True(File.Exists(bigSource));
+        Assert.False(File.Exists(bigDestination), "the partial copy must be removed");
+    }
+
+    [Fact]
+    public async Task ExecuteTransferPlanAsync_CancelKeepsDestinationWhenSourceChangedAfterCopy()
+    {
+        // The source was rewritten after the copy completed: the rollback
+        // cannot prove the destination is still its own copy, so it stays.
+        var service = new FileService();
+        string sourcePath = Path.Combine(_tempRoot, "changed-source.txt");
+        string destinationPath = Path.Combine(_tempRoot, "changed-dest.txt");
+        File.WriteAllText(sourcePath, "first version");
+        string bigSource = Path.Combine(_tempRoot, "changed-big.bin");
+        await using (FileStream big = File.Create(bigSource))
+        {
+            big.SetLength(16L * 1024 * 1024);
+        }
+        string bigDestination = Path.Combine(_tempRoot, "changed-big-dest.bin");
+
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<FileService.FileTransferProgress>(update =>
+        {
+            if (update.BytesTransferred > 1024 * 1024)
+            {
+                File.WriteAllText(sourcePath, "second versio");
+                cancellation.Cancel();
+            }
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ExecuteTransferPlanAsync(
+                [
+                    new FileService.FileTransferPlan(sourcePath, destinationPath),
+                    new FileService.FileTransferPlan(bigSource, bigDestination),
+                ],
+                move: false,
+                progress: progress,
+                cancellationToken: cancellation.Token));
+
+        Assert.True(File.Exists(destinationPath), "destination must stay when the source no longer matches");
+        Assert.Equal("first version", await File.ReadAllTextAsync(destinationPath));
+        Assert.Equal("second versio", await File.ReadAllTextAsync(sourcePath));
+    }
+
+    [Fact]
+    public void MovePaths_RevalidateSourceIdentityBeforeDeletingIt()
+    {
+        string progressSource = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.TransferProgress.cs"));
+        string managedMove = Slice(
+            progressSource,
+            "private static async Task MoveFileWithProgressAsync",
+            "internal static void DeleteSourceFileAfterCopy");
+        Assert.Contains("TryCaptureSourceIdentity", managedMove, StringComparison.Ordinal);
+        int verifyIndex = managedMove.IndexOf(
+            "SourceFileMatchesIdentity",
+            StringComparison.Ordinal);
+        int deleteIndex = managedMove.IndexOf(
+            "DeleteSourceFileAfterCopy",
+            StringComparison.Ordinal);
+        Assert.True(verifyIndex >= 0, "the source identity must be revalidated");
+        Assert.True(
+            deleteIndex > verifyIndex,
+            "the revalidation must happen before the source delete");
+        // A changed source keeps both copies; it must bypass the generic
+        // destination cleanup.
+        Assert.Contains(
+            "catch (FileTransferSourceChangedException)",
+            managedMove,
+            StringComparison.Ordinal);
+
+        string service = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.cs"));
+        string fallbackMove = Slice(
+            service,
+            "private static async Task MoveFileAsync",
+            "private static async Task MoveDirectoryAsync");
+        Assert.Contains("TryCaptureSourceIdentity", fallbackMove, StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (FileTransferSourceChangedException)",
+            fallbackMove,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RollbackTransfers_DeleteCopiesByReceiptNotByPath()
+    {
+        string service = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.cs"));
+        string rollback = Slice(
+            service,
+            "private static async Task RollbackTransfersAsync",
+            "private static void RollbackCopiedEntry");
+
+        // The old rollback recursed into whatever lived at the destination.
+        Assert.DoesNotContain(
+            "DeleteEntryAsync(operation.DestinationPath)",
+            rollback,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "RollbackCopiedEntry(",
+            rollback,
+            StringComparison.Ordinal);
+
+        string receipt = Slice(
+            service,
+            "private static void RollbackCopiedEntry",
+            "private static bool FilesLookLikeCopies");
+        Assert.Contains(
+            "FilesLookLikeCopies(sourcePath, destinationPath)",
+            receipt,
+            StringComparison.Ordinal);
+
+        string directory = Slice(
+            service,
+            "private static void RollbackCopiedDirectory",
+            "private static async Task CopyEntryAsync");
+        Assert.Contains(
+            "recursive: false",
+            directory,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "recursive: true",
+            directory,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CopyEntryAsync_NeverDeletesACompetingDestinationFile()
+    {
+        // A file that appears at the planned destination after planning is
+        // not ours: the copy must fail and leave it untouched. The old
+        // File.Copy catch deleted whatever sat at the destination.
+        var service = new FileService();
+        string sourcePath = Path.Combine(_tempRoot, "competing-source.txt");
+        string destinationPath = Path.Combine(_tempRoot, "competing-dest.txt");
+        File.WriteAllText(sourcePath, "deskbox payload");
+        File.WriteAllText(destinationPath, "someone else's file");
+
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            service.ExecuteTransferPlanAsync(
+                [new FileService.FileTransferPlan(sourcePath, destinationPath)],
+                move: false,
+                progress: null));
+
+        Assert.Equal(
+            "someone else's file",
+            await File.ReadAllTextAsync(destinationPath));
+        Assert.True(File.Exists(sourcePath));
+    }
+
+    [Fact]
+    public async Task RestoreMigratedDirectory_KeepsDivergedDuplicatesAndRemovesMatchingOnes()
+    {
+        string copiedDirectory = Path.Combine(_tempRoot, "merge-copied");
+        string originalDirectory = Path.Combine(_tempRoot, "merge-original");
+        Directory.CreateDirectory(copiedDirectory);
+        Directory.CreateDirectory(originalDirectory);
+        DateTime stamp = DateTime.UtcNow.AddDays(-1);
+
+        string matchingCopied = Path.Combine(copiedDirectory, "matching.txt");
+        string matchingOriginal = Path.Combine(originalDirectory, "matching.txt");
+        File.WriteAllText(matchingCopied, "same content");
+        File.WriteAllText(matchingOriginal, "same content");
+        File.SetLastWriteTimeUtc(matchingCopied, stamp);
+        File.SetLastWriteTimeUtc(matchingOriginal, stamp);
+
+        string divergedCopied = Path.Combine(copiedDirectory, "diverged.txt");
+        string divergedOriginal = Path.Combine(originalDirectory, "diverged.txt");
+        File.WriteAllText(divergedCopied, "short");
+        File.WriteAllText(divergedOriginal, "longer original content");
+
+        await FileService.RestoreMigratedDirectoryPreservingExistingAsync(
+            copiedDirectory,
+            originalDirectory);
+
+        Assert.False(File.Exists(matchingCopied), "the matching duplicate must be removed");
+        Assert.True(File.Exists(matchingOriginal));
+        Assert.True(
+            File.Exists(divergedCopied),
+            "a diverged duplicate must be kept instead of guessed at");
+        Assert.Equal(
+            "longer original content",
+            await File.ReadAllTextAsync(divergedOriginal));
+    }
+
+    [Fact]
+    public void StripBlockingAttributes_RestoresTheOriginalState()
+    {
+        string path = Path.Combine(_tempRoot, "stripped.txt");
+        File.WriteAllText(path, "payload");
+        File.SetAttributes(path, FileAttributes.Hidden | FileAttributes.Archive);
+
+        System.IO.FileAttributes? original = FileService.StripBlockingAttributes(path);
+        Assert.NotNull(original);
+        Assert.Equal(
+            FileAttributes.None,
+            File.GetAttributes(path) & FileAttributes.Hidden);
+
+        FileService.RestoreAttributes(path, original);
+        Assert.Equal(
+            FileAttributes.Hidden,
+            File.GetAttributes(path) & FileAttributes.Hidden);
+
+        // A file with no blocking attributes reports nothing to restore,
+        // and restoring null is a no-op.
+        File.SetAttributes(path, FileAttributes.Archive);
+        Assert.Null(FileService.StripBlockingAttributes(path));
+        FileService.RestoreAttributes(path, null);
+        Assert.Equal(
+            FileAttributes.Archive,
+            File.GetAttributes(path) & ~FileAttributes.System);
+    }
+
+    [Fact]
+    public void AttributeStrip_IsSerializedAgainstLostUpdateRaces()
+    {
+        string service = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.cs"));
+        string strip = Slice(
+            service,
+            "internal static System.IO.FileAttributes? StripBlockingAttributes",
+            "internal static void RestoreAttributes");
+        string restore = Slice(
+            service,
+            "internal static void RestoreAttributes",
+            "private static async Task<StorageFile?> TryGetStorageFileAsync");
+
+        // Without the gate a second stripper can read the already-stripped
+        // state as "original" and restore it over the first restore.
+        Assert.Contains("lock (s_attributeStripGate)", strip, StringComparison.Ordinal);
+        Assert.Contains("lock (s_attributeStripGate)", restore, StringComparison.Ordinal);
+        Assert.Contains(
+            "Failed to restore attributes",
+            restore,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SafeCopyCore_IsTheOnlyFileCopyPath()
+    {
+        string service = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.cs"));
+        string copyEntry = Slice(
+            service,
+            "private static async Task CopyEntryAsync",
+            "private static async Task MoveEntryAsync");
+        Assert.Contains(
+            "CopyFileWithProgressAsync(",
+            copyEntry,
+            StringComparison.Ordinal);
+        // The P0 pattern: a blind catch deleting whatever sits at the
+        // destination must never come back.
+        Assert.DoesNotContain("File.Delete(destinationPath)", copyEntry, StringComparison.Ordinal);
+
+        string fallbackMove = Slice(
+            service,
+            "private static async Task MoveFileAsync",
+            "private static async Task MoveDirectoryAsync");
+        Assert.Contains(
+            "CopyFileWithProgressAsync(",
+            fallbackMove,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "TryDeletePartialFile(destinationFilePath, copiedLength)",
+            fallbackMove,
+            StringComparison.Ordinal);
+
+        string progressSource = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.TransferProgress.cs"));
+        string partialDelete = Slice(
+            progressSource,
+            "private static void TryDeletePartialFile",
+            "private sealed class TransferProgressReporter");
+        Assert.Contains("expectedLength", partialDelete, StringComparison.Ordinal);
+        Assert.Contains(
+            "TryDeletePartialFile(destinationFilePath, sourceLength)",
+            progressSource,
+            StringComparison.Ordinal);
+    }
+
+    private static string Slice(string source, string startMarker, string endMarker)
+    {
+        int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Start marker not found: {startMarker}");
+        int end = source.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+        Assert.True(end > start, $"End marker not found: {endMarker}");
+        return source[start..end];
+    }
+
     private sealed class InlineProgress<T>(Action<T> callback) : IProgress<T>
     {
         public void Report(T value) => callback(value);

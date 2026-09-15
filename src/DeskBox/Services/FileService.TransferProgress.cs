@@ -413,6 +413,11 @@ public sealed partial class FileService
             // so cancellation and real byte progress remain available.
         }
 
+        // Cross-volume fallback: capture the identity of the file being
+        // copied so the source can be re-validated before it is deleted.
+        FileTransferSourceIdentity? sourceIdentity =
+            TryCaptureSourceIdentity(sourceFilePath);
+
         await CopyFileWithProgressAsync(
             sourceFilePath,
             destinationFilePath,
@@ -420,6 +425,18 @@ public sealed partial class FileService
             cancellationToken);
         try
         {
+            if (sourceIdentity is { } identity &&
+                !SourceFileMatchesIdentity(sourceFilePath, identity))
+            {
+                // The path no longer holds the file that was just copied.
+                // Keep both copies: deleting the source could remove someone
+                // else's file, deleting the destination would discard the
+                // original content.
+                throw new FileTransferSourceChangedException(
+                    sourceFilePath,
+                    destinationFilePath);
+            }
+
             FileAttributes sourceAttributes = sourceInfo.Attributes;
             await Task.Run(
                 () => DeleteSourceFileAfterCopy(
@@ -427,9 +444,17 @@ public sealed partial class FileService
                     sourceAttributes),
                 cancellationToken);
         }
+        catch (FileTransferSourceChangedException)
+        {
+            // Both copies stay; the destination holds the complete original
+            // content, so the generic destination cleanup must not run.
+            throw;
+        }
         catch
         {
-            TryDeletePartialFile(destinationFilePath);
+            // The copy completed, so the destination should still carry the
+            // captured source length; anything else is not ours to delete.
+            TryDeletePartialFile(destinationFilePath, sourceLength);
             throw;
         }
 
@@ -742,15 +767,35 @@ public sealed partial class FileService
         }
     }
 
-    private static void TryDeletePartialFile(string destinationFilePath)
+    /// <summary>
+    /// Removes a destination file this transfer created. When
+    /// <paramref name="expectedLength"/> is known (a completed copy), a file
+    /// that no longer carries that length is kept: it may have been replaced
+    /// by another process, and neither its attributes nor its content are
+    /// ours to touch.
+    /// </summary>
+    private static void TryDeletePartialFile(
+        string destinationFilePath,
+        long? expectedLength = null)
     {
         try
         {
-            if (File.Exists(destinationFilePath))
+            if (!File.Exists(destinationFilePath))
             {
-                File.SetAttributes(destinationFilePath, FileAttributes.Normal);
-                File.Delete(destinationFilePath);
+                return;
             }
+
+            if (expectedLength is { } length &&
+                new FileInfo(destinationFilePath).Length != length)
+            {
+                App.Log(
+                    $"[FileTransfer] Kept '{destinationFilePath}': it no " +
+                    $"longer looks like this transfer's own copy.");
+                return;
+            }
+
+            File.SetAttributes(destinationFilePath, FileAttributes.Normal);
+            File.Delete(destinationFilePath);
         }
         catch (Exception ex)
         {

@@ -195,9 +195,16 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
         string twinFile = Path.Combine(copiedDirectory, "twin.txt");
         string twinOriginal = Path.Combine(originalDirectory, "twin.txt");
         string uniqueFile = Path.Combine(copiedDirectory, "unique.txt");
+        string matchingFile = Path.Combine(copiedDirectory, "matching.txt");
+        string matchingOriginal = Path.Combine(originalDirectory, "matching.txt");
         File.WriteAllText(twinFile, "stale copy");
         File.WriteAllText(twinOriginal, "possibly newer original");
         File.WriteAllText(uniqueFile, "only in the copy");
+        File.WriteAllText(matchingFile, "identical twin");
+        File.WriteAllText(matchingOriginal, "identical twin");
+        DateTime stamp = DateTime.UtcNow.AddDays(-1);
+        File.SetLastWriteTimeUtc(matchingFile, stamp);
+        File.SetLastWriteTimeUtc(matchingOriginal, stamp);
 
         await FileService.RestoreMigratedDirectoryPreservingExistingAsync(
             copiedDirectory,
@@ -209,7 +216,15 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
         Assert.Equal(
             "only in the copy",
             File.ReadAllText(Path.Combine(originalDirectory, "unique.txt")));
-        Assert.False(Directory.Exists(copiedDirectory), "A fully restored copy must be removed.");
+        Assert.True(
+            File.Exists(twinFile),
+            "A diverged duplicate is kept: either side may hold the user's " +
+            "latest edit, and ownership cannot be proven without a match.");
+        Assert.False(
+            File.Exists(matchingFile),
+            "A matching duplicate is removed: the surviving original proves " +
+            "the copied side is redundant.");
+        Assert.True(Directory.Exists(copiedDirectory), "The copy stays for its diverged content.");
     }
 
     [Fact]
