@@ -26,7 +26,9 @@ public sealed class SettingsMigrationPipelineTests
             ]
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Null(settings.WidgetGroups[0].WheelSwitchEnabled);
         Assert.False(settings.WidgetGroups[1].WheelSwitchEnabled);
@@ -53,7 +55,9 @@ public sealed class SettingsMigrationPipelineTests
             ]
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Null(settings.WidgetGroups[0].WheelSwitchEnabled);
         Assert.False(settings.WidgetGroups[1].WheelSwitchEnabled);
@@ -70,7 +74,9 @@ public sealed class SettingsMigrationPipelineTests
             Widgets = []
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.True(settings.HasResolvedInitialFileWidgetSetup);
     }
@@ -89,7 +95,9 @@ public sealed class SettingsMigrationPipelineTests
             SearchMaxResults = storedLimit
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Equal(expectedLimit, settings.SearchMaxResults);
     }
@@ -110,7 +118,9 @@ public sealed class SettingsMigrationPipelineTests
             Widgets = [widget]
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
 
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.NotNull(settings.WidgetTopologyLayouts);
@@ -133,7 +143,9 @@ public sealed class SettingsMigrationPipelineTests
             SearchEverythingAdvancedSyntaxEnabled = true
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
 
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.False(settings.SearchEverythingEnabled);
@@ -154,7 +166,9 @@ public sealed class SettingsMigrationPipelineTests
             EnableContinuousDecorativeAnimations = legacyEnabled
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
 
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Equal(legacyEnabled, settings.EnableTextMarqueeAnimations);
@@ -175,7 +189,9 @@ public sealed class SettingsMigrationPipelineTests
             TransientWindowReleaseDelaySeconds = PerformanceSettingsPolicy.CleanupNever
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
 
         Assert.Equal(PerformanceSettingsPolicy.ModeBalanced, settings.PerformanceMode);
         Assert.Equal(30, settings.HiddenCacheCleanupDelaySeconds);
@@ -195,7 +211,9 @@ public sealed class SettingsMigrationPipelineTests
             TransientWindowReleaseDelaySeconds = PerformanceSettingsPolicy.CleanupNever
         };
 
-        Assert.True(new SettingsMigrationPipeline().RunMigrations(settings));
+        var (migratedSettings, migrationsApplied) = new SettingsMigrationPipeline().RunMigrationsOnCopy(settings);
+        Assert.True(migrationsApplied);
+        settings = migratedSettings;
 
         Assert.Equal(PerformanceSettingsPolicy.ModeCustom, settings.PerformanceMode);
         Assert.Equal(5 * 60, settings.HiddenCacheCleanupDelaySeconds);
@@ -237,7 +255,7 @@ public sealed class SettingsMigrationPipelineTests
     }
 
     [Fact]
-    public void FailedStep_RestoresThePreStepStateItAlreadyMutated()
+    public void FailedStep_LeavesTheInputGraphUntouched()
     {
         var settings = new AppSettings
         {
@@ -246,10 +264,15 @@ public sealed class SettingsMigrationPipelineTests
         };
         int widgetCountBefore = settings.Widgets.Count;
 
-        bool anyApplied = new SettingsMigrationPipeline(
-            [new MutatingThrowingMigration(4)]).RunMigrations(settings);
+        // Copy-on-write: the mutating step runs on a discarded copy, so both
+        // the returned graph and the input instance stay pristine.
+        var (result, anyApplied) = new SettingsMigrationPipeline(
+            [new MutatingThrowingMigration(4)]).RunMigrationsOnCopy(settings);
 
         Assert.False(anyApplied);
+        Assert.Equal(4, result.SchemaVersion);
+        Assert.Equal(0.8, result.WidgetOpacity);
+        Assert.Equal(widgetCountBefore, result.Widgets.Count);
         Assert.Equal(4, settings.SchemaVersion);
         Assert.Equal(0.8, settings.WidgetOpacity);
         Assert.Equal(widgetCountBefore, settings.Widgets.Count);
@@ -263,15 +286,15 @@ public sealed class SettingsMigrationPipelineTests
         var beforeFailure = new TrackedMigration(4);
         var settings = new AppSettings { SchemaVersion = 4 };
 
-        bool anyApplied = new SettingsMigrationPipeline(
-            [beforeFailure, failing, afterFailure]).RunMigrations(settings);
+        var (result, anyApplied) = new SettingsMigrationPipeline(
+            [beforeFailure, failing, afterFailure]).RunMigrationsOnCopy(settings);
 
         // The failed step stops the chain: the final schema version must
         // never claim migrations that did not run (the pre-fix pipeline
         // stamped the current version unconditionally).
         Assert.True(anyApplied);
         Assert.True(beforeFailure.Applied);
-        Assert.Equal(5, settings.SchemaVersion);
+        Assert.Equal(5, result.SchemaVersion);
         Assert.False(afterFailure.Applied);
     }
 
@@ -282,11 +305,11 @@ public sealed class SettingsMigrationPipelineTests
         var afterFailure = new TrackedMigration(5);
         var settings = new AppSettings { SchemaVersion = 4 };
 
-        bool anyApplied = new SettingsMigrationPipeline(
-            [failing, afterFailure]).RunMigrations(settings);
+        var (result, anyApplied) = new SettingsMigrationPipeline(
+            [failing, afterFailure]).RunMigrationsOnCopy(settings);
 
         Assert.False(anyApplied);
-        Assert.Equal(4, settings.SchemaVersion);
+        Assert.Equal(4, result.SchemaVersion);
         Assert.False(afterFailure.Applied);
     }
 
@@ -298,10 +321,10 @@ public sealed class SettingsMigrationPipelineTests
             .ToArray();
         var settings = new AppSettings { SchemaVersion = 0 };
 
-        bool anyApplied = new SettingsMigrationPipeline(steps).RunMigrations(settings);
+        var (result, anyApplied) = new SettingsMigrationPipeline(steps).RunMigrationsOnCopy(settings);
 
         Assert.True(anyApplied);
-        Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, settings.SchemaVersion);
+        Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, result.SchemaVersion);
         Assert.All(steps, step => Assert.True(step.Applied));
     }
 
@@ -313,9 +336,9 @@ public sealed class SettingsMigrationPipelineTests
         var steps = new[] { new TrackedMigration(4), new TrackedMigration(6) };
         var settings = new AppSettings { SchemaVersion = 4 };
 
-        new SettingsMigrationPipeline(steps).RunMigrations(settings);
+        var (result, _) = new SettingsMigrationPipeline(steps).RunMigrationsOnCopy(settings);
 
-        Assert.Equal(5, settings.SchemaVersion);
+        Assert.Equal(5, result.SchemaVersion);
         Assert.False(steps[1].Applied);
     }
 }

@@ -98,7 +98,7 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
 
         var manifest = new List<FileService.CopiedSourceFileRecord>
         {
-            new(copiedFile, new FileInfo(copiedFile).Length, new FileInfo(copiedFile).LastWriteTimeUtc)
+            new(copiedFile, new FileInfo(copiedFile).Length, new FileInfo(copiedFile).LastWriteTimeUtc, null)
         };
 
         Assert.Throws<FileService.FileTransferSourceChangedException>(
@@ -122,7 +122,7 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
 
         var manifest = new List<FileService.CopiedSourceFileRecord>
         {
-            new(changedFile, 1, DateTime.UtcNow - TimeSpan.FromHours(1))
+            new(changedFile, 1, DateTime.UtcNow - TimeSpan.FromHours(1), null)
         };
 
         Assert.Throws<FileService.FileTransferSourceChangedException>(
@@ -173,7 +173,10 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
             FileAccess.Read,
             FileShare.Read);
 
-        Assert.Throws<IOException>(
+        // A file locked by another process cannot be deleted through a
+        // verified handle: fail closed as a cleanup failure (both copies
+        // stay) instead of a raw delete error.
+        Assert.Throws<FileService.FileTransferSourceCleanupException>(
             () => FileService.DeleteSourceTreeByManifest(
                 sourceDirectory,
                 Path.Combine(_tempRoot, "locked-destination"),

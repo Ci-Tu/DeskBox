@@ -1732,8 +1732,10 @@ public sealed class FileServiceTests : IDisposable
     [Fact]
     public async Task ExecuteTransferPlanAsync_CancelKeepsDestinationWhenSourceChangedAfterCopy()
     {
-        // The source was rewritten after the copy completed: the rollback
-        // cannot prove the destination is still its own copy, so it stays.
+        // The source was rewritten after the copy completed. The rollback
+        // removes the destination through its object-identity receipt (this
+        // copy created it), while the rewritten source stays untouched —
+        // the user's newest content is never the thing being cleaned up.
         var service = new FileService();
         string sourcePath = Path.Combine(_tempRoot, "changed-source.txt");
         string destinationPath = Path.Combine(_tempRoot, "changed-dest.txt");
@@ -1765,13 +1767,14 @@ public sealed class FileServiceTests : IDisposable
                 progress: progress,
                 cancellationToken: cancellation.Token));
 
-        Assert.True(File.Exists(destinationPath), "destination must stay when the source no longer matches");
-        Assert.Equal("first version", await File.ReadAllTextAsync(destinationPath));
+        Assert.False(
+            File.Exists(destinationPath),
+            "this copy's own destination is removed by its identity receipt");
         Assert.Equal("second versio", await File.ReadAllTextAsync(sourcePath));
     }
 
     [Fact]
-    public void MovePaths_DeleteTheSourceThroughAVerifiedHandle()
+    public void MovePaths_HoldTheSourceHandleAcrossTheWholeTransaction()
     {
         string progressSource = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/Services/FileService.TransferProgress.cs"));
@@ -1779,24 +1782,25 @@ public sealed class FileServiceTests : IDisposable
             progressSource,
             "private static async Task MoveFileWithProgressAsync",
             "internal static void DeleteSourceFileAfterCopy");
-        // Handle-bound delete: validation and deletion share one handle, so
-        // the deleted object is the verified one even under a path swap.
+        // One source handle (read+delete, shared for reading only) spans the
+        // copy and the disposition: no gap between validation and deletion,
+        // and concurrent writers are refused instead of raced.
+        Assert.Contains("ShareRead,", managedMove, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShareWrite,", managedMove, StringComparison.Ordinal);
         Assert.Contains(
-            "DeleteSourceFileByIdentity(",
+            "TrySetDispositionByHandle(sourceHandle",
             managedMove,
             StringComparison.Ordinal);
         // An uncapturable identity must never authorize the delete either:
         // fail closed and keep both copies.
         Assert.Contains(
-            "if (sourceIdentity is not { }",
+            "FileTransferSourceCleanupException",
             managedMove,
             StringComparison.Ordinal);
+        // A failed copy removes its destination through the still-open
+        // handle, never by path.
         Assert.Contains(
-            "catch (FileTransferSourceChangedException)",
-            managedMove,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "catch (FileTransferSourceCleanupException)",
+            "TryDisposeWithHandleDeletion(destination)",
             managedMove,
             StringComparison.Ordinal);
 
@@ -1804,25 +1808,12 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.cs"));
         string fallbackMove = Slice(
             service,
-            "private static async Task MoveFileAsync",
+            "private static Task MoveFileAsync",
             "private static async Task MoveDirectoryAsync");
-        Assert.Contains("TryCaptureSourceIdentity", fallbackMove, StringComparison.Ordinal);
-        int verifyIndex = fallbackMove.IndexOf(
-            "SourceFileMatchesIdentity",
-            StringComparison.Ordinal);
-        int handleDeleteIndex = fallbackMove.IndexOf(
-            "DeleteSourceFileByIdentity(",
-            StringComparison.Ordinal);
-        Assert.True(verifyIndex >= 0, "the fallback still pre-validates by path");
-        Assert.True(
-            handleDeleteIndex > verifyIndex,
-            "the handle-bound delete backs the pre-validation");
+        // The headless fallback delegates to the same transaction instead of
+        // reimplementing a second copy-and-delete sequence.
         Assert.Contains(
-            "if (sourceIdentity is not { }",
-            fallbackMove,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "catch (FileTransferSourceCleanupException)",
+            "MoveFileWithProgressAsync(",
             fallbackMove,
             StringComparison.Ordinal);
     }
@@ -2038,42 +2029,27 @@ public sealed class FileServiceTests : IDisposable
         // destination must never come back.
         Assert.DoesNotContain("File.Delete(destinationPath)", copyEntry, StringComparison.Ordinal);
 
-        string fallbackMove = Slice(
-            service,
-            "private static async Task MoveFileAsync",
-            "private static async Task MoveDirectoryAsync");
-        Assert.Contains(
-            "CopyFileWithProgressAsync(",
-            fallbackMove,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "TryDeletePartialFile(destinationFilePath, copiedLength)",
-            fallbackMove,
-            StringComparison.Ordinal);
-
         string progressSource = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/Services/FileService.TransferProgress.cs"));
-        string partialDelete = Slice(
+        string copyCore = Slice(
             progressSource,
-            "private static void TryDeletePartialFile",
-            "private sealed class TransferProgressReporter");
-        Assert.Contains("expectedLength", partialDelete, StringComparison.Ordinal);
-        // The completed-copy rollback verifies the destination identity
-        // receipt before deleting; the captured source length alone is not
-        // an ownership proof.
+            "private static async Task<(FileStream Stream, FileTransferSourceIdentity? Identity)> CopyFileCoreAsync",
+            "private static void TryDisposeQuietly");
+        // The destination is created once with delete access and shared with
+        // nobody; the caller owns the commit, and failures delete through
+        // the still-open handle.
         Assert.Contains(
-            "destinationReceipt",
-            progressSource,
+            "CreateTransferDestinationStream(",
+            copyCore,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "TryDeletePartialFile(destinationFilePath, receipt.Length)",
-            progressSource,
-            StringComparison.Ordinal);
-        // A failed copy deletes its partial file through the still-open
-        // handle, never by path.
         Assert.Contains(
             "TryDisposeWithHandleDeletion(destination)",
-            progressSource,
+            copyCore,
+            StringComparison.Ordinal);
+        // The identity receipt is read from the handle before any close.
+        Assert.Contains(
+            "IdentityFromHandle(destination.SafeFileHandle)",
+            copyCore,
             StringComparison.Ordinal);
     }
 
@@ -2095,7 +2071,7 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void DeleteSourceFileByIdentity_RemovesTheVerifiedObjectAndKeepsAReplacement()
+    public void TryDeleteFileByIdentity_RemovesTheVerifiedObjectAndKeepsAReplacement()
     {
         string path = Path.Combine(_tempRoot, "handle-delete.txt");
         File.WriteAllText(path, "original");
@@ -2104,7 +2080,7 @@ public sealed class FileServiceTests : IDisposable
         Assert.NotNull(identity);
 
         // Unchanged object: the handle-bound delete removes exactly it.
-        FileService.DeleteSourceFileByIdentity(path, path, identity!.Value);
+        Assert.True(FileService.TryDeleteFileByIdentity(path, identity!.Value));
         Assert.False(File.Exists(path));
 
         // A replacement at the same path with the same length and timestamp
@@ -2118,10 +2094,25 @@ public sealed class FileServiceTests : IDisposable
             FileService.TryCaptureSourceIdentity(path);
         Assert.NotEqual(identity.Value.FileKey, replacedIdentity!.Value.FileKey);
 
-        Assert.Throws<FileService.FileTransferSourceChangedException>(
-            () => FileService.DeleteSourceFileByIdentity(path, path, identity.Value));
+        Assert.False(FileService.TryDeleteFileByIdentity(path, identity.Value));
         Assert.True(File.Exists(path));
         Assert.Equal("REPLACED!", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public void PartialDestination_IsDeletedThroughItsOwnOpenHandle()
+    {
+        // The catch-time cleanup deletes through the still-open handle
+        // bound to the object this transfer created — never by path.
+        string path = Path.Combine(_tempRoot, "partial-handle-delete.bin");
+        using FileStream destination = FileService.CreateTransferDestinationStream(path);
+        destination.Write([1, 2, 3, 4], 0, 4);
+        destination.Flush();
+        Assert.True(File.Exists(path));
+
+        FileService.TryDisposeWithHandleDeletion(destination);
+
+        Assert.False(File.Exists(path), "the partial file must disappear when its handle closes");
     }
 
     [Fact]

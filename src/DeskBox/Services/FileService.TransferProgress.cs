@@ -109,7 +109,7 @@ public sealed partial class FileService
                         cancellationToken);
                     completedOperations.Add(childOperations is null
                         ? operation
-                        : operation with { SourceIsDirectory = true, ChildOperations = childOperations });
+                        : operation with { ChildOperations = childOperations });
                 }
 
                 reporter.CompleteItem(Path.GetFileName(operation.SourcePath));
@@ -251,10 +251,11 @@ public sealed partial class FileService
     }
 
     /// <summary>
-    /// Copies one entry. Directories return the actual child operations
-    /// created (name conflicts resolve to "name (2)" paths at copy time) so
-    /// a later rollback removes exactly what this copy created; plain files
-    /// return null.
+    /// Copies one entry. Files return the destination's object identity
+    /// (read from the handle before it closed) for receipt-based rollback;
+    /// directories return the actual child operations created (name
+    /// conflicts resolve to "name (2)" paths at copy time), each carrying
+    /// its own identity.
     /// </summary>
     private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryWithProgressAsync(
         string sourcePath,
@@ -265,12 +266,14 @@ public sealed partial class FileService
         cancellationToken.ThrowIfCancellationRequested();
         if (File.Exists(sourcePath))
         {
-            await CopyFileWithProgressAsync(
+            FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
                 sourcePath,
                 destinationPath,
                 reporter,
                 cancellationToken);
-            return null;
+            return destinationIdentity is null
+                ? null
+                : [new TransferOperation(sourcePath, destinationPath, DestinationIdentity: destinationIdentity)];
         }
 
         if (Directory.Exists(sourcePath))
@@ -314,7 +317,7 @@ public sealed partial class FileService
         }
     }
 
-    private static async Task CopyFileWithProgressAsync(
+    private static async Task<FileTransferSourceIdentity?> CopyFileWithProgressAsync(
         string sourceFilePath,
         string destinationFilePath,
         TransferProgressReporter reporter,
@@ -325,6 +328,7 @@ public sealed partial class FileService
         reporter.SetCurrentItem(sourceInfo.Name);
 
         FileStream? destination = null;
+        FileTransferSourceIdentity? destinationIdentity = null;
         try
         {
             const int bufferSize = 256 * 1024;
@@ -335,53 +339,66 @@ public sealed partial class FileService
                 FileShare.Read,
                 bufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            // The destination handle carries delete access so a failed copy
-            // can be removed through the handle itself: the path cannot have
-            // been replaced while FileShare.None was held.
-            SafeFileHandle destinationHandle = CreateFileW(
+            (destination, destinationIdentity) = await CopyFileCoreAsync(
+                source,
+                sourceInfo,
                 destinationFilePath,
-                GenericWriteAccess | DeleteAccess,
-                ShareNone,
-                IntPtr.Zero,
-                CreateNewDisposition,
-                FileFlagOverlapped,
-                IntPtr.Zero);
-            if (destinationHandle.IsInvalid)
-            {
-                // CreateNew semantics preserved: a competing file at the
-                // planned path fails the copy untouched.
-                throw new IOException(
-                    $"The destination '{destinationFilePath}' could not be created.",
-                    Marshal.GetLastWin32Error());
-            }
+                reporter,
+                cancellationToken);
+        }
+        finally
+        {
+            // Plain copy: no commit follows, so the destination simply closes.
+            // The identity was read from the handle before closing, so the
+            // receipt stays valid as an object identity.
+            TryDisposeQuietly(destination);
+        }
 
-            await using (destination = new FileStream(
-                destinationHandle,
-                FileAccess.Write,
-                bufferSize,
-                isAsync: true))
+        reporter.Report(FileTransferPhase.Transferring, force: false);
+        return destinationIdentity;
+    }
+
+    /// <summary>
+    /// Copies from an open source stream into a CreateNew destination
+    /// handle, flushes, and applies metadata — then returns with the
+    /// destination STILL OPEN and carrying its object identity. The caller
+    /// owns the commit decision (a move keeps it open through the source
+    /// disposition; a copy closes it). A failure deletes the partial
+    /// destination through that same handle.
+    /// </summary>
+    private static async Task<(FileStream Stream, FileTransferSourceIdentity? Identity)> CopyFileCoreAsync(
+        FileStream source,
+        FileInfo sourceInfo,
+        string destinationFilePath,
+        TransferProgressReporter reporter,
+        CancellationToken cancellationToken)
+    {
+        const int bufferSize = 256 * 1024;
+        FileStream destination = CreateTransferDestinationStream(destinationFilePath);
+        try
+        {
+            byte[] buffer = new byte[bufferSize];
+            while (true)
             {
-                byte[] buffer = new byte[bufferSize];
-                while (true)
+                int bytesRead = await source.ReadAsync(
+                    buffer.AsMemory(0, buffer.Length),
+                    cancellationToken);
+                if (bytesRead == 0)
                 {
-                    int bytesRead = await source.ReadAsync(
-                        buffer.AsMemory(0, buffer.Length),
-                        cancellationToken);
-                    if (bytesRead == 0)
-                    {
-                        break;
-                    }
-
-                    await destination.WriteAsync(
-                        buffer.AsMemory(0, bytesRead),
-                        cancellationToken);
-                    reporter.AddBytes(bytesRead, sourceInfo.Name);
+                    break;
                 }
 
-                await destination.FlushAsync(cancellationToken);
-                await destination.DisposeAsync();
-                destination = null;
+                await destination.WriteAsync(
+                    buffer.AsMemory(0, bytesRead),
+                    cancellationToken);
+                reporter.AddBytes(bytesRead, sourceInfo.Name);
             }
+
+            await destination.FlushAsync(cancellationToken);
+            // Still exclusively held (ShareNone), so the path cannot point
+            // anywhere else while metadata is applied.
+            CopyFileMetadata(sourceInfo, destinationFilePath);
+            return (destination, IdentityFromHandle(destination.SafeFileHandle));
         }
         catch
         {
@@ -391,9 +408,29 @@ public sealed partial class FileService
             TryDisposeWithHandleDeletion(destination);
             throw;
         }
+    }
 
-        CopyFileMetadata(sourceInfo, destinationFilePath);
-        reporter.Report(FileTransferPhase.Transferring, force: false);
+    /// <summary>
+    /// Closes a destination stream without deleting the file — used when the
+    /// destination must survive (copy completion, kept-both-copies outcomes).
+    /// </summary>
+    private static void TryDisposeQuietly(FileStream? destination)
+    {
+        if (destination is null)
+        {
+            return;
+        }
+
+        try
+        {
+            destination.Dispose();
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[FileTransfer] Failed to close the destination stream for " +
+                $"'{destination.Name}': {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -401,7 +438,7 @@ public sealed partial class FileService
     /// partial file through that same handle (POSIX-style disposition) so
     /// only the object this transfer created can ever be removed.
     /// </summary>
-    private static void TryDisposeWithHandleDeletion(FileStream? destination)
+    internal static void TryDisposeWithHandleDeletion(FileStream? destination)
     {
         if (destination is null)
         {
@@ -413,11 +450,20 @@ public sealed partial class FileService
             if (!destination.SafeFileHandle.IsClosed)
             {
                 var disposition = new FileDispositionInfo { Delete = true };
-                SetFileInformationByHandle(
+                bool deleted = SetFileInformationByHandle(
                     destination.SafeFileHandle,
                     FileDispositionInfoClass,
                     ref disposition,
                     Marshal.SizeOf<FileDispositionInfo>());
+                App.Log(
+                    $"[FileTransfer] Partial cleanup disposition applied={deleted} " +
+                    $"for '{destination.Name}'");
+            }
+            else
+            {
+                App.Log(
+                    $"[FileTransfer] Partial cleanup skipped: the handle for " +
+                    $"'{destination.Name}' was already closed before disposition.");
             }
         }
         catch (Exception ex)
@@ -486,72 +532,99 @@ public sealed partial class FileService
             // so cancellation and real byte progress remain available.
         }
 
-        // Cross-volume fallback: capture the identity of the file being
-        // copied so the source can be re-validated before it is deleted.
-        FileTransferSourceIdentity? sourceIdentity =
-            TryCaptureSourceIdentity(sourceFilePath);
-
-        await CopyFileWithProgressAsync(
+        // Cross-volume fallback: ONE source handle (READ|DELETE, shared for
+        // reading only) spans the entire copy-to-commit sequence. Nobody can
+        // write, rename, or delete the source mid-move, and the final
+        // disposition deletes the exact object that was copied — no gap
+        // remains between validation and deletion.
+        SafeFileHandle sourceHandle = CreateFileW(
             sourceFilePath,
-            destinationFilePath,
-            reporter,
-            cancellationToken);
-        // Receipt for rolling the completed copy back: captures the object
-        // this transfer created (post-metadata) so a later replacement at the
-        // destination path is never cleaned up as if it were ours.
-        FileTransferSourceIdentity? destinationReceipt =
-            TryCaptureSourceIdentity(destinationFilePath);
+            GenericReadAccess | DeleteAccess,
+            ShareRead,
+            IntPtr.Zero,
+            OpenExisting,
+            FileFlagOverlapped,
+            IntPtr.Zero);
+        if (sourceHandle.IsInvalid)
+        {
+            // A sharing violation here means another process is writing the
+            // source: refuse the move rather than copy a moving target.
+            throw new IOException(
+                $"The source '{sourceFilePath}' is in use and cannot be moved safely " +
+                $"(win32={Marshal.GetLastWin32Error()}).",
+                Marshal.GetLastWin32Error());
+        }
+
+        FileStream? destination = null;
         try
         {
-            if (sourceIdentity is not { } sourceFileIdentity)
+            await using var source = new FileStream(
+                sourceHandle,
+                FileAccess.Read,
+                256 * 1024,
+                isAsync: true);
+            if (IdentityFromHandle(sourceHandle) is null)
             {
-                // Without a captured identity the delete cannot be proven
-                // safe (some file systems cannot stat open files), so both
-                // copies stay.
+                // Without an identity the disposition cannot be tied to the
+                // copied object; keep both copies.
                 throw new FileTransferSourceCleanupException(
                     sourceFilePath,
                     destinationFilePath,
                     new InvalidOperationException(
-                        "The source file identity was unavailable after the copy."));
+                        "The source file identity was unavailable before the copy."));
             }
 
-            // Validate-and-delete is bound to one handle: the identity is
-            // read from the same object the disposition is set on, so a file
-            // swapped in at the path after validation cannot be deleted.
-            DeleteSourceFileByIdentity(
-                sourceFilePath,
+            (destination, _) = await CopyFileCoreAsync(
+                source,
+                sourceInfo,
                 destinationFilePath,
-                sourceFileIdentity);
+                reporter,
+                cancellationToken);
+
+            // The copy was read from this very handle; the disposition
+            // therefore deletes exactly the object that was copied.
+            if (!GetFileInformationByHandle(sourceHandle, out ByHandleFileInformation sourceInformation))
+            {
+                throw new FileTransferSourceCleanupException(
+                    sourceFilePath,
+                    destinationFilePath,
+                    new InvalidOperationException(
+                        "The source file state could not be read before deletion."));
+            }
+
+            if (!TrySetDispositionByHandle(sourceHandle, in sourceInformation, sourceFilePath))
+            {
+                // Copy complete, source retained: both copies stay.
+                throw new FileTransferSourceCleanupException(
+                    sourceFilePath,
+                    destinationFilePath,
+                    new IOException(
+                        $"The source '{sourceFilePath}' could not be deleted after the copy."));
+            }
+
+            // Commit complete: the destination survives and closes normally.
+            TryDisposeQuietly(destination);
+            destination = null;
         }
         catch (FileTransferSourceChangedException)
         {
             // Both copies stay; the destination holds the complete original
-            // content, so the generic destination cleanup must not run.
+            // content, so the destination cleanup must not run.
+            TryDisposeQuietly(destination);
             throw;
         }
         catch (FileTransferSourceCleanupException)
         {
             // Copy complete, source retained by design: the destination holds
             // the full content and must not be cleaned up.
+            TryDisposeQuietly(destination);
             throw;
         }
         catch
         {
-            // Roll back the completed copy only while the destination still
-            // carries this transfer's own object (identity receipt); a
-            // replacement at the path stays untouched.
-            if (destinationReceipt is { } receipt &&
-                SourceFileMatchesIdentity(destinationFilePath, receipt))
-            {
-                TryDeletePartialFile(destinationFilePath, receipt.Length);
-            }
-            else
-            {
-                App.Log(
-                    $"[FileTransfer] Kept '{destinationFilePath}': it no " +
-                    $"longer looks like this transfer's own copy.");
-            }
-
+            // The copy itself failed: remove the destination through its own
+            // still-open handle — never by path, never a replacement.
+            TryDisposeWithHandleDeletion(destination);
             throw;
         }
 
@@ -713,7 +786,7 @@ public sealed partial class FileService
                 var sourceInfo = new FileInfo(filePath);
                 long sourceLength = sourceInfo.Length;
                 DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
-                await CopyFileWithProgressAsync(
+                FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
                     filePath,
                     destinationFilePath,
                     reporter,
@@ -721,9 +794,12 @@ public sealed partial class FileService
                 copiedSourceFiles.Add(new CopiedSourceFileRecord(
                     filePath,
                     sourceLength,
-                    sourceLastWriteUtc));
-                completedChildOperations.Add(
-                    new TransferOperation(filePath, destinationFilePath));
+                    sourceLastWriteUtc,
+                    TryCaptureSourceIdentity(filePath)));
+                completedChildOperations.Add(new TransferOperation(
+                    filePath,
+                    destinationFilePath,
+                    DestinationIdentity: destinationIdentity));
             }
 
             foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
@@ -874,35 +950,36 @@ public sealed partial class FileService
     /// by another process, and neither its attributes nor its content are
     /// ours to touch.
     /// </summary>
-    private static void TryDeletePartialFile(
-        string destinationFilePath,
-        long? expectedLength = null)
+    /// <summary>
+    /// Creates the transfer destination stream: an overlapped CreateNew
+    /// handle with write and delete access, shared with nobody. Returned
+    /// still open — the caller owns the commit decision and the
+    /// handle-bound cleanup on failure.
+    /// </summary>
+    internal static FileStream CreateTransferDestinationStream(string destinationFilePath)
     {
-        try
+        SafeFileHandle destinationHandle = CreateFileW(
+            destinationFilePath,
+            GenericWriteAccess | DeleteAccess,
+            ShareNone,
+            IntPtr.Zero,
+            CreateNewDisposition,
+            FileFlagOverlapped,
+            IntPtr.Zero);
+        if (destinationHandle.IsInvalid)
         {
-            if (!File.Exists(destinationFilePath))
-            {
-                return;
-            }
-
-            if (expectedLength is { } length &&
-                new FileInfo(destinationFilePath).Length != length)
-            {
-                App.Log(
-                    $"[FileTransfer] Kept '{destinationFilePath}': it no " +
-                    $"longer looks like this transfer's own copy.");
-                return;
-            }
-
-            File.SetAttributes(destinationFilePath, FileAttributes.Normal);
-            File.Delete(destinationFilePath);
+            // CreateNew semantics: a competing file at the planned path
+            // fails the copy untouched.
+            throw new IOException(
+                $"The destination '{destinationFilePath}' could not be created.",
+                Marshal.GetLastWin32Error());
         }
-        catch (Exception ex)
-        {
-            App.Log(
-                $"[FileTransfer] Failed to remove partial file " +
-                $"'{destinationFilePath}': {ex.Message}");
-        }
+
+        return new FileStream(
+            destinationHandle,
+            FileAccess.Write,
+            256 * 1024,
+            isAsync: true);
     }
 
     private sealed class TransferProgressReporter(
