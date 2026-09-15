@@ -425,8 +425,19 @@ public sealed partial class FileService
             cancellationToken);
         try
         {
-            if (sourceIdentity is { } identity &&
-                !SourceFileMatchesIdentity(sourceFilePath, identity))
+            if (sourceIdentity is not { } sourceFileIdentity)
+            {
+                // Without a captured identity the delete cannot be proven
+                // safe (some file systems cannot stat open files), so both
+                // copies stay.
+                throw new FileTransferSourceCleanupException(
+                    sourceFilePath,
+                    destinationFilePath,
+                    new InvalidOperationException(
+                        "The source file identity was unavailable after the copy."));
+            }
+
+            if (!SourceFileMatchesIdentity(sourceFilePath, sourceFileIdentity))
             {
                 // The path no longer holds the file that was just copied.
                 // Keep both copies: deleting the source could remove someone
@@ -448,6 +459,12 @@ public sealed partial class FileService
         {
             // Both copies stay; the destination holds the complete original
             // content, so the generic destination cleanup must not run.
+            throw;
+        }
+        catch (FileTransferSourceCleanupException)
+        {
+            // Copy complete, source retained by design: the destination holds
+            // the full content and must not be cleaned up.
             throw;
         }
         catch

@@ -2526,8 +2526,19 @@ public sealed partial class FileService
                     new TransferProgressReporter(progress: null, totalItems: 1),
                     CancellationToken.None);
                 copied = true;
-                if (sourceIdentity is { } identity &&
-                    !SourceFileMatchesIdentity(sourceFilePath, identity))
+                if (sourceIdentity is not { } sourceFileIdentity)
+                {
+                    // Without a captured identity the delete cannot be proven
+                    // safe (some file systems cannot stat open files), so both
+                    // copies stay.
+                    throw new FileTransferSourceCleanupException(
+                        sourceFilePath,
+                        destinationFilePath,
+                        new InvalidOperationException(
+                            "The source file identity was unavailable after the copy."));
+                }
+
+                if (!SourceFileMatchesIdentity(sourceFilePath, sourceFileIdentity))
                 {
                     // The path no longer holds the file that was just copied.
                     // Keep both copies: deleting the source could remove
@@ -2544,6 +2555,12 @@ public sealed partial class FileService
             }
             catch (FileTransferSourceChangedException)
             {
+                throw;
+            }
+            catch (FileTransferSourceCleanupException)
+            {
+                // The copy is complete and the source stays; the destination
+                // holds the full content and must not be cleaned up.
                 throw;
             }
             catch
@@ -3050,12 +3067,15 @@ public sealed partial class FileService
     /// Identity of a source file captured before a copy-then-delete move.
     /// The NTFS file key survives path-based replacement (a new file created
     /// at the same path gets a new key), which length/timestamp comparison
-    /// cannot detect. File systems without stable file keys report null and
-    /// matching falls back to length + timestamp only.
+    /// cannot detect. The key does NOT survive in-place edits: opening and
+    /// rewriting a file keeps its key, so length and timestamp must still
+    /// match before the source may be deleted. File systems without stable
+    /// file keys report null and matching relies on length + timestamp only.
     /// </summary>
     internal readonly record struct FileTransferSourceIdentity(
         long Length,
         DateTime LastWriteTimeUtc,
+        uint VolumeSerialNumber,
         ulong? FileKey);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -3105,6 +3125,7 @@ public sealed partial class FileService
             return new FileTransferSourceIdentity(
                 length,
                 DateTime.FromFileTimeUtc(lastWrite),
+                information.VolumeSerialNumber,
                 fileIndex == 0 ? null : fileIndex);
         }
         catch
@@ -3123,11 +3144,27 @@ public sealed partial class FileService
             return false;
         }
 
-        if (expected.FileKey is { } expectedKey && current.FileKey is { } currentKey)
+        if (expected.VolumeSerialNumber != 0 &&
+            current.VolumeSerialNumber != 0 &&
+            expected.VolumeSerialNumber != current.VolumeSerialNumber)
         {
-            return expectedKey == currentKey;
+            // The path now resolves to a different volume: a reparse point
+            // replaced the original file.
+            return false;
         }
 
+        if (expected.FileKey is { } expectedKey &&
+            current.FileKey is { } currentKey &&
+            expectedKey != currentKey)
+        {
+            // The path holds a different file object than the one copied.
+            return false;
+        }
+
+        // A matching file key proves the same object, NOT that its content
+        // is unchanged: an in-place edit keeps the key. Only an identical
+        // length and write time together prove the copied content is still
+        // current, so the source may not be deleted without all of them.
         return current.Length == expected.Length &&
             current.LastWriteTimeUtc == expected.LastWriteTimeUtc;
     }

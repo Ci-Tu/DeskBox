@@ -449,11 +449,13 @@ public sealed class AppUpdateServiceTests : IDisposable
     [InlineData("https://deskbox.fun/update/DeskBox_Setup.exe", true)]
     [InlineData("https://cdn.deskbox.fun/DeskBox_Setup.exe", true)]
     [InlineData("https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.2/DeskBox_Setup.exe", true)]
-    [InlineData("https://objects.githubusercontent.com/some-asset-path", true)]
     [InlineData("http://deskbox.fun/update/DeskBox_Setup.exe", false)]
     [InlineData("https://evil.example.com/DeskBox_Setup.exe", false)]
     [InlineData("https://deskbox.fun.evil.example.com/DeskBox_Setup.exe", false)]
     [InlineData("https://github.evil.example.com/DeskBox_Setup.exe", false)]
+    [InlineData("https://github.com/attacker/evil/releases/download/v1.0.0/DeskBox_Setup.exe", false)]
+    [InlineData("https://github.com/Tianyu199509/DeskBox/blob/main/DeskBox_Setup.exe", false)]
+    [InlineData("https://objects.githubusercontent.com/some-asset-path", false)]
     public void IsManifestUsable_PinsTheInstallerOriginToTrustedHttpsHosts(
         string downloadUrl,
         bool expected)

@@ -853,6 +853,9 @@ public sealed partial class WidgetManager
             configs,
             async config =>
             {
+                // A folder widget with thousands of items can take a while to
+                // restore; each widget proves startup is still progressing.
+                App.MarkStartupProgress();
                 using var widgetPerfScope = PerformanceLogger.Measure(
                     "WidgetManager.RestoreWidget",
                     $"id={config.Id} name={config.Name}");

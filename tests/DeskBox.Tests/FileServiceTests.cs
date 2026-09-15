@@ -1651,6 +1651,27 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
+    public void SourceIdentity_DetectsInPlaceEditDespiteSameFileKey()
+    {
+        // An in-place rewrite keeps the NTFS file key, so the key alone must
+        // never authorize deleting the source: the copied content may be
+        // stale by the time the delete runs (Word/OneDrive in-place saves).
+        string path = Path.Combine(_tempRoot, "identity-inplace.txt");
+        File.WriteAllText(path, "AAAAAAAA");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+        Assert.NotNull(identity!.Value.FileKey);
+
+        // Same object, same length, newer write time (a sub-timestamp-granularity
+        // rewrite stays undetectable without a content hash — accepted).
+        File.WriteAllText(path, "BBBBBBBB");
+        File.SetLastWriteTimeUtc(path, identity.Value.LastWriteTimeUtc.AddSeconds(2));
+
+        Assert.False(FileService.SourceFileMatchesIdentity(path, identity.Value));
+    }
+
+    [Fact]
     public async Task ExecuteTransferPlanAsync_CancelKeepsForeignFilesInCompletedDirectoryCopy()
     {
         // Canceling after one directory copy completed must roll that copy
@@ -1775,6 +1796,16 @@ public sealed class FileServiceTests : IDisposable
             "catch (FileTransferSourceChangedException)",
             managedMove,
             StringComparison.Ordinal);
+        // An uncapturable identity must never authorize the delete either:
+        // fail closed and keep both copies.
+        Assert.Contains(
+            "if (sourceIdentity is not { }",
+            managedMove,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (FileTransferSourceCleanupException)",
+            managedMove,
+            StringComparison.Ordinal);
 
         string service = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/Services/FileService.cs"));
@@ -1784,8 +1815,48 @@ public sealed class FileServiceTests : IDisposable
             "private static async Task MoveDirectoryAsync");
         Assert.Contains("TryCaptureSourceIdentity", fallbackMove, StringComparison.Ordinal);
         Assert.Contains(
+            "if (sourceIdentity is not { }",
+            fallbackMove,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "catch (FileTransferSourceChangedException)",
             fallbackMove,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (FileTransferSourceCleanupException)",
+            fallbackMove,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceIdentity_MatchingRequiresFileKeyAndLengthAndTimestampTogether()
+    {
+        // A matching key proves the same object, not unchanged content: the
+        // conjunction must stay in the source so a future edit cannot regress
+        // to key-only matching.
+        string service = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.cs"));
+        string matches = Slice(
+            service,
+            "internal static bool SourceFileMatchesIdentity",
+            "// ─── Steam dead-shortcut detection");
+
+        Assert.Contains(
+            "current.Length == expected.Length",
+            matches,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "current.LastWriteTimeUtc == expected.LastWriteTimeUtc",
+            matches,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "VolumeSerialNumber != current.VolumeSerialNumber",
+            matches,
+            StringComparison.Ordinal);
+        // The key-only short circuit must never come back.
+        Assert.DoesNotContain(
+            "return expectedKey == currentKey;",
+            matches,
             StringComparison.Ordinal);
     }
 

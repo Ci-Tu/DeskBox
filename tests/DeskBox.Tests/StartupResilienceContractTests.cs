@@ -226,6 +226,30 @@ public sealed class StartupResilienceContractTests
         Assert.Contains("Exit();", shutdown, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void StartupWatchdog_MeasuresStallNotTotalElapsedTime()
+    {
+        string startup = Read("src/DeskBox/App.Startup.cs");
+        string watchdog = Slice(
+            startup,
+            "private static void StartStartupWatchdog",
+            "private static void MarkStartupLifelineEstablished");
+
+        // A multi-gigabyte data restore legitimately runs past any fixed
+        // total-time budget; the watchdog may only kill a startup that has
+        // stopped making progress entirely.
+        Assert.Contains("s_lastStartupProgressTicks", watchdog, StringComparison.Ordinal);
+        Assert.Contains("stalledMs", watchdog, StringComparison.Ordinal);
+        Assert.DoesNotContain("waitedMs", watchdog, StringComparison.Ordinal);
+
+        // The long phases must actually mark progress: the backup snapshot
+        // copy loop (pre-restore archive) and per-widget restoration.
+        string backup = Read("src/DeskBox/Services/DeskBoxDataBackupService.cs");
+        Assert.Contains("App.MarkStartupProgress();", backup, StringComparison.Ordinal);
+        string manager = Read("src/DeskBox/Services/WidgetManager.cs");
+        Assert.Contains("App.MarkStartupProgress();", manager, StringComparison.Ordinal);
+    }
+
     private static string OnLaunched() =>
         Slice(
             Read("src/DeskBox/App.xaml.cs"),

@@ -985,6 +985,7 @@ public partial class App : Application
                 async () => await DataBackupService.CreateAutomaticSnapshotIfDueAsync());
 
             // Phase 1: Load settings (must complete first)
+            MarkStartupProgress();
             await SettingsService.LoadAsync();
             RefreshAutomaticBackupOptionsFromSettings();
             SettingsService.SettingsChanged += OnBackupSettingsChanged;
@@ -1022,6 +1023,7 @@ public partial class App : Application
 
             // Parallel: independent UI setup. The tray is the lifeline: once its
             // icon is up the user can act on the process again.
+            MarkStartupProgress();
             CreateTrayIcon();
             RunOptionalStartupStep("lifecycle-recovery-watcher", InitializeLifecycleRecoveryWatcher);
 
@@ -1040,6 +1042,7 @@ public partial class App : Application
 
             WidgetManager = new WidgetManager(SettingsService, FileService, OrganizerService, themeService, quickCaptureService, localizationService);
             WidgetManager.TrayLayerStateChanged += UpdateTrayLayerStateText;
+            MarkStartupProgress();
             // Lets a quick-reveal raise promote already-open DeskBox surfaces
             // (search popup, settings, desktop organization) above the raised
             // widget group; the reverse order is handled per-window at show.

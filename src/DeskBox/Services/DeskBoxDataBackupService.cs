@@ -1195,6 +1195,9 @@ public sealed partial class DeskBoxDataBackupService
         Directory.CreateDirectory(snapshotDataDirectory);
         foreach ((string sourcePath, string relativePath) in sourceFiles)
         {
+            // A multi-gigabyte snapshot legitimately runs longer than the
+            // startup watchdog's stall window; each file proves progress.
+            App.MarkStartupProgress();
             cancellationToken.ThrowIfCancellationRequested();
             string destinationPath = Path.Combine(
                 snapshotDataDirectory,

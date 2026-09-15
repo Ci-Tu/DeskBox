@@ -458,11 +458,20 @@ public sealed partial class AppUpdateService : IAppUpdateService
             return false;
         }
 
-        return IsHostOrSubdomain(uri, "deskbox.fun") ||
-            IsHostOrSubdomain(uri, "github.com") ||
-            string.Equals(
-                uri.Host,
-                "objects.githubusercontent.com",
+        if (IsHostOrSubdomain(uri, "deskbox.fun"))
+        {
+            return true;
+        }
+
+        // GitHub hosts third-party repositories, so trusting the whole domain
+        // would let a tampered manifest point at any attacker repository with
+        // a matching hash. Only this project's own release downloads count;
+        // the actual asset bytes arrive via redirect from
+        // objects.githubusercontent.com, which the HTTP client follows and
+        // which therefore must never be trusted as a manifest origin itself.
+        return string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
+            uri.AbsolutePath.StartsWith(
+                "/Tianyu199509/DeskBox/releases/download/",
                 StringComparison.OrdinalIgnoreCase);
     }
 
