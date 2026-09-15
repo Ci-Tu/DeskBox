@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using DeskBox.Helpers;
+using Microsoft.Win32.SafeHandles;
 
 namespace DeskBox.Services;
 
@@ -97,17 +98,20 @@ public sealed partial class FileService
                         estimate,
                         reporter,
                         cancellationToken);
+                    completedOperations.Add(operation);
                 }
                 else
                 {
-                    await CopyEntryWithProgressAsync(
+                    IReadOnlyList<TransferOperation>? childOperations = await CopyEntryWithProgressAsync(
                         operation.SourcePath,
                         operation.DestinationPath,
                         reporter,
                         cancellationToken);
+                    completedOperations.Add(childOperations is null
+                        ? operation
+                        : operation with { SourceIsDirectory = true, ChildOperations = childOperations });
                 }
 
-                completedOperations.Add(operation);
                 reporter.CompleteItem(Path.GetFileName(operation.SourcePath));
                 // A progress consumer can request cancellation from the final
                 // byte/item callback. Check once more after registering the
@@ -246,7 +250,13 @@ public sealed partial class FileService
         }
     }
 
-    private static async Task CopyEntryWithProgressAsync(
+    /// <summary>
+    /// Copies one entry. Directories return the actual child operations
+    /// created (name conflicts resolve to "name (2)" paths at copy time) so
+    /// a later rollback removes exactly what this copy created; plain files
+    /// return null.
+    /// </summary>
+    private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryWithProgressAsync(
         string sourcePath,
         string destinationPath,
         TransferProgressReporter reporter,
@@ -260,17 +270,19 @@ public sealed partial class FileService
                 destinationPath,
                 reporter,
                 cancellationToken);
-            return;
+            return null;
         }
 
         if (Directory.Exists(sourcePath))
         {
-            await CopyDirectoryWithProgressAsync(
+            return await CopyDirectoryWithProgressAsync(
                 sourcePath,
                 destinationPath,
                 reporter,
                 cancellationToken);
         }
+
+        return null;
     }
 
     private static async Task MoveEntryWithProgressAsync(
@@ -312,7 +324,7 @@ public sealed partial class FileService
         var sourceInfo = new FileInfo(sourceFilePath);
         reporter.SetCurrentItem(sourceInfo.Name);
 
-        bool destinationCreated = false;
+        FileStream? destination = null;
         try
         {
             const int bufferSize = 256 * 1024;
@@ -323,49 +335,110 @@ public sealed partial class FileService
                 FileShare.Read,
                 bufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using var destination = new FileStream(
+            // The destination handle carries delete access so a failed copy
+            // can be removed through the handle itself: the path cannot have
+            // been replaced while FileShare.None was held.
+            SafeFileHandle destinationHandle = CreateFileW(
                 destinationFilePath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            destinationCreated = true;
-
-            byte[] buffer = new byte[bufferSize];
-            while (true)
+                GenericWriteAccess | DeleteAccess,
+                ShareNone,
+                IntPtr.Zero,
+                CreateNewDisposition,
+                FileFlagOverlapped,
+                IntPtr.Zero);
+            if (destinationHandle.IsInvalid)
             {
-                int bytesRead = await source.ReadAsync(
-                    buffer.AsMemory(0, buffer.Length),
-                    cancellationToken);
-                if (bytesRead == 0)
-                {
-                    break;
-                }
-
-                await destination.WriteAsync(
-                    buffer.AsMemory(0, bytesRead),
-                    cancellationToken);
-                reporter.AddBytes(bytesRead, sourceInfo.Name);
+                // CreateNew semantics preserved: a competing file at the
+                // planned path fails the copy untouched.
+                throw new IOException(
+                    $"The destination '{destinationFilePath}' could not be created.",
+                    Marshal.GetLastWin32Error());
             }
 
-            await destination.FlushAsync(cancellationToken);
+            await using (destination = new FileStream(
+                destinationHandle,
+                FileAccess.Write,
+                bufferSize,
+                isAsync: true))
+            {
+                byte[] buffer = new byte[bufferSize];
+                while (true)
+                {
+                    int bytesRead = await source.ReadAsync(
+                        buffer.AsMemory(0, buffer.Length),
+                        cancellationToken);
+                    if (bytesRead == 0)
+                    {
+                        break;
+                    }
+
+                    await destination.WriteAsync(
+                        buffer.AsMemory(0, bytesRead),
+                        cancellationToken);
+                    reporter.AddBytes(bytesRead, sourceInfo.Name);
+                }
+
+                await destination.FlushAsync(cancellationToken);
+                await destination.DisposeAsync();
+                destination = null;
+            }
         }
         catch
         {
-            // FileMode.CreateNew can fail because another process created the
-            // destination after planning. Never delete that pre-existing file;
-            // only clean up a destination stream this operation opened.
-            if (destinationCreated)
-            {
-                TryDeletePartialFile(destinationFilePath);
-            }
-
+            // Delete the partial file through the still-open handle bound to
+            // the object this copy created — never by path, and never a file
+            // someone else placed at the path.
+            TryDisposeWithHandleDeletion(destination);
             throw;
         }
 
         CopyFileMetadata(sourceInfo, destinationFilePath);
         reporter.Report(FileTransferPhase.Transferring, force: false);
+    }
+
+    /// <summary>
+    /// Disposes a destination stream whose transfer failed, deleting the
+    /// partial file through that same handle (POSIX-style disposition) so
+    /// only the object this transfer created can ever be removed.
+    /// </summary>
+    private static void TryDisposeWithHandleDeletion(FileStream? destination)
+    {
+        if (destination is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!destination.SafeFileHandle.IsClosed)
+            {
+                var disposition = new FileDispositionInfo { Delete = true };
+                SetFileInformationByHandle(
+                    destination.SafeFileHandle,
+                    FileDispositionInfoClass,
+                    ref disposition,
+                    Marshal.SizeOf<FileDispositionInfo>());
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[FileTransfer] Handle-bound partial deletion failed for " +
+                $"'{destination.Name}': {ex.Message}");
+        }
+        finally
+        {
+            try
+            {
+                destination.Dispose();
+            }
+            catch (Exception ex)
+            {
+                App.Log(
+                    $"[FileTransfer] Failed to dispose the partial stream for " +
+                    $"'{destination.Name}': {ex.Message}");
+            }
+        }
     }
 
     private static async Task MoveFileWithProgressAsync(
@@ -423,6 +496,11 @@ public sealed partial class FileService
             destinationFilePath,
             reporter,
             cancellationToken);
+        // Receipt for rolling the completed copy back: captures the object
+        // this transfer created (post-metadata) so a later replacement at the
+        // destination path is never cleaned up as if it were ours.
+        FileTransferSourceIdentity? destinationReceipt =
+            TryCaptureSourceIdentity(destinationFilePath);
         try
         {
             if (sourceIdentity is not { } sourceFileIdentity)
@@ -437,23 +515,13 @@ public sealed partial class FileService
                         "The source file identity was unavailable after the copy."));
             }
 
-            if (!SourceFileMatchesIdentity(sourceFilePath, sourceFileIdentity))
-            {
-                // The path no longer holds the file that was just copied.
-                // Keep both copies: deleting the source could remove someone
-                // else's file, deleting the destination would discard the
-                // original content.
-                throw new FileTransferSourceChangedException(
-                    sourceFilePath,
-                    destinationFilePath);
-            }
-
-            FileAttributes sourceAttributes = sourceInfo.Attributes;
-            await Task.Run(
-                () => DeleteSourceFileAfterCopy(
-                    sourceFilePath,
-                    sourceAttributes),
-                cancellationToken);
+            // Validate-and-delete is bound to one handle: the identity is
+            // read from the same object the disposition is set on, so a file
+            // swapped in at the path after validation cannot be deleted.
+            DeleteSourceFileByIdentity(
+                sourceFilePath,
+                destinationFilePath,
+                sourceFileIdentity);
         }
         catch (FileTransferSourceChangedException)
         {
@@ -469,9 +537,21 @@ public sealed partial class FileService
         }
         catch
         {
-            // The copy completed, so the destination should still carry the
-            // captured source length; anything else is not ours to delete.
-            TryDeletePartialFile(destinationFilePath, sourceLength);
+            // Roll back the completed copy only while the destination still
+            // carries this transfer's own object (identity receipt); a
+            // replacement at the path stays untouched.
+            if (destinationReceipt is { } receipt &&
+                SourceFileMatchesIdentity(destinationFilePath, receipt))
+            {
+                TryDeletePartialFile(destinationFilePath, receipt.Length);
+            }
+            else
+            {
+                App.Log(
+                    $"[FileTransfer] Kept '{destinationFilePath}': it no " +
+                    $"longer looks like this transfer's own copy.");
+            }
+
             throw;
         }
 
@@ -589,7 +669,7 @@ public sealed partial class FileService
         StringBuilder volumePathName,
         uint bufferLength);
 
-    private static Task CopyDirectoryWithProgressAsync(
+    private static Task<IReadOnlyList<TransferOperation>> CopyDirectoryWithProgressAsync(
         string sourceDirectory,
         string destinationDirectory,
         TransferProgressReporter reporter,
@@ -604,7 +684,7 @@ public sealed partial class FileService
             new List<CopiedSourceFileRecord>());
     }
 
-    private static async Task CopyDirectoryWithProgressAsync(
+    private static async Task<IReadOnlyList<TransferOperation>> CopyDirectoryWithProgressAsync(
         string sourceDirectory,
         string destinationDirectory,
         TransferProgressReporter reporter,
@@ -652,15 +732,16 @@ public sealed partial class FileService
                 string destinationSubDirectory = GetAvailableDestinationPath(
                     destinationDirectory,
                     Path.GetFileName(subDirectory));
-                await CopyDirectoryWithProgressAsync(
+                IReadOnlyList<TransferOperation> childOperations = await CopyDirectoryWithProgressAsync(
                     subDirectory,
                     destinationSubDirectory,
                     reporter,
                     cancellationToken,
                     visitedSourceDirectories,
                     copiedSourceFiles);
+                completedChildOperations.AddRange(childOperations);
                 completedChildOperations.Add(
-                    new TransferOperation(subDirectory, destinationSubDirectory));
+                    new TransferOperation(subDirectory, destinationSubDirectory, SourceIsDirectory: true));
             }
         }
         catch
@@ -674,6 +755,8 @@ public sealed partial class FileService
 
             throw;
         }
+
+        return completedChildOperations;
     }
 
     private static async Task MoveDirectoryWithProgressAsync(

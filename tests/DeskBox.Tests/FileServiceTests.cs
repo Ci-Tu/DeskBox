@@ -1771,7 +1771,7 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void MovePaths_RevalidateSourceIdentityBeforeDeletingIt()
+    public void MovePaths_DeleteTheSourceThroughAVerifiedHandle()
     {
         string progressSource = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/Services/FileService.TransferProgress.cs"));
@@ -1779,27 +1779,20 @@ public sealed class FileServiceTests : IDisposable
             progressSource,
             "private static async Task MoveFileWithProgressAsync",
             "internal static void DeleteSourceFileAfterCopy");
-        Assert.Contains("TryCaptureSourceIdentity", managedMove, StringComparison.Ordinal);
-        int verifyIndex = managedMove.IndexOf(
-            "SourceFileMatchesIdentity",
-            StringComparison.Ordinal);
-        int deleteIndex = managedMove.IndexOf(
-            "DeleteSourceFileAfterCopy",
-            StringComparison.Ordinal);
-        Assert.True(verifyIndex >= 0, "the source identity must be revalidated");
-        Assert.True(
-            deleteIndex > verifyIndex,
-            "the revalidation must happen before the source delete");
-        // A changed source keeps both copies; it must bypass the generic
-        // destination cleanup.
+        // Handle-bound delete: validation and deletion share one handle, so
+        // the deleted object is the verified one even under a path swap.
         Assert.Contains(
-            "catch (FileTransferSourceChangedException)",
+            "DeleteSourceFileByIdentity(",
             managedMove,
             StringComparison.Ordinal);
         // An uncapturable identity must never authorize the delete either:
         // fail closed and keep both copies.
         Assert.Contains(
             "if (sourceIdentity is not { }",
+            managedMove,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "catch (FileTransferSourceChangedException)",
             managedMove,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1814,12 +1807,18 @@ public sealed class FileServiceTests : IDisposable
             "private static async Task MoveFileAsync",
             "private static async Task MoveDirectoryAsync");
         Assert.Contains("TryCaptureSourceIdentity", fallbackMove, StringComparison.Ordinal);
+        int verifyIndex = fallbackMove.IndexOf(
+            "SourceFileMatchesIdentity",
+            StringComparison.Ordinal);
+        int handleDeleteIndex = fallbackMove.IndexOf(
+            "DeleteSourceFileByIdentity(",
+            StringComparison.Ordinal);
+        Assert.True(verifyIndex >= 0, "the fallback still pre-validates by path");
+        Assert.True(
+            handleDeleteIndex > verifyIndex,
+            "the handle-bound delete backs the pre-validation");
         Assert.Contains(
             "if (sourceIdentity is not { }",
-            fallbackMove,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "catch (FileTransferSourceChangedException)",
             fallbackMove,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1889,10 +1888,18 @@ public sealed class FileServiceTests : IDisposable
             receipt,
             StringComparison.Ordinal);
 
+        // Directory rollbacks prefer the recorded child receipts (the actual
+        // "name (2)" destinations created at copy time) over re-deriving
+        // destinations from the source tree.
+        Assert.Contains(
+            "operation.ChildOperations is { } childOperations",
+            rollback,
+            StringComparison.Ordinal);
+
         string directory = Slice(
             service,
             "private static void RollbackCopiedDirectory",
-            "private static async Task CopyEntryAsync");
+            "TryDeleteEmptyDestinationTree(string destinationDirectory)");
         Assert.Contains(
             "recursive: false",
             directory,
@@ -2021,7 +2028,7 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.cs"));
         string copyEntry = Slice(
             service,
-            "private static async Task CopyEntryAsync",
+            "private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryAsync",
             "private static async Task MoveEntryAsync");
         Assert.Contains(
             "CopyFileWithProgressAsync(",
@@ -2051,10 +2058,118 @@ public sealed class FileServiceTests : IDisposable
             "private static void TryDeletePartialFile",
             "private sealed class TransferProgressReporter");
         Assert.Contains("expectedLength", partialDelete, StringComparison.Ordinal);
+        // The completed-copy rollback verifies the destination identity
+        // receipt before deleting; the captured source length alone is not
+        // an ownership proof.
         Assert.Contains(
-            "TryDeletePartialFile(destinationFilePath, sourceLength)",
+            "destinationReceipt",
             progressSource,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "TryDeletePartialFile(destinationFilePath, receipt.Length)",
+            progressSource,
+            StringComparison.Ordinal);
+        // A failed copy deletes its partial file through the still-open
+        // handle, never by path.
+        Assert.Contains(
+            "TryDisposeWithHandleDeletion(destination)",
+            progressSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceIdentity_RejectsAMissingFileKeyOnEitherSide()
+    {
+        string path = Path.Combine(_tempRoot, "identity-asymmetric.txt");
+        File.WriteAllText(path, "payload");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+        Assert.NotNull(identity!.Value.FileKey);
+
+        // One stat saw a key, the other did not: the object at the path is
+        // no longer the one that was captured.
+        var withoutKey = identity.Value with { FileKey = null };
+        Assert.False(FileService.SourceIdentityMatches(withoutKey, identity.Value));
+        Assert.False(FileService.SourceIdentityMatches(identity.Value, withoutKey));
+    }
+
+    [Fact]
+    public void DeleteSourceFileByIdentity_RemovesTheVerifiedObjectAndKeepsAReplacement()
+    {
+        string path = Path.Combine(_tempRoot, "handle-delete.txt");
+        File.WriteAllText(path, "original");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+
+        // Unchanged object: the handle-bound delete removes exactly it.
+        FileService.DeleteSourceFileByIdentity(path, path, identity!.Value);
+        Assert.False(File.Exists(path));
+
+        // A replacement at the same path with the same length and timestamp
+        // must survive: the delete refuses to act on the path alone.
+        File.WriteAllText(path, "original");
+        DateTime stamp = File.GetLastWriteTimeUtc(path);
+        File.Delete(path);
+        File.WriteAllText(path, "REPLACED!");
+        File.SetLastWriteTimeUtc(path, stamp);
+        FileService.FileTransferSourceIdentity? replacedIdentity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotEqual(identity.Value.FileKey, replacedIdentity!.Value.FileKey);
+
+        Assert.Throws<FileService.FileTransferSourceChangedException>(
+            () => FileService.DeleteSourceFileByIdentity(path, path, identity.Value));
+        Assert.True(File.Exists(path));
+        Assert.Equal("REPLACED!", File.ReadAllText(path));
+    }
+
+    [Fact]
+    public async Task CopyRollback_WithANameConflict_DeletesOnlyTheActuallyCreatedFile()
+    {
+        // A foreign file already occupies the planned name, so the copy
+        // creates "a (2).txt". The rollback must remove the file this copy
+        // created — not the foreign twin the source-relative derivation
+        // would point at.
+        var service = new FileService();
+        string sourceDirectory = Path.Combine(_tempRoot, "conflict-src");
+        Directory.CreateDirectory(sourceDirectory);
+        string sourceFile = Path.Combine(sourceDirectory, "a.txt");
+        File.WriteAllText(sourceFile, "shared payload");
+
+        string destinationDirectory = Path.Combine(_tempRoot, "conflict-dest");
+        Directory.CreateDirectory(destinationDirectory);
+        string foreignFile = Path.Combine(destinationDirectory, "a.txt");
+        File.WriteAllText(foreignFile, "shared payload");
+        DateTime stamp = DateTime.UtcNow.AddDays(-1);
+        File.SetLastWriteTimeUtc(sourceFile, stamp);
+        File.SetLastWriteTimeUtc(foreignFile, stamp);
+
+        string lockedSource = Path.Combine(_tempRoot, "conflict-locked.txt");
+        File.WriteAllText(lockedSource, "will fail");
+        await using var lockHandle = new FileStream(
+            lockedSource,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.None);
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            service.ExecuteTransferPlanAsync(
+                [
+                    new FileService.FileTransferPlan(sourceDirectory, destinationDirectory),
+                    new FileService.FileTransferPlan(lockedSource, Path.Combine(_tempRoot, "conflict-locked-dest.txt")),
+                ],
+                move: false,
+                progress: null));
+
+        Assert.True(
+            File.Exists(foreignFile),
+            "the pre-existing foreign file must survive the rollback");
+        Assert.Equal("shared payload", await File.ReadAllTextAsync(foreignFile));
+        Assert.False(
+            File.Exists(Path.Combine(destinationDirectory, "a (2).txt")),
+            "the file this copy actually created must be removed");
+        Assert.True(File.Exists(sourceFile));
     }
 
     private static string Slice(string source, string startMarker, string endMarker)

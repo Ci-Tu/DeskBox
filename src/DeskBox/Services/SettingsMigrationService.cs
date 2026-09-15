@@ -1,4 +1,5 @@
 using DeskBox.Models;
+using System.Text.Json;
 
 namespace DeskBox.Services;
 
@@ -74,6 +75,19 @@ public sealed class SettingsMigrationPipeline
                 break;
             }
 
+            // A step that mutates fields and then throws must not leave a
+            // half-migrated graph behind: snapshot the pre-step state so the
+            // caller-held instance can be restored verbatim. Without a
+            // snapshot the step does not run at all.
+            byte[]? preStepSnapshot = TrySerializeSettings(settings);
+            if (preStepSnapshot is null)
+            {
+                App.Log(
+                    $"[SettingsMigration] Migration from version {migration.FromVersion} skipped: " +
+                    "the pre-step settings snapshot could not be taken.");
+                break;
+            }
+
             try
             {
                 migration.Migrate(settings);
@@ -86,10 +100,12 @@ public sealed class SettingsMigrationPipeline
                 // A failed step must stop the chain: every later migration
                 // assumes the schema the failed step was supposed to produce,
                 // and stamping the final version anyway would permanently skip
-                // the failed step on every later launch.
+                // the failed step on every later launch. Restore the snapshot
+                // so partially applied mutations do not persist either.
+                RestoreSettingsSnapshot(settings, preStepSnapshot);
                 App.Log(
                     $"[SettingsMigration] Migration from version {migration.FromVersion} failed: {ex.Message}; " +
-                    $"stopping at schema version {version} (will retry on next launch)");
+                    $"state restored, stopping at schema version {version} (will retry on next launch)");
                 break;
             }
         }
@@ -99,6 +115,49 @@ public sealed class SettingsMigrationPipeline
         // launch; only a full pass reaches CurrentSchemaVersion.
         settings.SchemaVersion = version;
         return anyApplied;
+    }
+
+    private static byte[]? TrySerializeSettings(AppSettings settings)
+    {
+        try
+        {
+            return JsonSerializer.SerializeToUtf8Bytes(
+                settings,
+                SettingsJsonContext.Default.AppSettings);
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[SettingsMigration] Settings snapshot failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static void RestoreSettingsSnapshot(AppSettings settings, byte[] snapshot)
+    {
+        try
+        {
+            if (JsonSerializer.Deserialize(
+                    snapshot,
+                    SettingsJsonContext.Default.AppSettings) is not { } restored)
+            {
+                App.Log("[SettingsMigration] Snapshot restore produced no settings.");
+                return;
+            }
+
+            // Copy the restored state onto the instance the caller holds;
+            // property-by-property write-back keeps the reference identity.
+            foreach (var property in typeof(AppSettings).GetProperties())
+            {
+                if (property.CanWrite && property.GetIndexParameters().Length == 0)
+                {
+                    property.SetValue(settings, property.GetValue(restored));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[SettingsMigration] Snapshot restore failed: {ex.Message}");
+        }
     }
 }
 

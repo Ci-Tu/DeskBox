@@ -74,7 +74,8 @@ public sealed partial class FileService
     private sealed record TransferOperation(
         string SourcePath,
         string DestinationPath,
-        bool SourceIsDirectory = false);
+        bool SourceIsDirectory = false,
+        IReadOnlyList<TransferOperation>? ChildOperations = null);
 
     private sealed record FileSystemEntrySnapshot(
         string Path,
@@ -1429,15 +1430,18 @@ public sealed partial class FileService
                     await Task.Run(() => MoveEntryAsync(
                         operation.SourcePath,
                         operation.DestinationPath));
+                    completedOperations.Add(operation);
                 }
                 else
                 {
-                    await Task.Run(() => CopyEntryAsync(
-                        operation.SourcePath,
-                        operation.DestinationPath));
+                    IReadOnlyList<TransferOperation>? childOperations = await Task.Run(
+                        () => CopyEntryAsync(
+                            operation.SourcePath,
+                            operation.DestinationPath));
+                    completedOperations.Add(childOperations is null
+                        ? operation
+                        : operation with { SourceIsDirectory = true, ChildOperations = childOperations });
                 }
-
-                completedOperations.Add(operation);
             }
         }
         catch
@@ -2330,6 +2334,26 @@ public sealed partial class FileService
                         reporter,
                         CancellationToken.None);
                 }
+                else if (operation.ChildOperations is { } childOperations && childOperations.Count > 0)
+                {
+                    // Roll back by what this copy actually created (name
+                    // conflicts resolved to "name (2)" paths at copy time);
+                    // deriving destinations from the source tree again could
+                    // touch files this copy never made.
+                    await Task.Run(() =>
+                    {
+                        foreach (TransferOperation child in childOperations)
+                        {
+                            if (child.SourceIsDirectory)
+                            {
+                                continue;
+                            }
+
+                            RollbackCopiedEntry(child.SourcePath, child.DestinationPath);
+                        }
+                    });
+                    TryDeleteEmptyDestinationTree(operation.DestinationPath);
+                }
                 else
                 {
                     await Task.Run(() => RollbackCopiedEntry(
@@ -2447,10 +2471,7 @@ public sealed partial class FileService
             }
         }
 
-        if (!Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
-        {
-            Directory.Delete(destinationDirectory, recursive: false);
-        }
+        TryDeleteEmptyDestinationTree(destinationDirectory);
 
         if (kept > 0)
         {
@@ -2460,7 +2481,51 @@ public sealed partial class FileService
         }
     }
 
-    private static async Task CopyEntryAsync(string sourcePath, string destinationPath)
+    /// <summary>
+    /// Removes a copied directory tree bottom-up, but only while each level
+    /// is empty: unknown content always blocks deletion.
+    /// </summary>
+    private static void TryDeleteEmptyDestinationTree(string destinationDirectory)
+    {
+        try
+        {
+            if (!Directory.Exists(destinationDirectory))
+            {
+                return;
+            }
+
+            foreach (string subDirectory in Directory
+                         .EnumerateDirectories(destinationDirectory, "*", SearchOption.AllDirectories)
+                         .OrderByDescending(path =>
+                             path.Count(character => character == Path.DirectorySeparatorChar)))
+            {
+                if (!Directory.EnumerateFileSystemEntries(subDirectory).Any())
+                {
+                    Directory.Delete(subDirectory, recursive: false);
+                }
+            }
+
+            if (!Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
+            {
+                Directory.Delete(destinationDirectory, recursive: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[TransferRollback] Empty-directory cleanup failed for " +
+                $"'{destinationDirectory}': {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Copies one entry. Directories return the actual child operations that
+    /// were created (name conflicts resolve to "name (2)" paths at copy
+    /// time), so a later rollback removes exactly what this copy created.
+    /// </summary>
+    private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryAsync(
+        string sourcePath,
+        string destinationPath)
     {
         if (File.Exists(sourcePath))
         {
@@ -2473,13 +2538,19 @@ public sealed partial class FileService
                 destinationPath,
                 new TransferProgressReporter(progress: null, totalItems: 1),
                 CancellationToken.None);
-            return;
+            return null;
         }
 
         if (Directory.Exists(sourcePath))
         {
-            await CopyDirectoryAsync(sourcePath, destinationPath);
+            return await CopyDirectoryAsync(
+                sourcePath,
+                destinationPath,
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new List<CopiedSourceFileRecord>());
         }
+
+        return null;
     }
 
     private static async Task MoveEntryAsync(string sourcePath, string destinationPath)
@@ -2549,9 +2620,13 @@ public sealed partial class FileService
                         destinationFilePath);
                 }
 
-                await Task.Run(() => DeleteSourceFileAfterCopy(
+                // Validate-and-delete is bound to one handle so the deleted
+                // object is the verified one even if the path is swapped
+                // after the pre-check above.
+                DeleteSourceFileByIdentity(
                     sourceFilePath,
-                    File.GetAttributes(sourceFilePath)));
+                    destinationFilePath,
+                    sourceFileIdentity);
             }
             catch (FileTransferSourceChangedException)
             {
@@ -2974,7 +3049,7 @@ public sealed partial class FileService
             new List<CopiedSourceFileRecord>());
     }
 
-    private static async Task CopyDirectoryAsync(
+    private static async Task<IReadOnlyList<TransferOperation>> CopyDirectoryAsync(
         string sourceDirectory,
         string destinationDirectory,
         ISet<string> visitedSourceDirectories,
@@ -3010,12 +3085,13 @@ public sealed partial class FileService
             {
                 string folderName = Path.GetFileName(subDirectory);
                 string destinationSubDirectory = GetAvailableDestinationPath(destinationDirectory, folderName);
-                await CopyDirectoryAsync(
+                IReadOnlyList<TransferOperation> childOperations = await CopyDirectoryAsync(
                     subDirectory,
                     destinationSubDirectory,
                     visitedSourceDirectories,
                     copiedSourceFiles);
-                completedChildOperations.Add(new TransferOperation(subDirectory, destinationSubDirectory));
+                completedChildOperations.AddRange(childOperations);
+                completedChildOperations.Add(new TransferOperation(subDirectory, destinationSubDirectory, SourceIsDirectory: true));
             }
         }
         catch
@@ -3028,6 +3104,8 @@ public sealed partial class FileService
 
             throw;
         }
+
+        return completedChildOperations;
     }
 
     private static bool PathExists(string path)
@@ -3117,16 +3195,7 @@ public sealed partial class FileService
                 return null;
             }
 
-            ulong fileIndex =
-                ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
-            long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
-            long lastWrite =
-                ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
-            return new FileTransferSourceIdentity(
-                length,
-                DateTime.FromFileTimeUtc(lastWrite),
-                information.VolumeSerialNumber,
-                fileIndex == 0 ? null : fileIndex);
+            return IdentityFromInformation(information);
         }
         catch
         {
@@ -3134,22 +3203,38 @@ public sealed partial class FileService
         }
     }
 
+    private static FileTransferSourceIdentity? IdentityFromInformation(
+        in ByHandleFileInformation information)
+    {
+        ulong fileIndex =
+            ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
+        long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
+        long lastWrite =
+            ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
+        return new FileTransferSourceIdentity(
+            length,
+            DateTime.FromFileTimeUtc(lastWrite),
+            information.VolumeSerialNumber,
+            fileIndex == 0 ? null : fileIndex);
+    }
+
     internal static bool SourceFileMatchesIdentity(
         string path,
         FileTransferSourceIdentity expected)
     {
-        if (TryCaptureSourceIdentity(path) is not { } current)
-        {
-            // Unable to stat the source: assume the worst and keep both copies.
-            return false;
-        }
+        return TryCaptureSourceIdentity(path) is { } current &&
+            SourceIdentityMatches(current, expected);
+    }
 
-        if (expected.VolumeSerialNumber != 0 &&
-            current.VolumeSerialNumber != 0 &&
-            expected.VolumeSerialNumber != current.VolumeSerialNumber)
+    internal static bool SourceIdentityMatches(
+        FileTransferSourceIdentity current,
+        FileTransferSourceIdentity expected)
+    {
+        if ((expected.FileKey is null) != (current.FileKey is null))
         {
-            // The path now resolves to a different volume: a reparse point
-            // replaced the original file.
+            // The same file system answers file-key queries consistently for
+            // the same object; one stat seeing a key and the other not means
+            // the object at the path is no longer the one that was captured.
             return false;
         }
 
@@ -3161,12 +3246,143 @@ public sealed partial class FileService
             return false;
         }
 
+        if (expected.VolumeSerialNumber != current.VolumeSerialNumber)
+        {
+            // The object now reports a different volume (reparse point swap).
+            return false;
+        }
+
         // A matching file key proves the same object, NOT that its content
         // is unchanged: an in-place edit keeps the key. Only an identical
         // length and write time together prove the copied content is still
         // current, so the source may not be deleted without all of them.
         return current.Length == expected.Length &&
             current.LastWriteTimeUtc == expected.LastWriteTimeUtc;
+    }
+
+    // ─── Handle-bound source deletion ─────────────────────────────────
+
+    private const uint GenericReadAccess = 0x80000000;
+    private const uint GenericWriteAccess = 0x40000000;
+    private const uint DeleteAccess = 0x00010000;
+    private const uint ShareRead = 0x00000001;
+    private const uint ShareWrite = 0x00000002;
+    private const uint ShareDelete = 0x00000004;
+    private const uint ShareNone = 0;
+    private const uint OpenExisting = 3;
+    private const uint CreateNewDisposition = 1;
+    private const uint FileFlagOverlapped = 0x40000000;
+    private const int FileDispositionInfoClass = 4; // FILE_INFO_BY_HANDLE_CLASS.FileDispositionInfo
+    private const int ErrorAccessDenied = 5;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileDispositionInfo
+    {
+        // FILE_DISPOSITION_INFO carries a 1-byte BOOLEAN, not a 4-byte BOOL:
+        // without U1 marshaling the native call sees garbage.
+        [MarshalAs(UnmanagedType.U1)]
+        public bool Delete;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern SafeFileHandle CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        IntPtr lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFileInformationByHandle(
+        SafeFileHandle hFile,
+        int fileInformationClass,
+        ref FileDispositionInfo lpFileInformation,
+        int dwBufferSize);
+
+    /// <summary>
+    /// Deletes the exact file object the copy started from. The path is
+    /// opened once with delete access, the object identity is validated on
+    /// that same handle, and the deletion is bound to the handle — a file
+    /// swapped in at the path after validation cannot be deleted instead,
+    /// which closes the validate-to-delete race no amount of re-checking
+    /// the path can eliminate.
+    /// </summary>
+    internal static void DeleteSourceFileByIdentity(
+        string sourceFilePath,
+        string destinationFilePath,
+        FileTransferSourceIdentity expectedIdentity)
+    {
+        using SafeFileHandle handle = CreateFileW(
+            sourceFilePath,
+            GenericReadAccess | DeleteAccess,
+            ShareRead | ShareWrite | ShareDelete,
+            IntPtr.Zero,
+            OpenExisting,
+            0,
+            IntPtr.Zero);
+        if (handle.IsInvalid)
+        {
+            throw new IOException(
+                $"The source '{sourceFilePath}' could not be opened for deletion.",
+                Marshal.GetLastWin32Error());
+        }
+
+        if (!GetFileInformationByHandle(handle, out ByHandleFileInformation information) ||
+            IdentityFromInformation(information) is not { } currentIdentity)
+        {
+            throw new IOException(
+                $"The identity of the source '{sourceFilePath}' could not be read for deletion.");
+        }
+
+        if (!SourceIdentityMatches(currentIdentity, expectedIdentity))
+        {
+            throw new FileTransferSourceChangedException(sourceFilePath, destinationFilePath);
+        }
+
+        var disposition = new FileDispositionInfo { Delete = true };
+        int dispositionSize = Marshal.SizeOf<FileDispositionInfo>();
+        if (!SetFileInformationByHandle(
+                handle,
+                FileDispositionInfoClass,
+                ref disposition,
+                dispositionSize))
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (error != ErrorAccessDenied)
+            {
+                throw new IOException(
+                    $"The source '{sourceFilePath}' could not be deleted (win32={error}).",
+                    error);
+            }
+
+            // Read-only sources block deletion; clear the bit and retry on
+            // the same handle so the deleted object is still the verified one.
+            try
+            {
+                File.SetAttributes(
+                    sourceFilePath,
+                    File.GetAttributes(sourceFilePath) & ~System.IO.FileAttributes.ReadOnly);
+            }
+            catch (Exception ex)
+            {
+                throw new IOException(
+                    $"The read-only source '{sourceFilePath}' could not be cleared for deletion.",
+                    ex);
+            }
+
+            if (!SetFileInformationByHandle(
+                    handle,
+                    FileDispositionInfoClass,
+                    ref disposition,
+                    dispositionSize))
+            {
+                throw new IOException(
+                    $"The source '{sourceFilePath}' could not be deleted (win32={Marshal.GetLastWin32Error()}).",
+                    Marshal.GetLastWin32Error());
+            }
+        }
     }
 
     // ─── Steam dead-shortcut detection ───────────────────────────────────

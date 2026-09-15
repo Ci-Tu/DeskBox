@@ -1475,6 +1475,8 @@ public sealed partial class DeskBoxDataBackupService
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         byte[] buffer = new byte[81920];
         long totalBytes = 0;
+        long bytesSinceProgressMark = 0;
+        const long progressMarkIntervalBytes = 32L * 1024 * 1024;
         while (true)
         {
             int bytesRead = await source.ReadAsync(buffer, cancellationToken);
@@ -1486,6 +1488,15 @@ public sealed partial class DeskBoxDataBackupService
             hash.AppendData(buffer, 0, bytesRead);
             await destination.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
             totalBytes = checked(totalBytes + bytesRead);
+            // A single multi-gigabyte file can outlast the startup watchdog's
+            // stall window on slow storage; mark progress per chunk so the
+            // copy itself proves the process is alive.
+            bytesSinceProgressMark += bytesRead;
+            if (bytesSinceProgressMark >= progressMarkIntervalBytes)
+            {
+                bytesSinceProgressMark = 0;
+                App.MarkStartupProgress();
+            }
         }
 
         return (totalBytes, Convert.ToHexString(hash.GetHashAndReset()));

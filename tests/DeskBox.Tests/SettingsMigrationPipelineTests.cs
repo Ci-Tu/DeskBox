@@ -222,6 +222,39 @@ public sealed class SettingsMigrationPipelineTests
             throw new InvalidOperationException("injected fault");
     }
 
+    private sealed class MutatingThrowingMigration(int fromVersion) : ISettingsMigration
+    {
+        public int FromVersion => fromVersion;
+
+        public void Migrate(AppSettings settings)
+        {
+            // Mutate first, then fail: the pipeline must restore the
+            // pre-step graph, not just stop the version progression.
+            settings.WidgetOpacity = 0.99;
+            settings.Widgets.Add(new WidgetConfig { Id = "half-migrated", Name = "ghost" });
+            throw new InvalidOperationException("injected fault after mutation");
+        }
+    }
+
+    [Fact]
+    public void FailedStep_RestoresThePreStepStateItAlreadyMutated()
+    {
+        var settings = new AppSettings
+        {
+            SchemaVersion = 4,
+            WidgetOpacity = 0.8
+        };
+        int widgetCountBefore = settings.Widgets.Count;
+
+        bool anyApplied = new SettingsMigrationPipeline(
+            [new MutatingThrowingMigration(4)]).RunMigrations(settings);
+
+        Assert.False(anyApplied);
+        Assert.Equal(4, settings.SchemaVersion);
+        Assert.Equal(0.8, settings.WidgetOpacity);
+        Assert.Equal(widgetCountBefore, settings.Widgets.Count);
+    }
+
     [Fact]
     public void StepFailure_StopsTheChainAndKeepsTheLastSuccessfulCheckpoint()
     {
