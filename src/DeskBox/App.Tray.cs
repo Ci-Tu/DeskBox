@@ -122,9 +122,19 @@ public partial class App
         PrepareTrayContextMenu(contextMenu);
 
         _trayWindow = new Window();
-        _trayWindow.AppWindow.IsShownInSwitchers = false;
         AppBranding.ApplyWindowIcon(_trayWindow.AppWindow);
-        _trayWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(1, 1));
+        // Early-logon sessions can reject these windowing calls (E_NOTIMPL is
+        // observed on IsShownInSwitchers); a 1x1 host window that leaks into
+        // Alt+Tab is the acceptable degraded state, failing startup is not.
+        WindowShellState.TryHideFromSwitchers(_trayWindow.AppWindow);
+        try
+        {
+            _trayWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32(1, 1));
+        }
+        catch (Exception ex)
+        {
+            Log($"[Tray] Tray window resize not applied: {ex.Message}");
+        }
 
         _trayIcon = new TaskbarIcon
         {
@@ -169,13 +179,31 @@ public partial class App
         }
 
         ThemeService.TrackWindow(_trayWindow);
-        _trayWindow.Activate();
+        try
+        {
+            // The tray icon is created independently of this window, so a
+            // failed activation only costs the hidden host window's state.
+            _trayWindow.Activate();
+        }
+        catch (Exception ex)
+        {
+            Log($"[Tray] Tray window activation not applied: {ex.Message}");
+        }
 
         if (!_trayIcon.IsCreated)
         {
             // Keep the process at normal QoS. Tray creation must never opt the
             // whole application into a lower-priority efficiency mode.
             _trayIcon.ForceCreate(enablesEfficiencyMode: false);
+        }
+
+        if (IsTraySurfaceUsable())
+        {
+            MarkStartupLifelineEstablished();
+        }
+        else
+        {
+            Log("[Tray] Tray surface is not usable; the startup lifeline stays pending");
         }
 
         try
@@ -201,6 +229,28 @@ public partial class App
         });
 
         ThemeService.AppearanceChanged += UpdateTrayIconAppearance;
+    }
+
+    /// <summary>
+    /// Mirrors the tray surface checks the AOT smoke harness pins: the icon
+    /// must exist, own a message window, and have a real host window. Once this
+    /// holds, startup has something the user can act on and exceptions stop
+    /// being fatal.
+    /// </summary>
+    private bool IsTraySurfaceUsable()
+    {
+        try
+        {
+            return _trayIcon is { IsCreated: true } trayIcon &&
+                trayIcon.TrayIcon.WindowHandle != IntPtr.Zero &&
+                _trayWindow is not null &&
+                WindowNative.GetWindowHandle(_trayWindow) != IntPtr.Zero;
+        }
+        catch (Exception ex)
+        {
+            Log($"[Tray] Tray surface probe failed: {ex.Message}");
+            return false;
+        }
     }
 
     private MenuFlyoutItem CreateTrayCreateWidgetItem(

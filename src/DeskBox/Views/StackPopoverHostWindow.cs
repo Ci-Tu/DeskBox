@@ -41,15 +41,8 @@ internal sealed class StackPopoverHostWindow : Window
         WindowHandle = WindowNative.GetWindowHandle(this);
         WindowId windowId = Win32Interop.GetWindowIdFromWindow(WindowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
-        _appWindow.IsShownInSwitchers = false;
-        _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        if (_appWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = false;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.SetBorderAndTitleBar(false, false);
-        }
+        WindowShellState.TryHideFromSwitchers(_appWindow);
+        WindowShellState.TryApplyBorderlessOverlappedPresenter(_appWindow);
 
         if (ownerWindowHandle != IntPtr.Zero)
         {

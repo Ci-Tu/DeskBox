@@ -1868,7 +1868,19 @@ public sealed partial class WidgetManager
                 existingWindow.WindowHandle != IntPtr.Zero &&
                 Win32Helper.IsWindowVisible(existingWindow.WindowHandle))
             {
-                existingWindow.RestoreBoundsForCurrentTopology();
+                try
+                {
+                    existingWindow.RestoreBoundsForCurrentTopology();
+                }
+                catch (Exception ex)
+                {
+                    // Bounds restoration is best-effort: a window that keeps its
+                    // previous bounds is far better than a failed startup.
+                    App.Log(
+                        $"[WidgetGroup] Bounds restore failed group={group.Id} " +
+                        $"active={group.ActiveMemberId}: {ex}");
+                }
+
                 App.Log(
                     $"[WidgetGroup] Kept visible group surface during restore: " +
                     $"group={group.Id}, active={group.ActiveMemberId}, " +

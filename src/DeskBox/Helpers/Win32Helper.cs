@@ -316,7 +316,9 @@ public static partial class Win32Helper
     [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     public static partial uint RegisterWindowMessage(string lpString);
 
+    private const uint MB_OK = 0x00000000;
     private const uint MB_YESNO = 0x00000004;
+    private const uint MB_ICONERROR = 0x00000010;
     private const uint MB_ICONWARNING = 0x00000030;
     private const int IDYES = 6;
 
@@ -332,6 +334,16 @@ public static partial class Win32Helper
     {
         int choice = MessageBox(ownerHandle, message, caption, MB_YESNO | MB_ICONWARNING);
         return choice == IDYES;
+    }
+
+    /// <summary>
+    /// Shows an ownerless error dialog for fatal startup failures where no
+    /// XAML surface exists yet. Must stay native: the failure path runs
+    /// before/after arbitrary XAML teardown, so only user32 is dependable.
+    /// </summary>
+    public static void ShowFatalError(string message, string caption)
+    {
+        MessageBox(IntPtr.Zero, message, caption, MB_OK | MB_ICONERROR);
     }
 
     public const uint GA_ROOT = 2;
@@ -2093,9 +2105,32 @@ public static partial class Win32Helper
             Environment.SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", null);
         }
 
+        // Observation only: never abort the call or release the caller's slot —
+        // native Shell calls cannot be safely aborted (BoundedStaOperationRunner
+        // relies on that invariant), and ShellExecuteEx may sit in legitimate
+        // modal UI (UAC, SmartScreen) for as long as the user takes. A pending
+        // marker after this threshold separates those opens from a wedged Shell
+        // (feedback #9: .lnk resolution never returned on a machine whose
+        // Explorer desktop window was missing from ShellWindows).
+        const int LocalShellExecutePendingLogSeconds = 15;
+        bool localLaunchCompleted = false;
+        _ = Task.Delay(TimeSpan.FromSeconds(LocalShellExecutePendingLogSeconds))
+            .ContinueWith(
+                _ =>
+                {
+                    if (!localLaunchCompleted)
+                    {
+                        App.Log(
+                            $"[OpenFile] local ShellExecuteEx still pending for '{path}' after " +
+                            $"{LocalShellExecutePendingLogSeconds}s (system Shell may be unresponsive).");
+                    }
+                },
+                TaskScheduler.Default);
+
         try
         {
             Process.Start(startInfo);
+            localLaunchCompleted = true;
             App.Log(
                 $"[OpenFile] backend=local-shell-execute path='{path}'");
             return true;

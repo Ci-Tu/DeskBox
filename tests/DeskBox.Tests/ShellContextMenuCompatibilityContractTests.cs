@@ -112,7 +112,7 @@ public sealed class ShellContextMenuCompatibilityContractTests
         string preferences = ReadRepositoryFile(
             "src/DeskBox/ViewModels/SettingsViewModel.PreferenceCallbacks.cs");
 
-        Assert.Contains("ScheduleShellContextMenuPrewarm();", app, StringComparison.Ordinal);
+        Assert.Contains("ScheduleShellContextMenuPrewarm", app, StringComparison.Ordinal);
         Assert.Contains(
             "Settings.FileItemSystemContextMenuEnabled",
             app,

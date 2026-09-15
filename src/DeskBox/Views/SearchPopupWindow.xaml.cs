@@ -467,14 +467,7 @@ public sealed partial class SearchPopupWindow : Window
         }
 
         // Remove title bar
-        _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        if (_appWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = false;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.SetBorderAndTitleBar(false, false);
-        }
+        WindowShellState.TryApplyBorderlessOverlappedPresenter(_appWindow);
 
         _appWindow.Resize(new SizeInt32(PopupWidth, PopupHeight));
 

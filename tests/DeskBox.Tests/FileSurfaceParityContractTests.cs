@@ -944,9 +944,17 @@ public sealed class FileSurfaceParityContractTests
             "class StackPopoverInlineRenameWindow : Window",
             stackPopoverRenameWindow,
             StringComparison.Ordinal);
+        // The borderless presenter is applied through the shared degrading
+        // helper: early-logon sessions reject these windowing calls outright.
+        Assert.Contains(
+            "WindowShellState.TryApplyBorderlessOverlappedPresenter(_appWindow);",
+            stackPopoverRenameWindow,
+            StringComparison.Ordinal);
         Assert.Contains(
             "presenter.SetBorderAndTitleBar(false, false)",
-            stackPopoverRenameWindow,
+            File.ReadAllText(Path.Combine(
+                root,
+                "src/DeskBox/Helpers/WindowShellState.cs")),
             StringComparison.Ordinal);
         Assert.Contains(
             "extendedStyle &= ~Win32Helper.WS_EX_NOACTIVATE",
@@ -972,8 +980,14 @@ public sealed class FileSurfaceParityContractTests
             stackPopoverRenameWindow,
             StringComparison.Ordinal);
         Assert.Contains(
-            "IsShownInSwitchers = false",
+            "WindowShellState.TryHideFromSwitchers(_appWindow);",
             stackPopoverRenameWindow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "appWindow.IsShownInSwitchers = false;",
+            File.ReadAllText(Path.Combine(
+                root,
+                "src/DeskBox/Helpers/WindowShellState.cs")),
             StringComparison.Ordinal);
         Assert.DoesNotContain(
             "new ContentDialog",

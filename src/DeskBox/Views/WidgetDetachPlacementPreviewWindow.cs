@@ -96,15 +96,8 @@ internal sealed class WidgetDetachPlacementPreviewWindow : IDisposable
         Microsoft.UI.WindowId windowId =
             Win32Interop.GetWindowIdFromWindow(_hWnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
-        _appWindow.IsShownInSwitchers = false;
-        _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-        if (_appWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.IsResizable = false;
-            presenter.IsMaximizable = false;
-            presenter.IsMinimizable = false;
-            presenter.SetBorderAndTitleBar(false, false);
-        }
+        WindowShellState.TryHideFromSwitchers(_appWindow);
+        WindowShellState.TryApplyBorderlessOverlappedPresenter(_appWindow);
 
         int extendedStyle = Win32Helper.GetWindowLong(
             _hWnd,
