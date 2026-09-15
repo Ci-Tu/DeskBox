@@ -61,6 +61,50 @@ public sealed class RenderWindowContractTests
         Assert.Contains("ResetRenderWindow()", navigation, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The activation threshold must be enforced where the window is computed:
+    /// folders at or below it render everything. 1.5.1 shipped with the
+    /// constant declared but never referenced, so every folder was capped at
+    /// the initial 30-item prefix (feedback #4: "文件格子最多只能显示前30个").
+    /// </summary>
+    [Fact]
+    public void ReconcileRenderWindow_RendersFoldersWithinTheActivationThresholdInFull()
+    {
+        string windowing = File.ReadAllText(GetRepoFile(
+            "src/DeskBox/ViewModels/WidgetViewModel.Windowing.cs"));
+
+        Assert.Contains(
+            "VisibleItemCount <= RenderWindowActivationThreshold",
+            windowing,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A rendered prefix that fits inside the viewport has no overflow to
+    /// scroll, so ViewChanged never fires and growth must also run after
+    /// layout passes (initial load, item changes, viewport resizes) or tall
+    /// widgets stay stuck at the initial window size forever (feedback #4).
+    /// </summary>
+    [Fact]
+    public void RenderWindow_GrowsWhenTheRenderedPrefixDoesNotOverflowTheViewport()
+    {
+        string renderWindow = File.ReadAllText(GetRepoFile(
+            "src/DeskBox/Controls/WidgetContents/FileSurfaceContent.RenderWindow.cs"));
+
+        Assert.Contains(
+            "ItemsGrid.LayoutUpdated += ItemsView_LayoutUpdatedForRenderWindow",
+            renderWindow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ItemsList.LayoutUpdated += ItemsView_LayoutUpdatedForRenderWindow",
+            renderWindow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ExtentHeight <= scrollViewer.ViewportHeight",
+            renderWindow,
+            StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string source, string value)
     {
         int count = 0;

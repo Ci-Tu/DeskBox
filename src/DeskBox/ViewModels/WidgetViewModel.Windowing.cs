@@ -148,6 +148,14 @@ public partial class WidgetViewModel
     /// </summary>
     private void ReconcileRenderWindow()
     {
+        if (VisibleItemCount <= RenderWindowActivationThreshold)
+        {
+            // Folders within the activation threshold always render in full;
+            // the incremental window only applies above it. Without this the
+            // initial prefix caps every folder at RenderWindowInitialSize.
+            _renderWindowCount = VisibleItemCount;
+        }
+
         int targetCount = Math.Min(_renderWindowCount, VisibleItemCount);
         var desired = new List<WidgetItem>(targetCount);
         int collected = 0;
