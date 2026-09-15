@@ -24,6 +24,7 @@ public partial class App
     private static int s_startupLifelineEstablished;
     private static int s_startupFailureHandled;
     private static int s_startupWatchdogArmed;
+    private static bool s_startupLaunchQuietExit;
 
     /// <summary>
     /// True once the tray surface is usable. Before that point the process has
@@ -98,6 +99,16 @@ public partial class App
         Log($"[Startup] Fatal: {reason}" +
             (exception is null ? string.Empty : $": {exception}"));
 
+        if (s_startupLaunchQuietExit)
+        {
+            // Task-triggered launch: nobody is watching, and the logon task's
+            // RestartOnFailure policy retries in a minute. A modal dialog here
+            // would sit on the unattended desktop holding the mutex — the
+            // exact zombie shape this path exists to prevent.
+            DrainLogQueue();
+            Environment.Exit(1);
+        }
+
         var exitThread = new Thread(() =>
         {
             Thread.Sleep(StartupFailureGraceMs);
@@ -131,12 +142,35 @@ public partial class App
     /// <summary>
     /// The process must end startup owning at least one surface the user can
     /// act on: the tray icon, or a widget window (widget windows legitimately
-    /// exist while hidden, so visibility is not the criterion).
+    /// exist while hidden, so visibility is not the criterion). When only the
+    /// tray retry is still pending, this waits it out: killing the launch
+    /// inside the early-logon window would turn a recoverable boot race into
+    /// "autostart never shows".
     /// </summary>
-    private void EnsureStartupProducedUsableSurface()
+    private async Task EnsureStartupProducedUsableSurfaceAsync()
     {
-        if (IsStartupLifelineEstablished || WidgetManager?.LoadedWidgetCount > 0)
+        if (!IsStartupLifelineEstablished &&
+            WidgetManager?.LoadedWidgetCount == 0 &&
+            _trayIconCreationTask is { } trayCreation)
         {
+            while (!trayCreation.IsCompleted)
+            {
+                await Task.Delay(500);
+            }
+        }
+
+        if (IsStartupLifelineEstablished)
+        {
+            return;
+        }
+
+        if (WidgetManager?.LoadedWidgetCount > 0)
+        {
+            // Widgets alone are a usable surface: a boot race that only broke
+            // the tray icon must not kill a launch that already restored its
+            // boxes, and marking the lifeline here also retires the watchdog.
+            Log("[Startup] Tray surface unavailable; widget surfaces carry the session");
+            MarkStartupLifelineEstablished();
             return;
         }
 

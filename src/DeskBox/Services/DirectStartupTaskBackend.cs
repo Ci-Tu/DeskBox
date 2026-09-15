@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Xml.Linq;
@@ -21,6 +22,8 @@ internal sealed record DirectStartupTaskRegistration(
     bool StopIfGoingOnBatteries,
     bool RunOnlyIfIdle,
     string TriggerDelay,
+    string RestartOnFailureInterval = "",
+    int RestartOnFailureCount = 0,
     string TaskName = "")
 {
     public string CommandLine =>
@@ -51,13 +54,15 @@ internal interface IDirectStartupTaskBackend
 /// only when startup registration is queried or changed; it adds no resident
 /// helper process or service to DeskBox.
 /// </summary>
-internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
+internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBackend
 {
     internal const string LegacyTaskName = "DeskBox User Startup";
     internal const string TaskNamePrefix = LegacyTaskName + "-";
     internal const string StartupArguments =
         "--startup --startup-source=scheduled-task";
     internal const int InteractiveTaskPriority = 4;
+    internal const string TaskRestartInterval = "PT1M";
+    internal const int TaskRestartCount = 3;
     private const int SchtasksTimeoutMilliseconds = 10_000;
     private static readonly XNamespace TaskNamespace =
         "http://schemas.microsoft.com/windows/2004/02/mit/task";
@@ -155,7 +160,12 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
                 string.Equals(
                     registration.TriggerDelay,
                     "PT0S",
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase)) &&
+               string.Equals(
+                   registration.RestartOnFailureInterval,
+                   TaskRestartInterval,
+                   StringComparison.OrdinalIgnoreCase) &&
+               registration.RestartOnFailureCount == TaskRestartCount;
     }
 
     public bool TryRegister(string executablePath)
@@ -197,12 +207,22 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
                 {
                     // An update must not destroy the previous registration if
                     // Windows refuses or normalizes the replacement unexpectedly.
-                    File.WriteAllText(temporaryPath, previousTask.StandardOutput, Encoding.Unicode);
-                    SchtasksResult rollback = RunSchtasks(
-                        "/Create", "/TN", taskName, "/XML", temporaryPath, "/F");
-                    LastError = rollback.ExitCode == 0
-                        ? $"{verificationError} Previous task restored."
-                        : $"{verificationError} {FormatFailure("restore", rollback)}";
+                    // Only a parseable snapshot is restored: writing back a
+                    // corrupt read would replace the task with garbage.
+                    if (IsParseableXml(previousTask.StandardOutput))
+                    {
+                        File.WriteAllText(temporaryPath, previousTask.StandardOutput, Encoding.Unicode);
+                        SchtasksResult rollback = RunSchtasks(
+                            "/Create", "/TN", taskName, "/XML", temporaryPath, "/F");
+                        LastError = rollback.ExitCode == 0
+                            ? $"{verificationError} Previous task restored."
+                            : $"{verificationError} {FormatFailure("restore", rollback)}";
+                    }
+                    else
+                    {
+                        LastError =
+                            $"{verificationError} Previous task snapshot was unreadable and was left in place.";
+                    }
                 }
                 else
                 {
@@ -399,7 +419,15 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
                     new XElement(TaskNamespace + "Hidden", "false"),
                     new XElement(TaskNamespace + "WakeToRun", "false"),
                     new XElement(TaskNamespace + "ExecutionTimeLimit", "PT0S"),
-                    new XElement(TaskNamespace + "Priority", InteractiveTaskPriority)),
+                    new XElement(TaskNamespace + "Priority", InteractiveTaskPriority),
+                    // Task Scheduler rejects restart intervals under one
+                    // minute, so the boot-race retry is PT1M; the in-app tray
+                    // retry covers the first seconds after logon, this covers
+                    // a launch that dies before the retry window can help.
+                    new XElement(
+                        TaskNamespace + "RestartOnFailure",
+                        new XElement(TaskNamespace + "Interval", TaskRestartInterval),
+                        new XElement(TaskNamespace + "Count", TaskRestartCount))),
                 new XElement(
                     TaskNamespace + "Actions",
                     new XAttribute("Context", "Author"),
@@ -450,6 +478,10 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             System.Globalization.NumberStyles.Integer,
             System.Globalization.CultureInfo.InvariantCulture,
             out int priority);
+        XElement? restartOnFailure = settings?.Element(ns + "RestartOnFailure");
+        _ = int.TryParse(
+            Value(restartOnFailure, ns, "Count"),
+            out int restartCount);
 
         return new DirectStartupTaskRegistration(
             Value(action, ns, "Command"),
@@ -469,6 +501,8 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             BooleanValue(settings, ns, "StopIfGoingOnBatteries"),
             BooleanValue(settings, ns, "RunOnlyIfIdle"),
             Value(trigger, ns, "Delay"),
+            Value(restartOnFailure, ns, "Interval"),
+            restartCount,
             Value(registrationInfo, ns, "URI").TrimStart('\\'));
     }
 
@@ -539,6 +573,106 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             throw new InvalidOperationException("The current Windows user SID is unavailable.");
     }
 
+    /// <summary>
+    /// Decodes byte-preserving schtasks pipe text. schtasks redirects transcode
+    /// its output to the active console code page while the embedded XML
+    /// declaration keeps claiming UTF-16, so the decoder probes instead of
+    /// trusting either: a BOM means UTF-16, then strict UTF-8, then the active
+    /// ANSI code page via MultiByteToWideChar (the .NET baseline carries no
+    /// ANSI encodings on this target).
+    /// </summary>
+    internal static string DecodeSchtasksOutput(string latin1Text)
+    {
+        if (string.IsNullOrEmpty(latin1Text))
+        {
+            return string.Empty;
+        }
+
+        byte[] bytes = Encoding.Latin1.GetBytes(latin1Text);
+        if (bytes.Length >= 2)
+        {
+            if (bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+
+            if (bytes[0] == 0xFE && bytes[1] == 0xFF)
+            {
+                return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+        }
+
+        try
+        {
+            return new UTF8Encoding(
+                encoderShouldEmitUTF8Identifier: false,
+                throwOnInvalidBytes: true).GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            return DecodeActiveCodePage(bytes);
+        }
+    }
+
+    private static string DecodeActiveCodePage(byte[] bytes)
+    {
+        int characterCount = MultiByteToWideChar(
+            ActiveCodePage,
+            MbPrecomposed,
+            bytes,
+            bytes.Length,
+            IntPtr.Zero,
+            0);
+        if (characterCount <= 0)
+        {
+            return Encoding.Latin1.GetString(bytes);
+        }
+
+        IntPtr buffer = Marshal.AllocHGlobal(characterCount * 2);
+        try
+        {
+            int written = MultiByteToWideChar(
+                ActiveCodePage,
+                MbPrecomposed,
+                bytes,
+                bytes.Length,
+                buffer,
+                characterCount);
+            return written > 0
+                ? Marshal.PtrToStringUni(buffer, written) ?? string.Empty
+                : Encoding.Latin1.GetString(bytes);
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static bool IsParseableXml(string candidate)
+    {
+        try
+        {
+            _ = XDocument.Parse(candidate, LoadOptions.None);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private const uint ActiveCodePage = 0;
+    private const uint MbPrecomposed = 1;
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial int MultiByteToWideChar(
+        uint codePage,
+        uint flags,
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 3)] byte[] source,
+        int sourceLength,
+        IntPtr target,
+        int targetLength);
+
     private static SchtasksResult RunSchtasks(params string[] arguments)
     {
         string schtasksPath = Path.Combine(Environment.SystemDirectory, "schtasks.exe");
@@ -553,7 +687,19 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            // The inherited working directory can be an installer temp folder
+            // that has already been deleted, which fails the child launch.
+            WorkingDirectory = AppContext.BaseDirectory,
+            // Latin-1 maps every byte 0x00-0xFF onto one code point, so the
+            // pipe text preserves the raw bytes and DecodeSchtasksOutput can
+            // pick the real encoding afterwards. A fixed decoder cannot work:
+            // schtasks transcodes redirected output to the active console code
+            // page (UTF-8 on some hosts, the ANSI page on others) while the
+            // XML declaration always claims UTF-16, so user names and paths
+            // with non-ASCII characters come back as mojibake otherwise.
+            StandardOutputEncoding = Encoding.Latin1,
+            StandardErrorEncoding = Encoding.Latin1
         };
         foreach (string argument in arguments)
         {
@@ -587,8 +733,8 @@ internal sealed class DirectStartupTaskBackend : IDirectStartupTaskBackend
             Task.WaitAll([outputTask, errorTask], TimeSpan.FromSeconds(2));
             return new SchtasksResult(
                 process.ExitCode,
-                outputTask.IsCompletedSuccessfully ? outputTask.Result : string.Empty,
-                errorTask.IsCompletedSuccessfully ? errorTask.Result : string.Empty);
+                outputTask.IsCompletedSuccessfully ? DecodeSchtasksOutput(outputTask.Result) : string.Empty,
+                errorTask.IsCompletedSuccessfully ? DecodeSchtasksOutput(errorTask.Result) : string.Empty);
         }
         catch (Exception ex)
         {

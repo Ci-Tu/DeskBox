@@ -178,7 +178,15 @@ public partial class App
             panel.Children.Add(_trayIcon);
         }
 
-        ThemeService.TrackWindow(_trayWindow);
+        try
+        {
+            ThemeService.TrackWindow(_trayWindow);
+        }
+        catch (Exception ex)
+        {
+            Log($"[Tray] Tray window theme tracking not applied: {ex.Message}");
+        }
+
         try
         {
             // The tray icon is created independently of this window, so a
@@ -190,21 +198,7 @@ public partial class App
             Log($"[Tray] Tray window activation not applied: {ex.Message}");
         }
 
-        if (!_trayIcon.IsCreated)
-        {
-            // Keep the process at normal QoS. Tray creation must never opt the
-            // whole application into a lower-priority efficiency mode.
-            _trayIcon.ForceCreate(enablesEfficiencyMode: false);
-        }
-
-        if (IsTraySurfaceUsable())
-        {
-            MarkStartupLifelineEstablished();
-        }
-        else
-        {
-            Log("[Tray] Tray surface is not usable; the startup lifeline stays pending");
-        }
+        StartTrayIconCreationWithRetry();
 
         try
         {
@@ -229,6 +223,70 @@ public partial class App
         });
 
         ThemeService.AppearanceChanged += UpdateTrayIconAppearance;
+    }
+
+    /// <summary>Attempts per tray creation pass through the early-logon window
+    /// where the taskbar may not exist yet (roughly the first 30 seconds after
+    /// logon in the field reports).</summary>
+    private const int TrayCreationMaxAttempts = 15;
+
+    private static readonly TimeSpan TrayCreationRetryDelay = TimeSpan.FromSeconds(2);
+
+    private Task<bool>? _trayIconCreationTask;
+
+    /// <summary>
+    /// Creates the tray icon, retrying through the early-logon race that makes
+    /// the first attempt fail (H.NotifyIcon TryCreate failures and E_NOTIMPL
+    /// windowing calls both recover once the shell finishes starting). The
+    /// first attempt runs inline so the normal path is unchanged; later
+    /// attempts continue on the UI thread while the rest of startup proceeds.
+    /// </summary>
+    private Task<bool> StartTrayIconCreationWithRetry()
+    {
+        _trayIconCreationTask ??= CreateTrayIconSurfaceWithRetryAsync();
+        return _trayIconCreationTask;
+    }
+
+    private async Task<bool> CreateTrayIconSurfaceWithRetryAsync()
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                if (_trayIcon is { IsCreated: false })
+                {
+                    // Keep the process at normal QoS. Tray creation must never
+                    // opt the whole application into a lower-priority
+                    // efficiency mode.
+                    _trayIcon.ForceCreate(enablesEfficiencyMode: false);
+                }
+
+                if (IsTraySurfaceUsable())
+                {
+                    MarkStartupLifelineEstablished();
+                    if (attempt > 1)
+                    {
+                        Log($"[Tray] Tray surface created on retry attempt {attempt}");
+                    }
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[Tray] Tray creation attempt {attempt} failed: {ex.Message}");
+            }
+
+            if (attempt >= TrayCreationMaxAttempts)
+            {
+                Log(
+                    "[Tray] Tray surface was not created after " +
+                    $"{attempt} attempts; continuing without the tray icon");
+                return false;
+            }
+
+            await Task.Delay(TrayCreationRetryDelay);
+        }
     }
 
     /// <summary>

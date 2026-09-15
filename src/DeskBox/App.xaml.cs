@@ -888,6 +888,11 @@ public partial class App : Application
             Environment.GetCommandLineArgs(),
             args.Arguments,
             startupTaskActivation);
+        // Set before the watchdog arms: a task-triggered launch has no user
+        // watching, so its fatal path must exit quietly and let the task's
+        // restart policy retry instead of parking a modal dialog on an
+        // unattended desktop while still holding the single-instance mutex.
+        s_startupLaunchQuietExit = isStartupLaunch;
         using var perfScope = PerformanceLogger.Measure(
             "App.OnLaunched",
             $"startup={isStartupLaunch}");
@@ -1185,7 +1190,7 @@ public partial class App : Application
             // The process must not keep running startup with nothing the user
             // can act on: it would own the single-instance mutex and swallow
             // every later launch.
-            EnsureStartupProducedUsableSurface();
+            await EnsureStartupProducedUsableSurfaceAsync();
 
             Log("OnLaunched completed successfully");
             // Startup registration does not gate the first usable widgets.
@@ -1249,7 +1254,11 @@ public partial class App : Application
             void Commit()
             {
                 SettingsService.Settings.AutoStart = enabled;
-                SettingsService.Settings.AutoStartDefaultApplied = true;
+                if (AutoStartDefaultPolicy.ShouldMarkApplied(effective))
+                {
+                    SettingsService.Settings.AutoStartDefaultApplied = true;
+                }
+
                 SettingsService.SaveDebounced();
             }
 

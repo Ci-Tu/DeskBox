@@ -14,7 +14,7 @@ public sealed class StartupResilienceContractTests
         string failStartup = Slice(
             startup,
             "private static void FailStartup",
-            "private void EnsureStartupProducedUsableSurface");
+            "private async Task EnsureStartupProducedUsableSurfaceAsync");
 
         // Re-entrancy: the message box pumps messages, so the fatal path can be
         // entered again from an unhandled exception while the dialog is up.
@@ -89,7 +89,7 @@ public sealed class StartupResilienceContractTests
         Assert.DoesNotContain("throw;", launch, StringComparison.Ordinal);
 
         // The launch only reports success once a usable surface was verified.
-        int surfaceCheck = launch.IndexOf("EnsureStartupProducedUsableSurface();", StringComparison.Ordinal);
+        int surfaceCheck = launch.IndexOf("await EnsureStartupProducedUsableSurfaceAsync();", StringComparison.Ordinal);
         int successLog = launch.IndexOf("OnLaunched completed successfully", StringComparison.Ordinal);
         Assert.True(surfaceCheck >= 0, "OnLaunched must verify it produced a usable surface.");
         Assert.True(
@@ -112,11 +112,80 @@ public sealed class StartupResilienceContractTests
         string startup = Read("src/DeskBox/App.Startup.cs");
         string surface = Slice(
             startup,
-            "private void EnsureStartupProducedUsableSurface",
+            "private async Task EnsureStartupProducedUsableSurfaceAsync",
             "private static async Task RunOptionalStartupStepAsync");
         Assert.Contains("WidgetManager?.LoadedWidgetCount > 0", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("HasVisibleWidgets", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("HasVisibleFileWidgets", surface, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StartupLaunch_FailsQuietlyWhileInteractiveLaunchesKeepTheDialog()
+    {
+        string startup = Read("src/DeskBox/App.Startup.cs");
+        string failStartup = Slice(
+            startup,
+            "private static void FailStartup",
+            "private async Task EnsureStartupProducedUsableSurfaceAsync");
+
+        // A task-triggered launch has no user watching: the fatal path must
+        // exit at once (the logon task's restart policy retries) instead of
+        // parking a modal dialog on an unattended desktop while the process
+        // still owns the single-instance mutex.
+        int quietExit = failStartup.IndexOf(
+            "if (s_startupLaunchQuietExit)",
+            StringComparison.Ordinal);
+        int quietExitCall = failStartup.IndexOf(
+            "Environment.Exit(1);",
+            quietExit,
+            StringComparison.Ordinal);
+        int graceThread = failStartup.IndexOf(
+            "Thread.Sleep(StartupFailureGraceMs);",
+            quietExit,
+            StringComparison.Ordinal);
+        Assert.True(quietExit >= 0, "The fatal path must special-case startup launches.");
+        Assert.True(quietExitCall >= 0, "The quiet path must terminate the process.");
+        Assert.True(
+            graceThread < 0 || quietExitCall < graceThread,
+            "The quiet path must exit before the interactive grace thread arms.");
+
+        // Interactive launches keep the visible report.
+        Assert.Contains("Win32Helper.ShowFatalError(", failStartup, StringComparison.Ordinal);
+
+        string launch = OnLaunched();
+        // The flag must be set before the watchdog arms: the watchdog can call
+        // the fatal path at any moment afterwards.
+        int flag = launch.IndexOf("s_startupLaunchQuietExit = isStartupLaunch;", StringComparison.Ordinal);
+        int armed = launch.IndexOf("StartStartupWatchdog();", StringComparison.Ordinal);
+        Assert.True(flag >= 0, "OnLaunched must record whether this is a startup launch.");
+        Assert.True(armed > flag, "The quiet-exit flag must be set before the watchdog arms.");
+    }
+
+    [Fact]
+    public void TrayIconCreation_RetriesThroughTheEarlyLogonWindow()
+    {
+        string tray = Read("src/DeskBox/App.Tray.cs");
+
+        // CreateTrayIcon itself must not call ForceCreate: the bare call is
+        // the crash point observed in the field logs.
+        string createTrayIcon = Slice(
+            tray,
+            "private void CreateTrayIcon()",
+            "/// <summary>Attempts per tray creation pass");
+        Assert.DoesNotContain("ForceCreate", createTrayIcon, StringComparison.Ordinal);
+        Assert.Contains("StartTrayIconCreationWithRetry();", createTrayIcon, StringComparison.Ordinal);
+
+        string retry = Slice(
+            tray,
+            "private Task<bool> StartTrayIconCreationWithRetry",
+            "private bool IsTraySurfaceUsable()");
+
+        // The retry must be bounded: an unbounded loop would keep the startup
+        // gate waiting forever when the shell never comes up.
+        Assert.Contains("TrayCreationMaxAttempts", retry, StringComparison.Ordinal);
+        Assert.Contains("await Task.Delay(TrayCreationRetryDelay);", retry, StringComparison.Ordinal);
+        Assert.Contains("MarkStartupLifelineEstablished();", retry, StringComparison.Ordinal);
+        Assert.Contains("_trayIcon.ForceCreate(enablesEfficiencyMode: false);", retry, StringComparison.Ordinal);
     }
 
     [Fact]

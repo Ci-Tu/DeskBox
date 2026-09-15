@@ -35,4 +35,13 @@ internal static class AutoStartDefaultPolicy
 
     internal static bool IsEnabledState(StartupRegistrationState state) =>
         state is StartupRegistrationState.Enabled or StartupRegistrationState.Pending;
+
+    /// <summary>
+    /// A blocked or failed attempt must not consume the one-time default: the
+    /// next launch retries once the machine condition clears. Every other
+    /// outcome (including every deliberate user or Windows disable) is final
+    /// and still marks the default as applied.
+    /// </summary>
+    internal static bool ShouldMarkApplied(StartupRegistrationState effectiveState) =>
+        effectiveState != StartupRegistrationState.BlockedOrFailed;
 }
