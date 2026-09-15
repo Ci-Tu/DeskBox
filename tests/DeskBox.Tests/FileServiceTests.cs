@@ -706,16 +706,18 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void DeleteSourceFileAfterCopy_ClearsReadOnlyBeforeDeleting()
+    public void TryDeleteFileByIdentity_ClearsReadOnlyBeforeDeleting()
     {
+        // The handle-bound delete clears read-only through the same handle,
+        // so read-only sources still move cleanly.
         string sourcePath = Path.Combine(_tempRoot, "read-only-source.txt");
         File.WriteAllText(sourcePath, "content");
-        FileAttributes attributes = File.GetAttributes(sourcePath) |
-            FileAttributes.ReadOnly;
-        File.SetAttributes(sourcePath, attributes);
+        File.SetAttributes(sourcePath, File.GetAttributes(sourcePath) | FileAttributes.ReadOnly);
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(sourcePath);
+        Assert.NotNull(identity);
 
-        FileService.DeleteSourceFileAfterCopy(sourcePath, attributes);
-
+        Assert.True(FileService.TryDeleteFileByIdentity(sourcePath, identity!.Value));
         Assert.False(File.Exists(sourcePath));
     }
 
@@ -1780,8 +1782,8 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.TransferProgress.cs"));
         string managedMove = Slice(
             progressSource,
-            "private static async Task MoveFileWithProgressAsync",
-            "internal static void DeleteSourceFileAfterCopy");
+            "private static async Task<FileTransferSourceIdentity?> MoveFileWithProgressAsync",
+            "internal static bool CanUseAtomicMove");
         // One source handle (read+delete, shared for reading only) spans the
         // copy and the disposition: no gap between validation and deletion,
         // and concurrent writers are refused instead of raced.
@@ -1808,7 +1810,7 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.cs"));
         string fallbackMove = Slice(
             service,
-            "private static Task MoveFileAsync",
+            "private static async Task<FileTransferSourceIdentity?> MoveFileAsync",
             "private static async Task MoveDirectoryAsync");
         // The headless fallback delegates to the same transaction instead of
         // reimplementing a second copy-and-delete sequence.
@@ -1874,8 +1876,14 @@ public sealed class FileServiceTests : IDisposable
             service,
             "private static void RollbackCopiedEntry",
             "private static bool FilesLookLikeCopies");
+        // Identity-only: no recorded identity means no deletion authority —
+        // the old "looks like the source twin" fallback must never return.
         Assert.Contains(
-            "FilesLookLikeCopies(sourcePath, destinationPath)",
+            "TryDeleteFileByIdentity(destinationPath, identity)",
+            receipt,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "File.Delete(destinationPath)",
             receipt,
             StringComparison.Ordinal);
 
@@ -2020,7 +2028,7 @@ public sealed class FileServiceTests : IDisposable
         string copyEntry = Slice(
             service,
             "private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryAsync",
-            "private static async Task MoveEntryAsync");
+            "private static async Task<FileTransferSourceIdentity?> MoveEntryAsync");
         Assert.Contains(
             "CopyFileWithProgressAsync(",
             copyEntry,
@@ -2161,6 +2169,98 @@ public sealed class FileServiceTests : IDisposable
             File.Exists(Path.Combine(destinationDirectory, "a (2).txt")),
             "the file this copy actually created must be removed");
         Assert.True(File.Exists(sourceFile));
+    }
+
+    [Fact]
+    public async Task Copy_PreservesSourceTimestampsOnTheDestination()
+    {
+        var service = new FileService();
+        string sourcePath = Path.Combine(_tempRoot, "metadata-source.txt");
+        string destinationPath = Path.Combine(_tempRoot, "metadata-dest.txt");
+        await File.WriteAllTextAsync(sourcePath, "metadata probe");
+        DateTime writeStamp = DateTime.UtcNow.AddDays(-3);
+        DateTime createStamp = DateTime.UtcNow.AddDays(-4);
+        File.SetLastWriteTimeUtc(sourcePath, writeStamp);
+        File.SetCreationTimeUtc(sourcePath, createStamp);
+
+        await service.ExecuteTransferPlanAsync(
+            [new FileService.FileTransferPlan(sourcePath, destinationPath)],
+            move: false,
+            progress: null);
+
+        var destination = new FileInfo(destinationPath);
+        Assert.True(File.Exists(destinationPath));
+        Assert.Equal(
+            writeStamp,
+            destination.LastWriteTimeUtc,
+            TimeSpan.FromSeconds(2));
+        Assert.Equal(
+            createStamp,
+            destination.CreationTimeUtc,
+            TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public void SourceIdentity_RejectsMatchingWithoutAnyFileKey()
+    {
+        // File systems without stable object ids (some network/cloud
+        // providers) cannot authorize a destructive delete: metadata alone
+        // is not an ownership proof.
+        string path = Path.Combine(_tempRoot, "identity-no-key.txt");
+        File.WriteAllText(path, "payload");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+
+        var withoutKeys = identity!.Value with { FileKey = null };
+        Assert.False(FileService.SourceIdentityMatches(withoutKeys, withoutKeys));
+    }
+
+    [Fact]
+    public async Task MoveBatchRollback_KeepsADestinationReplacedAfterTheMove()
+    {
+        // A completed move records its destination object; if something else
+        // occupies the destination path by the time the batch rolls back,
+        // that replacement is never moved back to the source.
+        var service = new FileService();
+        string sourceDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "moveback-src")).FullName;
+        string firstSource = Path.Combine(sourceDirectory, "first.txt");
+        string secondSource = Path.Combine(sourceDirectory, "second.txt");
+        string destinationDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "moveback-dest")).FullName;
+        string firstDestination = Path.Combine(destinationDirectory, "first.txt");
+        File.WriteAllText(firstSource, "moved content");
+        File.WriteAllText(secondSource, "second");
+
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<FileService.FileTransferProgress>(update =>
+        {
+            if (update.CompletedItems == 1 && File.Exists(firstDestination))
+            {
+                // Replace the moved object at the destination path.
+                File.Delete(firstDestination);
+                File.WriteAllText(firstDestination, "someone else's file");
+                cancellation.Cancel();
+            }
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ExecuteTransferPlanAsync(
+                [
+                    new FileService.FileTransferPlan(firstSource, firstDestination),
+                    new FileService.FileTransferPlan(secondSource, Path.Combine(destinationDirectory, "second.txt")),
+                ],
+                move: true,
+                progress: progress,
+                cancellationToken: cancellation.Token));
+
+        Assert.Equal(
+            "someone else's file",
+            await File.ReadAllTextAsync(firstDestination));
+        Assert.False(
+            File.Exists(firstSource),
+            "the source of the completed move stays moved; the replacement is not swapped back");
     }
 
     private static string Slice(string source, string startMarker, string endMarker)

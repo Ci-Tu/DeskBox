@@ -92,13 +92,15 @@ public sealed partial class FileService
                 estimates.TryGetValue(operation.SourcePath, out TransferWorkEstimate? estimate);
                 if (move)
                 {
-                    await MoveEntryWithProgressAsync(
+                    FileTransferSourceIdentity? receipt = await MoveEntryWithProgressAsync(
                         operation.SourcePath,
                         operation.DestinationPath,
                         estimate,
                         reporter,
                         cancellationToken);
-                    completedOperations.Add(operation);
+                    completedOperations.Add(receipt is null
+                        ? operation
+                        : operation with { DestinationIdentity = receipt });
                 }
                 else
                 {
@@ -266,14 +268,19 @@ public sealed partial class FileService
         cancellationToken.ThrowIfCancellationRequested();
         if (File.Exists(sourcePath))
         {
-            FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
-                sourcePath,
-                destinationPath,
-                reporter,
-                cancellationToken);
-            return destinationIdentity is null
+            (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
+                await CopyFileWithProgressAsync(
+                    sourcePath,
+                    destinationPath,
+                    reporter,
+                    cancellationToken);
+            return destinationIdentity is null && sourceIdentity is null
                 ? null
-                : [new TransferOperation(sourcePath, destinationPath, DestinationIdentity: destinationIdentity)];
+                : [new TransferOperation(
+                    sourcePath,
+                    destinationPath,
+                    DestinationIdentity: destinationIdentity,
+                    SourceIdentity: sourceIdentity)];
         }
 
         if (Directory.Exists(sourcePath))
@@ -288,7 +295,12 @@ public sealed partial class FileService
         return null;
     }
 
-    private static async Task MoveEntryWithProgressAsync(
+    /// <summary>
+    /// Moves one entry and returns the moved file's destination identity (a
+    /// receipt a later rollback verifies before moving anything back), or
+    /// null for directories and unavailable identities.
+    /// </summary>
+    private static async Task<FileTransferSourceIdentity?> MoveEntryWithProgressAsync(
         string sourcePath,
         string destinationPath,
         TransferWorkEstimate? estimate,
@@ -298,12 +310,11 @@ public sealed partial class FileService
         cancellationToken.ThrowIfCancellationRequested();
         if (File.Exists(sourcePath))
         {
-            await MoveFileWithProgressAsync(
+            return await MoveFileWithProgressAsync(
                 sourcePath,
                 destinationPath,
                 reporter,
                 cancellationToken);
-            return;
         }
 
         if (Directory.Exists(sourcePath))
@@ -315,9 +326,19 @@ public sealed partial class FileService
                 reporter,
                 cancellationToken);
         }
+
+        return null;
     }
 
-    private static async Task<FileTransferSourceIdentity?> CopyFileWithProgressAsync(
+    /// <summary>
+    /// Copies one file and returns both object identities, each read from
+    /// the very handle that participated in the copy while it was still
+    /// open — the source identity describes the object that was actually
+    /// read, the destination identity the object that was created.
+    /// </summary>
+    private static async Task<(
+        FileTransferSourceIdentity? SourceIdentity,
+        FileTransferSourceIdentity? DestinationIdentity)> CopyFileWithProgressAsync(
         string sourceFilePath,
         string destinationFilePath,
         TransferProgressReporter reporter,
@@ -329,6 +350,7 @@ public sealed partial class FileService
 
         FileStream? destination = null;
         FileTransferSourceIdentity? destinationIdentity = null;
+        FileTransferSourceIdentity? sourceIdentity;
         try
         {
             const int bufferSize = 256 * 1024;
@@ -339,6 +361,7 @@ public sealed partial class FileService
                 FileShare.Read,
                 bufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
+            sourceIdentity = IdentityFromHandle(source.SafeFileHandle);
             (destination, destinationIdentity) = await CopyFileCoreAsync(
                 source,
                 sourceInfo,
@@ -355,7 +378,7 @@ public sealed partial class FileService
         }
 
         reporter.Report(FileTransferPhase.Transferring, force: false);
-        return destinationIdentity;
+        return (sourceIdentity, destinationIdentity);
     }
 
     /// <summary>
@@ -487,7 +510,11 @@ public sealed partial class FileService
         }
     }
 
-    private static async Task MoveFileWithProgressAsync(
+    /// <summary>
+    /// Moves one file, returning the destination object's identity as a
+    /// rollback receipt.
+    /// </summary>
+    private static async Task<FileTransferSourceIdentity?> MoveFileWithProgressAsync(
         string sourceFilePath,
         string destinationFilePath,
         TransferProgressReporter reporter,
@@ -521,7 +548,10 @@ public sealed partial class FileService
                     cancellationToken);
                 reporter.AddBytes(sourceLength, sourceInfo.Name, force: true);
                 Win32Helper.NotifyShellItemMoved(sourceFilePath, destinationFilePath);
-                return;
+                // Receipt for a later rollback: whatever now sits at the
+                // destination path is what a rollback would move back, so a
+                // replacement that fails this check is never touched.
+                return TryCaptureSourceIdentity(destinationFilePath);
             }
         }
         catch (IOException) when (
@@ -556,6 +586,7 @@ public sealed partial class FileService
         }
 
         FileStream? destination = null;
+        FileTransferSourceIdentity? destinationReceipt = null;
         try
         {
             await using var source = new FileStream(
@@ -574,7 +605,7 @@ public sealed partial class FileService
                         "The source file identity was unavailable before the copy."));
             }
 
-            (destination, _) = await CopyFileCoreAsync(
+            (destination, destinationReceipt) = await CopyFileCoreAsync(
                 source,
                 sourceInfo,
                 destinationFilePath,
@@ -602,7 +633,11 @@ public sealed partial class FileService
                         $"The source '{sourceFilePath}' could not be deleted after the copy."));
             }
 
-            // Commit complete: the destination survives and closes normally.
+            // The source deletion completes when its handle closes: finish
+            // the source transaction before releasing the destination's
+            // exclusive hold, so at least one protected copy exists at every
+            // instant of the commit.
+            await source.DisposeAsync();
             TryDisposeQuietly(destination);
             destination = null;
         }
@@ -629,34 +664,7 @@ public sealed partial class FileService
         }
 
         Win32Helper.NotifyShellItemMoved(sourceFilePath, destinationFilePath);
-    }
-
-    internal static void DeleteSourceFileAfterCopy(
-        string sourceFilePath,
-        FileAttributes originalAttributes)
-    {
-        bool clearedReadOnly = originalAttributes.HasFlag(
-            FileAttributes.ReadOnly);
-        if (clearedReadOnly)
-        {
-            File.SetAttributes(
-                sourceFilePath,
-                originalAttributes & ~FileAttributes.ReadOnly);
-        }
-
-        try
-        {
-            File.Delete(sourceFilePath);
-        }
-        catch
-        {
-            if (clearedReadOnly && File.Exists(sourceFilePath))
-            {
-                File.SetAttributes(sourceFilePath, originalAttributes);
-            }
-
-            throw;
-        }
+        return destinationReceipt;
     }
 
     internal static bool CanUseAtomicMove(
@@ -786,16 +794,20 @@ public sealed partial class FileService
                 var sourceInfo = new FileInfo(filePath);
                 long sourceLength = sourceInfo.Length;
                 DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
-                FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
-                    filePath,
-                    destinationFilePath,
-                    reporter,
-                    cancellationToken);
+                (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
+                    await CopyFileWithProgressAsync(
+                        filePath,
+                        destinationFilePath,
+                        reporter,
+                        cancellationToken);
+                // The source identity comes from the copy's own handle: it
+                // describes the object that was actually read, never whatever
+                // may have appeared at the path after the copy finished.
                 copiedSourceFiles.Add(new CopiedSourceFileRecord(
                     filePath,
                     sourceLength,
                     sourceLastWriteUtc,
-                    TryCaptureSourceIdentity(filePath)));
+                    sourceIdentity));
                 completedChildOperations.Add(new TransferOperation(
                     filePath,
                     destinationFilePath,

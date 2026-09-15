@@ -76,7 +76,8 @@ public sealed partial class FileService
         string DestinationPath,
         bool SourceIsDirectory = false,
         IReadOnlyList<TransferOperation>? ChildOperations = null,
-        FileTransferSourceIdentity? DestinationIdentity = null);
+        FileTransferSourceIdentity? DestinationIdentity = null,
+        FileTransferSourceIdentity? SourceIdentity = null);
 
     private sealed record FileSystemEntrySnapshot(
         string Path,
@@ -1429,10 +1430,13 @@ public sealed partial class FileService
                 await Task.Run(() => EnsureSafeDirectoryTransfers([operation]));
                 if (move)
                 {
-                    await Task.Run(() => MoveEntryAsync(
-                        operation.SourcePath,
-                        operation.DestinationPath));
-                    completedOperations.Add(operation);
+                    FileTransferSourceIdentity? receipt = await Task.Run(
+                        () => MoveEntryAsync(
+                            operation.SourcePath,
+                            operation.DestinationPath));
+                    completedOperations.Add(receipt is null
+                        ? operation
+                        : operation with { DestinationIdentity = receipt });
                 }
                 else
                 {
@@ -2329,6 +2333,18 @@ public sealed partial class FileService
             {
                 if (move)
                 {
+                    // Move the completed file back only while its destination
+                    // still carries the object this move produced: a
+                    // replacement at the path must never be moved back.
+                    if (operation.DestinationIdentity is { } movedReceipt &&
+                        !SourceFileMatchesIdentity(operation.DestinationPath, movedReceipt))
+                    {
+                        App.Log(
+                            $"[TransferRollback] Kept '{operation.DestinationPath}': it no " +
+                            $"longer matches the moved object; not moving it back.");
+                        continue;
+                    }
+
                     await MoveEntryWithProgressAsync(
                         operation.DestinationPath,
                         operation.SourcePath,
@@ -2385,9 +2401,9 @@ public sealed partial class FileService
     /// <summary>
     /// Rolls back one copied entry by receipt: with a destination identity
     /// the file is deleted only through a handle that carries exactly that
-    /// identity; without one (file systems that cannot stat) the copy is
-    /// matched against the surviving source as a conservative fallback.
-    /// Anything else that now lives at the destination stays.
+    /// identity. Without one — file systems that cannot provide an object
+    /// identity — DeskBox has no deletion authority: the file stays and the
+    /// residue is logged.
     /// </summary>
     private static void RollbackCopiedEntry(
         string sourcePath,
@@ -2402,16 +2418,12 @@ public sealed partial class FileService
                 // matched against this receipt.
                 TryDeleteFileByIdentity(destinationPath, identity);
             }
-            else if (File.Exists(sourcePath) &&
-                FilesLookLikeCopies(sourcePath, destinationPath))
-            {
-                File.Delete(destinationPath);
-            }
             else
             {
                 App.Log(
-                    $"[TransferRollback] Kept '{destinationPath}': the source " +
-                    $"copy no longer matches.");
+                    $"[TransferRollback] Kept '{destinationPath}': no object " +
+                    $"identity was recorded for it, so its ownership cannot " +
+                    $"be proven. Remove the leftover copy manually if unwanted.");
             }
 
             return;
@@ -2558,14 +2570,19 @@ public sealed partial class FileService
             // stream it opened itself: a competing file that appeared at the
             // planned path after planning fails the copy untouched, instead
             // of being deleted by a blind catch.
-            FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
-                sourcePath,
-                destinationPath,
-                new TransferProgressReporter(progress: null, totalItems: 1),
-                CancellationToken.None);
-            return destinationIdentity is null
+            (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
+                await CopyFileWithProgressAsync(
+                    sourcePath,
+                    destinationPath,
+                    new TransferProgressReporter(progress: null, totalItems: 1),
+                    CancellationToken.None);
+            return destinationIdentity is null && sourceIdentity is null
                 ? null
-                : [new TransferOperation(sourcePath, destinationPath, DestinationIdentity: destinationIdentity)];
+                : [new TransferOperation(
+                    sourcePath,
+                    destinationPath,
+                    DestinationIdentity: destinationIdentity,
+                    SourceIdentity: sourceIdentity)];
         }
 
         if (Directory.Exists(sourcePath))
@@ -2580,26 +2597,31 @@ public sealed partial class FileService
         return null;
     }
 
-    private static async Task MoveEntryAsync(string sourcePath, string destinationPath)
+    /// <summary>
+    /// Moves one entry and returns the moved file's destination identity
+    /// (rollback receipt); null for directories and unavailable identities.
+    /// </summary>
+    private static async Task<FileTransferSourceIdentity?> MoveEntryAsync(string sourcePath, string destinationPath)
     {
         if (File.Exists(sourcePath))
         {
-            await MoveFileAsync(sourcePath, destinationPath);
-            return;
+            return await MoveFileAsync(sourcePath, destinationPath);
         }
 
         if (Directory.Exists(sourcePath))
         {
             await MoveDirectoryAsync(sourcePath, destinationPath);
         }
+
+        return null;
     }
 
-    private static Task MoveFileAsync(string sourceFilePath, string destinationFilePath)
+    private static async Task<FileTransferSourceIdentity?> MoveFileAsync(string sourceFilePath, string destinationFilePath)
     {
         // The progress path already tries the atomic rename first and then
         // runs the handle-held cross-volume transaction; headless callers
         // just pass a null reporter.
-        return MoveFileWithProgressAsync(
+        return await MoveFileWithProgressAsync(
             sourceFilePath,
             destinationFilePath,
             new TransferProgressReporter(progress: null, totalItems: 1),
@@ -2725,46 +2747,29 @@ public sealed partial class FileService
             // Handle-bound deletion: the object at the path is deleted only
             // while its identity still matches the manifest record, closing
             // the gap between the tree validation above and each delete.
-            if (record.Identity is { } recordIdentity)
+            // Without a recorded identity there is no deletion authority:
+            // fail closed (both copies stay).
+            if (record.Identity is not { } recordIdentity)
             {
-                if (!TryDeleteFileByIdentity(filePath, recordIdentity))
-                {
-                    // Could not delete through a verified handle (locked by
-                    // another process, or the object was swapped in the
-                    // narrow window after the tree validation): the complete
-                    // destination stays and the source is kept — fail closed
-                    // either way, reported as a cleanup failure.
-                    throw new FileTransferSourceCleanupException(
-                        sourceDirectory,
-                        destinationDirectory,
-                        new IOException(
-                            $"The copied source file could not be deleted through a verified handle: '{filePath}'"));
-                }
-
-                continue;
+                throw new FileTransferSourceCleanupException(
+                    sourceDirectory,
+                    destinationDirectory,
+                    new IOException(
+                        $"The copied source file has no recorded object identity: '{filePath}'"));
             }
 
-            System.IO.FileAttributes originalAttributes = File.GetAttributes(filePath);
-            bool clearedReadOnly = originalAttributes.HasFlag(System.IO.FileAttributes.ReadOnly);
-            if (clearedReadOnly)
+            if (!TryDeleteFileByIdentity(filePath, recordIdentity))
             {
-                File.SetAttributes(
-                    filePath,
-                    originalAttributes & ~System.IO.FileAttributes.ReadOnly);
-            }
-
-            try
-            {
-                File.Delete(filePath);
-            }
-            catch
-            {
-                if (clearedReadOnly && File.Exists(filePath))
-                {
-                    File.SetAttributes(filePath, originalAttributes);
-                }
-
-                throw;
+                // Could not delete through a verified handle (locked by
+                // another process, or the object was swapped in the
+                // narrow window after the tree validation): the complete
+                // destination stays and the source is kept — fail closed
+                // either way, reported as a cleanup failure.
+                throw new FileTransferSourceCleanupException(
+                    sourceDirectory,
+                    destinationDirectory,
+                    new IOException(
+                        $"The copied source file could not be deleted through a verified handle: '{filePath}'"));
             }
         }
 
@@ -2838,14 +2843,22 @@ public sealed partial class FileService
                     if (File.Exists(copiedChild))
                     {
                         // Delete the duplicate only while the surviving
-                        // original still matches it; a diverged pair means
-                        // someone touched one side and both stay.
+                        // original still matches it (content) AND the copied
+                        // side still carries the identity captured just now —
+                        // through a handle bound to that identity, so a
+                        // replacement at the copied path is never deleted.
                         if (File.Exists(originalChild) &&
-                            FilesLookLikeCopies(originalChild, copiedChild))
+                            FilesLookLikeCopies(originalChild, copiedChild) &&
+                            TryCaptureSourceIdentity(copiedChild) is { } copiedIdentity)
                         {
-                            DeleteSourceFileAfterCopy(
-                                copiedChild,
-                                File.GetAttributes(copiedChild));
+                            if (!TryDeleteFileByIdentity(copiedChild, copiedIdentity))
+                            {
+                                App.Log(
+                                    $"[FileTransfer] Migration merge-back kept " +
+                                    $"'{copiedChild}': it could not be deleted through " +
+                                    $"a verified handle. Remove the leftover copy manually " +
+                                    $"if unwanted.");
+                            }
                         }
                         else
                         {
@@ -3049,16 +3062,20 @@ public sealed partial class FileService
                 var sourceInfo = new FileInfo(filePath);
                 long sourceLength = sourceInfo.Length;
                 DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
-                FileTransferSourceIdentity? destinationIdentity = await CopyFileWithProgressAsync(
-                    filePath,
-                    destinationFilePath,
-                    new TransferProgressReporter(progress: null, totalItems: 1),
-                    CancellationToken.None);
+                (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
+                    await CopyFileWithProgressAsync(
+                        filePath,
+                        destinationFilePath,
+                        new TransferProgressReporter(progress: null, totalItems: 1),
+                        CancellationToken.None);
+                // The source identity comes from the copy's own handle: it
+                // describes the object that was actually read, never whatever
+                // may have appeared at the path after the copy finished.
                 copiedSourceFiles.Add(new CopiedSourceFileRecord(
                     filePath,
                     sourceLength,
                     sourceLastWriteUtc,
-                    TryCaptureSourceIdentity(filePath)));
+                    sourceIdentity));
                 completedChildOperations.Add(new TransferOperation(
                     filePath,
                     destinationFilePath,
@@ -3214,6 +3231,14 @@ public sealed partial class FileService
         FileTransferSourceIdentity current,
         FileTransferSourceIdentity expected)
     {
+        if (expected.FileKey is null && current.FileKey is null)
+        {
+            // This file system provides no stable object ids: metadata
+            // alone is not an ownership proof, so destructive operations
+            // have no say here. (Copies still work; deletions do not.)
+            return false;
+        }
+
         if ((expected.FileKey is null) != (current.FileKey is null))
         {
             // The same file system answers file-key queries consistently for
@@ -3429,14 +3454,18 @@ public sealed partial class FileService
             using SafeFileHandle handle = CreateFileW(
                 path,
                 GenericReadAccess | DeleteAccess | FileWriteAttributesAccess,
-                ShareRead | ShareWrite | ShareDelete,
+                ShareRead,
                 IntPtr.Zero,
                 OpenExisting,
                 0,
                 IntPtr.Zero);
             if (handle.IsInvalid)
             {
-                App.Log($"[FileTransfer] Kept '{path}': it could not be opened for deletion.");
+                // A writer holding the file refuses us (or an unrelated
+                // sharing conflict): no deletion without exclusivity.
+                App.Log(
+                    $"[FileTransfer] Kept '{path}': it could not be opened " +
+                    $"for deletion (win32={Marshal.GetLastWin32Error()}).");
                 return false;
             }
 
