@@ -1554,7 +1554,7 @@
   "Widget.DropOnShortcutCannotOpen": "“{0}” এই ফাইলটি খুলতে পারে না",
   "Widget.DropOnShortcutOpenWith": "“{0}” দিয়ে খুলুন",
     "Widget.OpenItemShortcutTargetMissing": "এই শর্টকাটের লক্ষ্য আর নেই। এটি Windows-কে দেওয়া হয়েছে।",
-  "Widget.OpenItemBusy": "অন্য একটি খোলার অনুরোধ প্রক্রিয়াধীন। কিছুক্ষণ পরে আবার চেষ্টা করুন।",
+  "Widget.OpenItemBusy": "অন্য একটি খোলার অনুরোধ প্রক্রিয়াধীন। কিছুক্ষণ পরে আবার চেষ্টা করুন। এটি বারবার ঘটলে Windows Shell সাড়া দিচ্ছে না এমন হতে পারে — ফাইল এক্সপ্লোরার পুনরায় চালু করলে ঠিক হয়ে যাবে।",
   "Widget.OpenItemFailed": "এই ফাইলটি খুলতে পারেনি৷ কোনো ডিফল্ট অ্যাপ সেট করা যাবে না।",
   "Widget.ShowInExplorer": "ফাইলের অবস্থান খুলুন",
   "Widget.CopyPath": "কপি পাথ",

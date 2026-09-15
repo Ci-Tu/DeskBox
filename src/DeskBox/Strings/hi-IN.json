@@ -1554,7 +1554,7 @@
   "Widget.DropOnShortcutCannotOpen": "“{0}” इस फ़ाइल को नहीं खोल सकता",
   "Widget.DropOnShortcutOpenWith": "“{0}” से खोलें",
     "Widget.OpenItemShortcutTargetMissing": "इस शॉर्टकट का लक्ष्य अब मौजूद नहीं है। इसे Windows को सौंपा गया है।",
-  "Widget.OpenItemBusy": "एक और खोलने का अनुरोध संसाधित हो रहा है। थोड़ी देर बाद फिर प्रयास करें।",
+  "Widget.OpenItemBusy": "एक और खोलने का अनुरोध संसाधित हो रहा है। थोड़ी देर बाद फिर प्रयास करें। यह बार-बार हो तो Windows Shell अनुत्तरदायी हो सकता है — फ़ाइल एक्सप्लोरर पुनः आरंभ करने से ठीक हो जाएगा।",
   "Widget.OpenItemFailed": "यह फ़ाइल नहीं खुल सकी. कोई डिफ़ॉल्ट ऐप सेट नहीं किया जा सकता.",
   "Widget.ShowInExplorer": "फ़ाइल स्थान खोलें",
   "Widget.CopyPath": "पथ कॉपी करें",

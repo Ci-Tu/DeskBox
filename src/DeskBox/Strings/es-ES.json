@@ -1554,7 +1554,7 @@
     "Widget.DropOnShortcutCannotOpen": "«{0}» no puede abrir este archivo",
     "Widget.DropOnShortcutOpenWith": "Abrir con «{0}»",
     "Widget.OpenItemShortcutTargetMissing": "El destino de este acceso directo ya no existe. Se pidió a Windows que lo gestionara.",
-    "Widget.OpenItemBusy": "Se está procesando otra solicitud de apertura. Inténtalo de nuevo en breve.",
+    "Widget.OpenItemBusy": "Se está procesando otra solicitud de apertura. Inténtalo de nuevo en breve. Si sigue ocurriendo, el Shell de Windows puede no responder; reiniciar el Explorador lo soluciona.",
     "Widget.OpenItemFailed": "No se pudo abrir este archivo. No se puede configurar ninguna aplicación predeterminada.",
   "Widget.ShowInExplorer": "Abrir ubicación del archivo",
   "Widget.CopyPath": "Copiar ruta",

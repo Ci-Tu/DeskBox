@@ -1542,7 +1542,7 @@
     "Widget.DropOnShortcutCannotOpen": "“{0}” não pode abrir este arquivo",
     "Widget.DropOnShortcutOpenWith": "Abrir com “{0}”",
     "Widget.OpenItemShortcutTargetMissing": "O destino deste atalho não existe mais. O Windows foi solicitado a processá-lo.",
-    "Widget.OpenItemBusy": "Outra solicitação de abertura ainda está sendo processada. Tente novamente em instantes.",
+    "Widget.OpenItemBusy": "Outra solicitação de abertura ainda está sendo processada. Tente novamente em instantes. Se isso continuar acontecendo, o Shell do Windows pode estar sem resposta; reiniciar o Explorador de Arquivos resolve.",
     "Widget.OpenItemFailed": "Não foi possível abrir o arquivo. Pode não haver aplicativo padrão definido.",
     "Widget.ShowInExplorer": "Abrir local do arquivo",
     "Widget.CopyPath": "Copiar caminho",

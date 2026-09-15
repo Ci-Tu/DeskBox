@@ -1177,7 +1177,7 @@
   "Widget.DropOnShortcutCannotOpen": "「{0}」 無法開啟此檔案",
   "Widget.DropOnShortcutOpenWith": "用 「{0}」 開啟",
     "Widget.OpenItemShortcutTargetMissing": "捷徑的目標已不存在，已交由系統處理",
-  "Widget.OpenItemBusy": "正在處理其他開啟要求，請稍後再試",
+  "Widget.OpenItemBusy": "正在處理其他開啟要求，請稍後再試；若持續出現，可能是系統 Shell 無回應，重新啟動檔案總管即可恢復",
   "Widget.OpenItemFailed": "無法開啟此檔案，可能未設定預設程式",
   "Language.English": "English",
   "QuickCapture.Empty.RecentText": "複製的內容會顯示在這裡。",

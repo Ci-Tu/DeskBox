@@ -1554,7 +1554,7 @@
     "Widget.DropOnShortcutCannotOpen": "« {0} » ne peut pas ouvrir ce fichier",
     "Widget.DropOnShortcutOpenWith": "Ouvrir avec « {0} »",
     "Widget.OpenItemShortcutTargetMissing": "La cible de ce raccourci n'existe plus. Windows a été chargé de le traiter.",
-    "Widget.OpenItemBusy": "Une autre demande d’ouverture est en cours. Réessayez dans un instant.",
+    "Widget.OpenItemBusy": "Une autre demande d’ouverture est en cours. Réessayez dans un instant. Si cela se reproduit, le Shell Windows ne répond peut-être plus ; redémarrer l’Explorateur y remédie.",
     "Widget.OpenItemFailed": "Impossible d'ouvrir ce fichier. Aucune application par défaut ne peut être définie.",
   "Widget.ShowInExplorer": "Emplacement du fichier ouvert",
   "Widget.CopyPath": "Copier le chemin",

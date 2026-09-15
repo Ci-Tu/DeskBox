@@ -1177,7 +1177,7 @@
     "Widget.DropOnShortcutCannotOpen": "“{0}” 无法打开此文件",
     "Widget.DropOnShortcutOpenWith": "用 “{0}” 打开",
     "Widget.OpenItemShortcutTargetMissing": "快捷方式的目标已不存在，已交由系统处理",
-    "Widget.OpenItemBusy": "正在处理其他打开请求，请稍后重试",
+    "Widget.OpenItemBusy": "正在处理其他打开请求，请稍后重试；若持续出现，可能是系统 Shell 无响应，重启资源管理器即可恢复",
     "Widget.OpenItemFailed": "无法打开此文件，可能未设置默认程序",
     "Language.English": "English",
     "QuickCapture.Empty.RecentText": "复制的内容会显示在这里。",

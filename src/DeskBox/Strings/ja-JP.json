@@ -1542,7 +1542,7 @@
     "Widget.DropOnShortcutCannotOpen": "“{0}” ではこのファイルを開けません",
     "Widget.DropOnShortcutOpenWith": "“{0}” で開く",
     "Widget.OpenItemShortcutTargetMissing": "ショートカットのリンク先が存在しないため、システムに委ねました",
-    "Widget.OpenItemBusy": "別の開く要求を処理中です。しばらくしてから再試行してください。",
+    "Widget.OpenItemBusy": "別の開く要求を処理中です。しばらくしてから再試行してください。繰り返し発生する場合は、システムのシェルが応答していない可能性があります。エクスプローラーを再起動すると回復します。",
     "Widget.OpenItemFailed": "このファイルを開けません。既定のアプリが設定されていない可能性があります。",
     "Widget.ShowInExplorer": "ファイルの場所を開く",
     "Widget.CopyPath": "パスをコピー",
