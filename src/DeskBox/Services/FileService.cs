@@ -74,10 +74,7 @@ public sealed partial class FileService
     private sealed record TransferOperation(
         string SourcePath,
         string DestinationPath,
-        bool SourceIsDirectory = false,
-        IReadOnlyList<TransferOperation>? ChildOperations = null,
-        FileTransferSourceIdentity? DestinationIdentity = null,
-        FileTransferSourceIdentity? SourceIdentity = null);
+        bool SourceIsDirectory = false);
 
     private sealed record FileSystemEntrySnapshot(
         string Path,
@@ -1430,29 +1427,24 @@ public sealed partial class FileService
                 await Task.Run(() => EnsureSafeDirectoryTransfers([operation]));
                 if (move)
                 {
-                    FileTransferSourceIdentity? receipt = await Task.Run(
-                        () => MoveEntryAsync(
-                            operation.SourcePath,
-                            operation.DestinationPath));
-                    completedOperations.Add(receipt is null
-                        ? operation
-                        : operation with { DestinationIdentity = receipt });
+                    await Task.Run(() => MoveEntryAsync(
+                        operation.SourcePath,
+                        operation.DestinationPath));
+                    completedOperations.Add(operation);
                 }
                 else
                 {
-                    IReadOnlyList<TransferOperation>? childOperations = await Task.Run(
-                        () => CopyEntryAsync(
-                            operation.SourcePath,
-                            operation.DestinationPath));
-                    completedOperations.Add(childOperations is null
-                        ? operation
-                        : operation with { ChildOperations = childOperations });
+                    await Task.Run(() => CopyEntryAsync(
+                        operation.SourcePath,
+                        operation.DestinationPath));
+                    completedOperations.Add(operation);
                 }
             }
         }
         catch
         {
-            await RollbackTransfersAsync(completedOperations, move);
+            // Partial completion: completed items stay (Explorer semantics —
+            // same reasoning as the managed engine's cancellation path).
             throw;
         }
 
@@ -2319,122 +2311,12 @@ public sealed partial class FileService
         }
     }
 
-    private static async Task RollbackTransfersAsync(IEnumerable<TransferOperation> completedOperations, bool move)
-    {
-        TransferOperation[] rollbackOperations = completedOperations
-            .Reverse()
-            .ToArray();
-        var reporter = new TransferProgressReporter(
-            progress: null,
-            totalItems: rollbackOperations.Length);
-        foreach (var operation in rollbackOperations)
-        {
-            try
-            {
-                if (move)
-                {
-                    // Move the completed file back only while its destination
-                    // still carries the object this move produced: a
-                    // replacement at the path must never be moved back.
-                    if (operation.DestinationIdentity is { } movedReceipt &&
-                        !SourceFileMatchesIdentity(operation.DestinationPath, movedReceipt))
-                    {
-                        App.Log(
-                            $"[TransferRollback] Kept '{operation.DestinationPath}': it no " +
-                            $"longer matches the moved object; not moving it back.");
-                        continue;
-                    }
-
-                    await MoveEntryWithProgressAsync(
-                        operation.DestinationPath,
-                        operation.SourcePath,
-                        estimate: null,
-                        reporter,
-                        CancellationToken.None);
-                }
-                else if (operation.ChildOperations is { } childOperations && childOperations.Count > 0)
-                {
-                    // Roll back by what this copy actually created (object
-                    // identity receipts; name conflicts resolved to
-                    // "name (2)" paths at copy time); deriving destinations
-                    // from the source tree again could touch files this copy
-                    // never made.
-                    await Task.Run(() =>
-                    {
-                        foreach (TransferOperation child in childOperations)
-                        {
-                            if (child.SourceIsDirectory)
-                            {
-                                continue;
-                            }
-
-                            RollbackCopiedEntry(
-                                child.SourcePath,
-                                child.DestinationPath,
-                                child.DestinationIdentity);
-                        }
-                    });
-                    TryDeleteEmptyDestinationTree(operation.DestinationPath);
-                }
-                else
-                {
-                    await Task.Run(() => RollbackCopiedEntry(
-                        operation.SourcePath,
-                        operation.DestinationPath,
-                        operation.DestinationIdentity));
-                }
-            }
-            catch (Exception ex)
-            {
-                App.Log($"[TransferRollback] Failed to rollback '{operation.DestinationPath}' -> '{operation.SourcePath}': {ex}");
-            }
-        }
-    }
-
     /// <summary>
-    /// Rolls back one copied entry by receipt: a destination file is deleted
-    /// only while the source still holds a matching copy of it. Anything else
-    /// that now lives under the destination — files added by the user or a
-    /// sync tool after the copy completed — is kept. Residue beats deleting
-    /// someone else's data, so unmatched entries never block the rest.
+    /// Content heuristic for the migration merge-back only: two sides of a
+    /// recovered pair are treated as duplicates while length and write time
+    /// agree. Deletion still goes through object identity; this only decides
+    /// whether the pair is a duplicate at all.
     /// </summary>
-    /// <summary>
-    /// Rolls back one copied entry by receipt: with a destination identity
-    /// the file is deleted only through a handle that carries exactly that
-    /// identity. Without one — file systems that cannot provide an object
-    /// identity — DeskBox has no deletion authority: the file stays and the
-    /// residue is logged.
-    /// </summary>
-    private static void RollbackCopiedEntry(
-        string sourcePath,
-        string destinationPath,
-        FileTransferSourceIdentity? destinationIdentity)
-    {
-        if (File.Exists(destinationPath))
-        {
-            if (destinationIdentity is { } identity)
-            {
-                // Handle-bound delete: a replacement at the path cannot be
-                // matched against this receipt.
-                TryDeleteFileByIdentity(destinationPath, identity);
-            }
-            else
-            {
-                App.Log(
-                    $"[TransferRollback] Kept '{destinationPath}': no object " +
-                    $"identity was recorded for it, so its ownership cannot " +
-                    $"be proven. Remove the leftover copy manually if unwanted.");
-            }
-
-            return;
-        }
-
-        if (Directory.Exists(destinationPath))
-        {
-            RollbackCopiedDirectory(sourcePath, destinationPath);
-        }
-    }
-
     private static bool FilesLookLikeCopies(string sourcePath, string destinationPath)
     {
         try
@@ -2447,181 +2329,61 @@ public sealed partial class FileService
         catch (Exception ex)
         {
             App.Log(
-                $"[TransferRollback] Copy identity check failed for " +
+                $"[FileTransfer] Copy identity check failed for " +
                 $"'{sourcePath}' -> '{destinationPath}': {ex.Message}");
             return false;
         }
     }
 
     /// <summary>
-    /// Deletes the copied mirror of a source tree. Files whose source twin
-    /// still matches (length + timestamp) are removed; everything else stays.
-    /// Directories are only removed bottom-up while empty, so unknown content
-    /// always blocks deletion.
+    /// Copies one entry through the shared CreateNew-based core: a competing
+    /// file at the planned destination fails the copy untouched, and this
+    /// copy's own partial destination is cleaned up through its handle.
     /// </summary>
-    private static void RollbackCopiedDirectory(string sourceDirectory, string destinationDirectory)
-    {
-        if (!Directory.Exists(sourceDirectory))
-        {
-            App.Log(
-                $"[TransferRollback] Kept '{destinationDirectory}': its " +
-                $"source directory no longer exists.");
-            return;
-        }
-
-        int kept = 0;
-        foreach (string sourceFilePath in Directory.EnumerateFiles(
-                     sourceDirectory,
-                     "*",
-                     SearchOption.AllDirectories))
-        {
-            string relative = Path.GetRelativePath(sourceDirectory, sourceFilePath);
-            string destinationFilePath = Path.Combine(destinationDirectory, relative);
-            if (!File.Exists(destinationFilePath))
-            {
-                continue;
-            }
-
-            if (FilesLookLikeCopies(sourceFilePath, destinationFilePath))
-            {
-                File.Delete(destinationFilePath);
-            }
-            else
-            {
-                kept++;
-            }
-        }
-
-        foreach (string sourceSubDirectory in Directory
-                     .EnumerateDirectories(sourceDirectory, "*", SearchOption.AllDirectories)
-                     .OrderByDescending(path =>
-                         path.Count(character => character == Path.DirectorySeparatorChar)))
-        {
-            string relative = Path.GetRelativePath(sourceDirectory, sourceSubDirectory);
-            string destinationSubDirectory = Path.Combine(destinationDirectory, relative);
-            if (Directory.Exists(destinationSubDirectory) &&
-                !Directory.EnumerateFileSystemEntries(destinationSubDirectory).Any())
-            {
-                Directory.Delete(destinationSubDirectory, recursive: false);
-            }
-        }
-
-        TryDeleteEmptyDestinationTree(destinationDirectory);
-
-        if (kept > 0)
-        {
-            App.Log(
-                $"[TransferRollback] Kept {kept} unmatched file(s) under " +
-                $"'{destinationDirectory}'.");
-        }
-    }
-
-    /// <summary>
-    /// Removes a copied directory tree bottom-up, but only while each level
-    /// is empty: unknown content always blocks deletion.
-    /// </summary>
-    private static void TryDeleteEmptyDestinationTree(string destinationDirectory)
-    {
-        try
-        {
-            if (!Directory.Exists(destinationDirectory))
-            {
-                return;
-            }
-
-            foreach (string subDirectory in Directory
-                         .EnumerateDirectories(destinationDirectory, "*", SearchOption.AllDirectories)
-                         .OrderByDescending(path =>
-                             path.Count(character => character == Path.DirectorySeparatorChar)))
-            {
-                if (!Directory.EnumerateFileSystemEntries(subDirectory).Any())
-                {
-                    Directory.Delete(subDirectory, recursive: false);
-                }
-            }
-
-            if (!Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
-            {
-                Directory.Delete(destinationDirectory, recursive: false);
-            }
-        }
-        catch (Exception ex)
-        {
-            App.Log(
-                $"[TransferRollback] Empty-directory cleanup failed for " +
-                $"'{destinationDirectory}': {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Copies one entry. Files return a single-element receipt list carrying
-    /// the destination's object identity; directories return the actual
-    /// child operations created (name conflicts resolve to "name (2)" paths
-    /// at copy time), each with its own identity. A later rollback removes
-    /// exactly what this copy created, by object identity.
-    /// </summary>
-    private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryAsync(
+    private static async Task CopyEntryAsync(
         string sourcePath,
         string destinationPath)
     {
         if (File.Exists(sourcePath))
         {
-            // The shared CreateNew-based core only ever deletes a destination
-            // stream it opened itself: a competing file that appeared at the
-            // planned path after planning fails the copy untouched, instead
-            // of being deleted by a blind catch.
-            (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
-                await CopyFileWithProgressAsync(
-                    sourcePath,
-                    destinationPath,
-                    new TransferProgressReporter(progress: null, totalItems: 1),
-                    CancellationToken.None);
-            return destinationIdentity is null && sourceIdentity is null
-                ? null
-                : [new TransferOperation(
-                    sourcePath,
-                    destinationPath,
-                    DestinationIdentity: destinationIdentity,
-                    SourceIdentity: sourceIdentity)];
+            await CopyFileWithProgressAsync(
+                sourcePath,
+                destinationPath,
+                new TransferProgressReporter(progress: null, totalItems: 1),
+                CancellationToken.None);
+            return;
         }
 
         if (Directory.Exists(sourcePath))
         {
-            return await CopyDirectoryAsync(
+            await CopyDirectoryAsync(
                 sourcePath,
                 destinationPath,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                 new List<CopiedSourceFileRecord>());
         }
-
-        return null;
     }
 
-    /// <summary>
-    /// Moves one entry and returns the moved file's destination identity
-    /// (rollback receipt); null for directories and unavailable identities.
-    /// </summary>
-    private static async Task<FileTransferSourceIdentity?> MoveEntryAsync(string sourcePath, string destinationPath)
+    private static async Task MoveEntryAsync(string sourcePath, string destinationPath)
     {
         if (File.Exists(sourcePath))
         {
-            return await MoveFileAsync(sourcePath, destinationPath);
+            await MoveFileAsync(sourcePath, destinationPath);
+            return;
         }
 
         if (Directory.Exists(sourcePath))
         {
             await MoveDirectoryAsync(sourcePath, destinationPath);
         }
-
-        return null;
     }
 
-    private static async Task<FileTransferSourceIdentity?> MoveFileAsync(string sourceFilePath, string destinationFilePath)
+    private static Task MoveFileAsync(string sourceFilePath, string destinationFilePath)
     {
         // The progress path already tries the atomic rename first and then
         // runs the handle-held cross-volume transaction; headless callers
         // just pass a null reporter.
-        return await MoveFileWithProgressAsync(
+        return MoveFileWithProgressAsync(
             sourceFilePath,
             destinationFilePath,
             new TransferProgressReporter(progress: null, totalItems: 1),
@@ -2847,8 +2609,13 @@ public sealed partial class FileService
                         // side still carries the identity captured just now —
                         // through a handle bound to that identity, so a
                         // replacement at the copied path is never deleted.
+                        // The original is re-verified right before the delete:
+                        // if it vanished in between, the copied file is the
+                        // last complete copy and must stay.
                         if (File.Exists(originalChild) &&
                             FilesLookLikeCopies(originalChild, copiedChild) &&
+                            TryCaptureSourceIdentity(originalChild) is { } originalIdentity &&
+                            SourceFileMatchesIdentity(originalChild, originalIdentity) &&
                             TryCaptureSourceIdentity(copiedChild) is { } copiedIdentity)
                         {
                             if (!TryDeleteFileByIdentity(copiedChild, copiedIdentity))
@@ -3038,7 +2805,13 @@ public sealed partial class FileService
             new List<CopiedSourceFileRecord>());
     }
 
-    private static async Task<IReadOnlyList<TransferOperation>> CopyDirectoryAsync(
+    /// <summary>
+    /// Copies one directory tree through the shared core. Completed children
+    /// are never rolled back (Explorer semantics); the manifest of copied
+    /// source files feeds the directory-move source cleanup, which runs only
+    /// after the whole tree has copied and been verified.
+    /// </summary>
+    private static async Task CopyDirectoryAsync(
         string sourceDirectory,
         string destinationDirectory,
         ISet<string> visitedSourceDirectories,
@@ -3050,63 +2823,40 @@ public sealed partial class FileService
             visitedSourceDirectories);
         Directory.CreateDirectory(destinationDirectory);
 
-        var completedChildOperations = new List<TransferOperation>();
-        try
+        foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
         {
-            foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
-            {
-                string destinationFilePath = GetAvailableDestinationPath(destinationDirectory, Path.GetFileName(filePath));
-                // Capture the pre-copy state: a mismatch during cleanup means
-                // the file changed while it was being copied. FileInfo stats
-                // lazily on first property access, so read both values now.
-                var sourceInfo = new FileInfo(filePath);
-                long sourceLength = sourceInfo.Length;
-                DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
-                (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
-                    await CopyFileWithProgressAsync(
-                        filePath,
-                        destinationFilePath,
-                        new TransferProgressReporter(progress: null, totalItems: 1),
-                        CancellationToken.None);
-                // The source identity comes from the copy's own handle: it
-                // describes the object that was actually read, never whatever
-                // may have appeared at the path after the copy finished.
-                copiedSourceFiles.Add(new CopiedSourceFileRecord(
-                    filePath,
-                    sourceLength,
-                    sourceLastWriteUtc,
-                    sourceIdentity));
-                completedChildOperations.Add(new TransferOperation(
-                    filePath,
-                    destinationFilePath,
-                    DestinationIdentity: destinationIdentity));
-            }
-
-            foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
-            {
-                string folderName = Path.GetFileName(subDirectory);
-                string destinationSubDirectory = GetAvailableDestinationPath(destinationDirectory, folderName);
-                IReadOnlyList<TransferOperation> childOperations = await CopyDirectoryAsync(
-                    subDirectory,
-                    destinationSubDirectory,
-                    visitedSourceDirectories,
-                    copiedSourceFiles);
-                completedChildOperations.AddRange(childOperations);
-                completedChildOperations.Add(new TransferOperation(subDirectory, destinationSubDirectory, SourceIsDirectory: true));
-            }
-        }
-        catch
-        {
-            await RollbackTransfersAsync(completedChildOperations, move: false);
-            if (Directory.Exists(destinationDirectory) && !Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
-            {
-                Directory.Delete(destinationDirectory, recursive: false);
-            }
-
-            throw;
+            string destinationFilePath = GetAvailableDestinationPath(destinationDirectory, Path.GetFileName(filePath));
+            // Capture the pre-copy state: a mismatch during cleanup means
+            // the file changed while it was being copied. FileInfo stats
+            // lazily on first property access, so read both values now.
+            var sourceInfo = new FileInfo(filePath);
+            long sourceLength = sourceInfo.Length;
+            DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
+            // The source identity comes from the copy's own handle: it
+            // describes the object that was actually read, never whatever
+            // may have appeared at the path after the copy finished.
+            FileTransferSourceIdentity? sourceIdentity = await CopyFileWithProgressAsync(
+                filePath,
+                destinationFilePath,
+                new TransferProgressReporter(progress: null, totalItems: 1),
+                CancellationToken.None);
+            copiedSourceFiles.Add(new CopiedSourceFileRecord(
+                filePath,
+                sourceLength,
+                sourceLastWriteUtc,
+                sourceIdentity));
         }
 
-        return completedChildOperations;
+        foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
+        {
+            string folderName = Path.GetFileName(subDirectory);
+            string destinationSubDirectory = GetAvailableDestinationPath(destinationDirectory, folderName);
+            await CopyDirectoryAsync(
+                subDirectory,
+                destinationSubDirectory,
+                visitedSourceDirectories,
+                copiedSourceFiles);
+        }
     }
 
     private static bool PathExists(string path)
@@ -3148,8 +2898,9 @@ public sealed partial class FileService
     /// at the same path gets a new key), which length/timestamp comparison
     /// cannot detect. The key does NOT survive in-place edits: opening and
     /// rewriting a file keeps its key, so length and timestamp must still
-    /// match before the source may be deleted. File systems without stable
-    /// file keys report null and matching relies on length + timestamp only.
+    /// match before the source may be deleted. File systems that provide no
+    /// stable file keys grant no deletion authority at all: matching never
+    /// falls back to length + timestamp for destructive operations.
     /// </summary>
     internal readonly record struct FileTransferSourceIdentity(
         long Length,

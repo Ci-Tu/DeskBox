@@ -796,14 +796,19 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteTransferPlanAsync_CancelRemovesPartialCopy()
+    public async Task ExecuteTransferPlanAsync_CancelLeavesNoTruncatedFile()
     {
+        // On a fast disk the 64 MB copy can finish inside the progress
+        // throttle window, so the cancel lands either mid-copy (the partial
+        // is removed through its own open handle) or after completion (the
+        // full copy stays, Explorer semantics). Either way the user never
+        // sees a truncated file at the destination.
         var service = new FileService();
         string sourcePath = Path.Combine(_tempRoot, "cancel-source.bin");
         string destinationPath = Path.Combine(_tempRoot, "cancel-destination.bin");
         await using (FileStream source = File.Create(sourcePath))
         {
-            source.SetLength(16L * 1024 * 1024);
+            source.SetLength(64L * 1024 * 1024);
         }
 
         using var cancellation = new CancellationTokenSource();
@@ -825,7 +830,13 @@ public sealed class FileServiceTests : IDisposable
                 cancellationToken: cancellation.Token));
 
         Assert.True(File.Exists(sourcePath));
-        Assert.False(File.Exists(destinationPath));
+        if (File.Exists(destinationPath))
+        {
+            Assert.True(
+                new FileInfo(destinationPath).Length == 64L * 1024 * 1024,
+                "a surviving destination must be the complete copy");
+        }
+
         int cancelingIndex = updates.FindIndex(update =>
             update.Phase == FileService.FileTransferPhase.Canceling);
         int canceledIndex = updates.FindIndex(update =>
@@ -874,7 +885,7 @@ public sealed class FileServiceTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExecuteTransferPlanAsync_CancelAfterFirstItemRollsBackCompletedBatch(
+    public async Task ExecuteTransferPlanAsync_CancelAfterFirstItemKeepsCompletedItems(
         bool move)
     {
         var service = new FileService();
@@ -908,9 +919,13 @@ public sealed class FileServiceTests : IDisposable
                 progress: progress,
                 cancellationToken: cancellation.Token));
 
-        Assert.Equal("first", await File.ReadAllTextAsync(firstSource));
+        // Explorer semantics: the completed item stays at its destination and,
+        // for a move, its source is gone; the pending item never ran.
+        Assert.Equal("first", await File.ReadAllTextAsync(firstDestination));
+        Assert.Equal(
+            move,
+            File.Exists(firstSource) is false);
         Assert.Equal("second", await File.ReadAllTextAsync(secondSource));
-        Assert.False(File.Exists(firstDestination));
         Assert.False(File.Exists(secondDestination));
     }
 
@@ -1674,10 +1689,11 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecuteTransferPlanAsync_CancelKeepsForeignFilesInCompletedDirectoryCopy()
+    public async Task ExecuteTransferPlanAsync_CancelKeepsCompletedDirectoryCopyAndForeignFiles()
     {
-        // Canceling after one directory copy completed must roll that copy
-        // back by receipt: files added to the destination by anyone else stay.
+        // Explorer semantics: canceling after a directory copy completed
+        // keeps that copy; foreign files added to the destination also stay;
+        // only the in-flight partial is removed (through its own handle).
         var service = new FileService();
         string sourceDirectory = Path.Combine(_tempRoot, "cancel-dir-src");
         Directory.CreateDirectory(sourceDirectory);
@@ -1687,7 +1703,7 @@ public sealed class FileServiceTests : IDisposable
         string bigSource = Path.Combine(_tempRoot, "cancel-big.bin");
         await using (FileStream big = File.Create(bigSource))
         {
-            big.SetLength(16L * 1024 * 1024);
+            big.SetLength(64L * 1024 * 1024);
         }
 
         string destinationDirectory = Path.Combine(_tempRoot, "cancel-dir-dest");
@@ -1700,8 +1716,7 @@ public sealed class FileServiceTests : IDisposable
             if (update.BytesTransferred > 1024 * 1024)
             {
                 // Past the first, already-completed small directory entry: a
-                // foreign file lands in the copied directory right before the
-                // cancel rolls it back.
+                // foreign file lands in the copied directory before the cancel.
                 if (!File.Exists(foreignFile))
                 {
                     Directory.CreateDirectory(destinationDirectory);
@@ -1722,22 +1737,26 @@ public sealed class FileServiceTests : IDisposable
                 progress: progress,
                 cancellationToken: cancellation.Token));
 
-        Assert.True(File.Exists(foreignFile), "foreign file must survive the rollback");
-        Assert.False(
+        Assert.True(
             File.Exists(Path.Combine(destinationDirectory, "copied.txt")),
-            "the copied twin must still be removed");
-        Assert.True(Directory.Exists(destinationDirectory), "the directory stays for its foreign content");
+            "the completed copy stays (Explorer semantics)");
+        Assert.True(File.Exists(foreignFile), "foreign files stay untouched");
         Assert.True(File.Exists(bigSource));
-        Assert.False(File.Exists(bigDestination), "the partial copy must be removed");
+        if (File.Exists(bigDestination))
+        {
+            Assert.True(
+                new FileInfo(bigDestination).Length == 64L * 1024 * 1024,
+                "a surviving in-flight item must be the complete copy, never truncated");
+        }
     }
 
     [Fact]
-    public async Task ExecuteTransferPlanAsync_CancelKeepsDestinationWhenSourceChangedAfterCopy()
+    public async Task ExecuteTransferPlanAsync_CancelKeepsCompletedCopyEvenWhenSourceChanged()
     {
-        // The source was rewritten after the copy completed. The rollback
-        // removes the destination through its object-identity receipt (this
-        // copy created it), while the rewritten source stays untouched —
-        // the user's newest content is never the thing being cleaned up.
+        // The source was rewritten after the copy completed; the completed
+        // destination stays (Explorer semantics) and the rewritten source is
+        // untouched. The user's newest content lives in both places now,
+        // and nothing deletes either.
         var service = new FileService();
         string sourcePath = Path.Combine(_tempRoot, "changed-source.txt");
         string destinationPath = Path.Combine(_tempRoot, "changed-dest.txt");
@@ -1745,7 +1764,7 @@ public sealed class FileServiceTests : IDisposable
         string bigSource = Path.Combine(_tempRoot, "changed-big.bin");
         await using (FileStream big = File.Create(bigSource))
         {
-            big.SetLength(16L * 1024 * 1024);
+            big.SetLength(64L * 1024 * 1024);
         }
         string bigDestination = Path.Combine(_tempRoot, "changed-big-dest.bin");
 
@@ -1769,9 +1788,12 @@ public sealed class FileServiceTests : IDisposable
                 progress: progress,
                 cancellationToken: cancellation.Token));
 
-        Assert.False(
-            File.Exists(destinationPath),
-            "this copy's own destination is removed by its identity receipt");
+        Assert.True(
+            string.Equals(
+                await File.ReadAllTextAsync(destinationPath),
+                "first version",
+                StringComparison.Ordinal),
+            "the completed copy stays");
         Assert.Equal("second versio", await File.ReadAllTextAsync(sourcePath));
     }
 
@@ -1782,7 +1804,7 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.TransferProgress.cs"));
         string managedMove = Slice(
             progressSource,
-            "private static async Task<FileTransferSourceIdentity?> MoveFileWithProgressAsync",
+            "private static async Task MoveFileWithProgressAsync",
             "internal static bool CanUseAtomicMove");
         // One source handle (read+delete, shared for reading only) spans the
         // copy and the disposition: no gap between validation and deletion,
@@ -1810,7 +1832,7 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.cs"));
         string fallbackMove = Slice(
             service,
-            "private static async Task<FileTransferSourceIdentity?> MoveFileAsync",
+            "private static Task MoveFileAsync",
             "private static async Task MoveDirectoryAsync");
         // The headless fallback delegates to the same transaction instead of
         // reimplementing a second copy-and-delete sequence.
@@ -1853,60 +1875,22 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void RollbackTransfers_DeleteCopiesByReceiptNotByPath()
+    public void CompletedTransfers_AreNeverRolledBack()
     {
+        // Explorer semantics: a cancel or failure never deletes completed
+        // work. The rollback machinery this pins against was removed
+        // wholesale; these guards keep it from creeping back.
         string service = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/Services/FileService.cs"));
-        string rollback = Slice(
-            service,
-            "private static async Task RollbackTransfersAsync",
-            "private static void RollbackCopiedEntry");
-
-        // The old rollback recursed into whatever lived at the destination.
-        Assert.DoesNotContain(
-            "DeleteEntryAsync(operation.DestinationPath)",
-            rollback,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "RollbackCopiedEntry(",
-            rollback,
-            StringComparison.Ordinal);
-
-        string receipt = Slice(
-            service,
-            "private static void RollbackCopiedEntry",
-            "private static bool FilesLookLikeCopies");
-        // Identity-only: no recorded identity means no deletion authority —
-        // the old "looks like the source twin" fallback must never return.
-        Assert.Contains(
-            "TryDeleteFileByIdentity(destinationPath, identity)",
-            receipt,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "File.Delete(destinationPath)",
-            receipt,
-            StringComparison.Ordinal);
-
-        // Directory rollbacks prefer the recorded child receipts (the actual
-        // "name (2)" destinations created at copy time) over re-deriving
-        // destinations from the source tree.
-        Assert.Contains(
-            "operation.ChildOperations is { } childOperations",
-            rollback,
-            StringComparison.Ordinal);
-
-        string directory = Slice(
-            service,
-            "private static void RollbackCopiedDirectory",
-            "TryDeleteEmptyDestinationTree(string destinationDirectory)");
-        Assert.Contains(
-            "recursive: false",
-            directory,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "recursive: true",
-            directory,
-            StringComparison.Ordinal);
+        string progress = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/Services/FileService.TransferProgress.cs"));
+        foreach (string source in new[] { service, progress })
+        {
+            Assert.DoesNotContain("RollbackTransfersAsync", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("RollbackCopiedEntry", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("RollbackCopiedDirectory", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("TryDeleteEmptyDestinationTree", source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -2027,8 +2011,8 @@ public sealed class FileServiceTests : IDisposable
             "src/DeskBox/Services/FileService.cs"));
         string copyEntry = Slice(
             service,
-            "private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryAsync",
-            "private static async Task<FileTransferSourceIdentity?> MoveEntryAsync");
+            "private static async Task CopyEntryAsync",
+            "private static async Task MoveEntryAsync");
         Assert.Contains(
             "CopyFileWithProgressAsync(",
             copyEntry,
@@ -2052,11 +2036,6 @@ public sealed class FileServiceTests : IDisposable
             StringComparison.Ordinal);
         Assert.Contains(
             "TryDisposeWithHandleDeletion(destination)",
-            copyCore,
-            StringComparison.Ordinal);
-        // The identity receipt is read from the handle before any close.
-        Assert.Contains(
-            "IdentityFromHandle(destination.SafeFileHandle)",
             copyCore,
             StringComparison.Ordinal);
     }
@@ -2124,12 +2103,11 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CopyRollback_WithANameConflict_DeletesOnlyTheActuallyCreatedFile()
+    public async Task CopyFailure_WithANameConflict_KeepsBothTheForeignFileAndTheCreatedCopy()
     {
         // A foreign file already occupies the planned name, so the copy
-        // creates "a (2).txt". The rollback must remove the file this copy
-        // created — not the foreign twin the source-relative derivation
-        // would point at.
+        // creates "a (2).txt"; a later item fails. Explorer semantics: the
+        // completed copy stays next to the foreign file, untouched.
         var service = new FileService();
         string sourceDirectory = Path.Combine(_tempRoot, "conflict-src");
         Directory.CreateDirectory(sourceDirectory);
@@ -2163,11 +2141,11 @@ public sealed class FileServiceTests : IDisposable
 
         Assert.True(
             File.Exists(foreignFile),
-            "the pre-existing foreign file must survive the rollback");
+            "the pre-existing foreign file must survive");
         Assert.Equal("shared payload", await File.ReadAllTextAsync(foreignFile));
-        Assert.False(
+        Assert.True(
             File.Exists(Path.Combine(destinationDirectory, "a (2).txt")),
-            "the file this copy actually created must be removed");
+            "the completed copy stays (Explorer semantics)");
         Assert.True(File.Exists(sourceFile));
     }
 
@@ -2217,11 +2195,10 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task MoveBatchRollback_KeepsADestinationReplacedAfterTheMove()
+    public async Task MoveBatchCancel_LeavesACompletedMoveAndItsReplacementAlone()
     {
-        // A completed move records its destination object; if something else
-        // occupies the destination path by the time the batch rolls back,
-        // that replacement is never moved back to the source.
+        // A completed move stays moved (Explorer semantics); whatever later
+        // occupies the destination path is never swapped back.
         var service = new FileService();
         string sourceDirectory = Directory.CreateDirectory(
             Path.Combine(_tempRoot, "moveback-src")).FullName;
@@ -2260,7 +2237,7 @@ public sealed class FileServiceTests : IDisposable
             await File.ReadAllTextAsync(firstDestination));
         Assert.False(
             File.Exists(firstSource),
-            "the source of the completed move stays moved; the replacement is not swapped back");
+            "the completed move stays moved; nothing is swapped back");
     }
 
     private static string Slice(string source, string startMarker, string endMarker)

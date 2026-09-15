@@ -92,26 +92,22 @@ public sealed partial class FileService
                 estimates.TryGetValue(operation.SourcePath, out TransferWorkEstimate? estimate);
                 if (move)
                 {
-                    FileTransferSourceIdentity? receipt = await MoveEntryWithProgressAsync(
+                    await MoveEntryWithProgressAsync(
                         operation.SourcePath,
                         operation.DestinationPath,
                         estimate,
                         reporter,
                         cancellationToken);
-                    completedOperations.Add(receipt is null
-                        ? operation
-                        : operation with { DestinationIdentity = receipt });
+                    completedOperations.Add(operation);
                 }
                 else
                 {
-                    IReadOnlyList<TransferOperation>? childOperations = await CopyEntryWithProgressAsync(
+                    await CopyEntryWithProgressAsync(
                         operation.SourcePath,
                         operation.DestinationPath,
                         reporter,
                         cancellationToken);
-                    completedOperations.Add(childOperations is null
-                        ? operation
-                        : operation with { ChildOperations = childOperations });
+                    completedOperations.Add(operation);
                 }
 
                 reporter.CompleteItem(Path.GetFileName(operation.SourcePath));
@@ -137,23 +133,29 @@ public sealed partial class FileService
         }
         catch (OperationCanceledException)
         {
+            // Explorer semantics: completed items stay, the in-flight item's
+            // partial destination was already removed through its own open
+            // handle, and pending items never run. Rolling back completed
+            // work would require deleting verified-owned objects while their
+            // source may have vanished meanwhile — the exact class of
+            // operation this engine refuses to perform.
             App.Log(
                 $"[FileTransfer] Managed canceling count={operations.Count} " +
                 $"move={move} bytes={reporter.BytesTransferred} " +
                 $"elapsedMs={reporter.ElapsedMilliseconds}");
             reporter.Report(FileTransferPhase.Canceling, force: true);
-            await RollbackTransfersAsync(completedOperations, move);
             reporter.Report(FileTransferPhase.Canceled, force: true);
             App.Log(
                 $"[FileTransfer] Managed canceled count={operations.Count} " +
-                $"move={move} rollbackCount={completedOperations.Count} " +
+                $"move={move} keptCompleted={completedOperations.Count} " +
                 $"elapsedMs={reporter.ElapsedMilliseconds}");
             throw;
         }
         catch
         {
+            // Partial completion: completed items stay (same reasoning as
+            // cancellation); the failure itself propagates.
             reporter.Report(FileTransferPhase.Failed, force: true);
-            await RollbackTransfersAsync(completedOperations, move);
             throw;
         }
     }
@@ -252,14 +254,7 @@ public sealed partial class FileService
         }
     }
 
-    /// <summary>
-    /// Copies one entry. Files return the destination's object identity
-    /// (read from the handle before it closed) for receipt-based rollback;
-    /// directories return the actual child operations created (name
-    /// conflicts resolve to "name (2)" paths at copy time), each carrying
-    /// its own identity.
-    /// </summary>
-    private static async Task<IReadOnlyList<TransferOperation>?> CopyEntryWithProgressAsync(
+    private static async Task CopyEntryWithProgressAsync(
         string sourcePath,
         string destinationPath,
         TransferProgressReporter reporter,
@@ -268,39 +263,25 @@ public sealed partial class FileService
         cancellationToken.ThrowIfCancellationRequested();
         if (File.Exists(sourcePath))
         {
-            (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
-                await CopyFileWithProgressAsync(
-                    sourcePath,
-                    destinationPath,
-                    reporter,
-                    cancellationToken);
-            return destinationIdentity is null && sourceIdentity is null
-                ? null
-                : [new TransferOperation(
-                    sourcePath,
-                    destinationPath,
-                    DestinationIdentity: destinationIdentity,
-                    SourceIdentity: sourceIdentity)];
+            await CopyFileWithProgressAsync(
+                sourcePath,
+                destinationPath,
+                reporter,
+                cancellationToken);
+            return;
         }
 
         if (Directory.Exists(sourcePath))
         {
-            return await CopyDirectoryWithProgressAsync(
+            await CopyDirectoryWithProgressAsync(
                 sourcePath,
                 destinationPath,
                 reporter,
                 cancellationToken);
         }
-
-        return null;
     }
 
-    /// <summary>
-    /// Moves one entry and returns the moved file's destination identity (a
-    /// receipt a later rollback verifies before moving anything back), or
-    /// null for directories and unavailable identities.
-    /// </summary>
-    private static async Task<FileTransferSourceIdentity?> MoveEntryWithProgressAsync(
+    private static async Task MoveEntryWithProgressAsync(
         string sourcePath,
         string destinationPath,
         TransferWorkEstimate? estimate,
@@ -310,11 +291,12 @@ public sealed partial class FileService
         cancellationToken.ThrowIfCancellationRequested();
         if (File.Exists(sourcePath))
         {
-            return await MoveFileWithProgressAsync(
+            await MoveFileWithProgressAsync(
                 sourcePath,
                 destinationPath,
                 reporter,
                 cancellationToken);
+            return;
         }
 
         if (Directory.Exists(sourcePath))
@@ -326,19 +308,15 @@ public sealed partial class FileService
                 reporter,
                 cancellationToken);
         }
-
-        return null;
     }
 
     /// <summary>
-    /// Copies one file and returns both object identities, each read from
-    /// the very handle that participated in the copy while it was still
-    /// open — the source identity describes the object that was actually
-    /// read, the destination identity the object that was created.
+    /// Copies one file and returns the source object's identity, read from
+    /// the very handle that performed the copy while it was still open —
+    /// the directory-move source cleanup later verifies each deletion
+    /// against this identity.
     /// </summary>
-    private static async Task<(
-        FileTransferSourceIdentity? SourceIdentity,
-        FileTransferSourceIdentity? DestinationIdentity)> CopyFileWithProgressAsync(
+    private static async Task<FileTransferSourceIdentity?> CopyFileWithProgressAsync(
         string sourceFilePath,
         string destinationFilePath,
         TransferProgressReporter reporter,
@@ -349,7 +327,6 @@ public sealed partial class FileService
         reporter.SetCurrentItem(sourceInfo.Name);
 
         FileStream? destination = null;
-        FileTransferSourceIdentity? destinationIdentity = null;
         FileTransferSourceIdentity? sourceIdentity;
         try
         {
@@ -362,7 +339,7 @@ public sealed partial class FileService
                 bufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             sourceIdentity = IdentityFromHandle(source.SafeFileHandle);
-            (destination, destinationIdentity) = await CopyFileCoreAsync(
+            (destination, _) = await CopyFileCoreAsync(
                 source,
                 sourceInfo,
                 destinationFilePath,
@@ -372,13 +349,11 @@ public sealed partial class FileService
         finally
         {
             // Plain copy: no commit follows, so the destination simply closes.
-            // The identity was read from the handle before closing, so the
-            // receipt stays valid as an object identity.
             TryDisposeQuietly(destination);
         }
 
         reporter.Report(FileTransferPhase.Transferring, force: false);
-        return (sourceIdentity, destinationIdentity);
+        return sourceIdentity;
     }
 
     /// <summary>
@@ -510,11 +485,7 @@ public sealed partial class FileService
         }
     }
 
-    /// <summary>
-    /// Moves one file, returning the destination object's identity as a
-    /// rollback receipt.
-    /// </summary>
-    private static async Task<FileTransferSourceIdentity?> MoveFileWithProgressAsync(
+    private static async Task MoveFileWithProgressAsync(
         string sourceFilePath,
         string destinationFilePath,
         TransferProgressReporter reporter,
@@ -548,10 +519,7 @@ public sealed partial class FileService
                     cancellationToken);
                 reporter.AddBytes(sourceLength, sourceInfo.Name, force: true);
                 Win32Helper.NotifyShellItemMoved(sourceFilePath, destinationFilePath);
-                // Receipt for a later rollback: whatever now sits at the
-                // destination path is what a rollback would move back, so a
-                // replacement that fails this check is never touched.
-                return TryCaptureSourceIdentity(destinationFilePath);
+                return;
             }
         }
         catch (IOException) when (
@@ -569,7 +537,7 @@ public sealed partial class FileService
         // remains between validation and deletion.
         SafeFileHandle sourceHandle = CreateFileW(
             sourceFilePath,
-            GenericReadAccess | DeleteAccess,
+            GenericReadAccess | DeleteAccess | FileWriteAttributesAccess,
             ShareRead,
             IntPtr.Zero,
             OpenExisting,
@@ -586,7 +554,6 @@ public sealed partial class FileService
         }
 
         FileStream? destination = null;
-        FileTransferSourceIdentity? destinationReceipt = null;
         try
         {
             await using var source = new FileStream(
@@ -605,7 +572,7 @@ public sealed partial class FileService
                         "The source file identity was unavailable before the copy."));
             }
 
-            (destination, destinationReceipt) = await CopyFileCoreAsync(
+            (destination, _) = await CopyFileCoreAsync(
                 source,
                 sourceInfo,
                 destinationFilePath,
@@ -664,7 +631,6 @@ public sealed partial class FileService
         }
 
         Win32Helper.NotifyShellItemMoved(sourceFilePath, destinationFilePath);
-        return destinationReceipt;
     }
 
     internal static bool CanUseAtomicMove(
@@ -750,7 +716,7 @@ public sealed partial class FileService
         StringBuilder volumePathName,
         uint bufferLength);
 
-    private static Task<IReadOnlyList<TransferOperation>> CopyDirectoryWithProgressAsync(
+    private static Task CopyDirectoryWithProgressAsync(
         string sourceDirectory,
         string destinationDirectory,
         TransferProgressReporter reporter,
@@ -765,7 +731,13 @@ public sealed partial class FileService
             new List<CopiedSourceFileRecord>());
     }
 
-    private static async Task<IReadOnlyList<TransferOperation>> CopyDirectoryWithProgressAsync(
+    /// <summary>
+    /// Copies one directory tree. Completed children are never rolled back
+    /// (Explorer semantics); the manifest of copied source files is recorded
+    /// for the directory-move source cleanup, which only runs after the
+    /// entire tree has copied and been verified.
+    /// </summary>
+    private static async Task CopyDirectoryWithProgressAsync(
         string sourceDirectory,
         string destinationDirectory,
         TransferProgressReporter reporter,
@@ -779,72 +751,47 @@ public sealed partial class FileService
             destinationDirectory,
             visitedSourceDirectories);
         Directory.CreateDirectory(destinationDirectory);
-        var completedChildOperations = new List<TransferOperation>();
-        try
+        foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
         {
-            foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string destinationFilePath = GetAvailableDestinationPath(
-                    destinationDirectory,
-                    Path.GetFileName(filePath));
-                // Capture the pre-copy state: a mismatch during cleanup means
-                // the file changed while it was being copied. FileInfo stats
-                // lazily on first property access, so read both values now.
-                var sourceInfo = new FileInfo(filePath);
-                long sourceLength = sourceInfo.Length;
-                DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
-                (FileTransferSourceIdentity? sourceIdentity, FileTransferSourceIdentity? destinationIdentity) =
-                    await CopyFileWithProgressAsync(
-                        filePath,
-                        destinationFilePath,
-                        reporter,
-                        cancellationToken);
-                // The source identity comes from the copy's own handle: it
-                // describes the object that was actually read, never whatever
-                // may have appeared at the path after the copy finished.
-                copiedSourceFiles.Add(new CopiedSourceFileRecord(
-                    filePath,
-                    sourceLength,
-                    sourceLastWriteUtc,
-                    sourceIdentity));
-                completedChildOperations.Add(new TransferOperation(
-                    filePath,
-                    destinationFilePath,
-                    DestinationIdentity: destinationIdentity));
-            }
-
-            foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string destinationSubDirectory = GetAvailableDestinationPath(
-                    destinationDirectory,
-                    Path.GetFileName(subDirectory));
-                IReadOnlyList<TransferOperation> childOperations = await CopyDirectoryWithProgressAsync(
-                    subDirectory,
-                    destinationSubDirectory,
-                    reporter,
-                    cancellationToken,
-                    visitedSourceDirectories,
-                    copiedSourceFiles);
-                completedChildOperations.AddRange(childOperations);
-                completedChildOperations.Add(
-                    new TransferOperation(subDirectory, destinationSubDirectory, SourceIsDirectory: true));
-            }
-        }
-        catch
-        {
-            await RollbackTransfersAsync(completedChildOperations, move: false);
-            if (Directory.Exists(destinationDirectory) &&
-                !Directory.EnumerateFileSystemEntries(destinationDirectory).Any())
-            {
-                Directory.Delete(destinationDirectory, recursive: false);
-            }
-
-            throw;
+            cancellationToken.ThrowIfCancellationRequested();
+            string destinationFilePath = GetAvailableDestinationPath(
+                destinationDirectory,
+                Path.GetFileName(filePath));
+            // Capture the pre-copy state: a mismatch during cleanup means
+            // the file changed while it was being copied. FileInfo stats
+            // lazily on first property access, so read both values now.
+            var sourceInfo = new FileInfo(filePath);
+            long sourceLength = sourceInfo.Length;
+            DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
+            // The source identity comes from the copy's own handle: it
+            // describes the object that was actually read, never whatever
+            // may have appeared at the path after the copy finished.
+            FileTransferSourceIdentity? sourceIdentity = await CopyFileWithProgressAsync(
+                filePath,
+                destinationFilePath,
+                reporter,
+                cancellationToken);
+            copiedSourceFiles.Add(new CopiedSourceFileRecord(
+                filePath,
+                sourceLength,
+                sourceLastWriteUtc,
+                sourceIdentity));
         }
 
-        return completedChildOperations;
+        foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string destinationSubDirectory = GetAvailableDestinationPath(
+                destinationDirectory,
+                Path.GetFileName(subDirectory));
+            await CopyDirectoryWithProgressAsync(
+                subDirectory,
+                destinationSubDirectory,
+                reporter,
+                cancellationToken,
+                visitedSourceDirectories,
+                copiedSourceFiles);
+        }
     }
 
     private static async Task MoveDirectoryWithProgressAsync(
