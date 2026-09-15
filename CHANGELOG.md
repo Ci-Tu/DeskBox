@@ -1,5 +1,19 @@
 ﻿# Changelog
 
+## 1.5.2 - 2026-09-15
+
+### English
+
+#### Fixes
+
+- File widgets no longer cap their contents at the first 30 items. Folders up to the render threshold show every item again, and larger folders extend the rendered window whenever the visible area is not yet filled (1.5.1 could leave tall widgets stuck at 30 items with no way to reach the rest — reported through the in-app feedback channel).
+
+### 中文
+
+#### 修复
+
+- 修复文件格子最多只显示前 30 个项目的问题。不高于渲染阈值的文件夹恢复显示全部条目，更大的文件夹在可视区域尚未填满时自动扩展渲染窗口（1.5.1 中较高的格子可能停在 30 项且无法查看其余内容——经应用内反馈渠道报告）。
+
 ## 1.5.1 - 2026-09-15
 
 ### English

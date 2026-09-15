@@ -7,7 +7,7 @@
 > 目前暂不接受外部 PR 合并——欢迎通过 Issue / Discussion 提交 Bug、功能建议与技术讨论，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 [![CI](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml/badge.svg)](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml)
-[![最新版本](https://img.shields.io/badge/release-1.5.1-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.1)
+[![最新版本](https://img.shields.io/badge/release-1.5.2-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.2)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4.svg)](#环境要求)
 [![x64 and ARM64](https://img.shields.io/badge/architecture-x64%20%7C%20ARM64-5C2D91.svg)](#下载)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
@@ -40,10 +40,10 @@ DeskBox 使用贴近 Windows 原生体验的材质，同时保留普通桌面文
 
 ## 下载
 
-当前线上稳定版为 DeskBox 1.5.1，可从 [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.1) 下载。
+当前线上稳定版为 DeskBox 1.5.2，可从 [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.2) 下载。
 
-- [DeskBox 1.5.1 x64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.1/DeskBox_Setup_1.5.1_x64.exe)，推荐大多数 Intel 和 AMD 电脑使用。
-- [DeskBox 1.5.1 ARM64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.1/DeskBox_Setup_1.5.1_arm64.exe)，推荐骁龙、Surface Pro X 等 Windows on ARM 电脑使用。
+- [DeskBox 1.5.2 x64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.2/DeskBox_Setup_1.5.2_x64.exe)，推荐大多数 Intel 和 AMD 电脑使用。
+- [DeskBox 1.5.2 ARM64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.2/DeskBox_Setup_1.5.2_arm64.exe)，推荐骁龙、Surface Pro X 等 Windows on ARM 电脑使用。
 
 两个安装包都是 Full Native AOT 构建，并内置对应架构的私有 Windows App Runtime 2.4，可离线安装，不需要另外下载 .NET 10 或 Windows App Runtime。
 
@@ -124,6 +124,12 @@ DeskBox 使用贴近 Windows 原生体验的材质，同时保留普通桌面文
 - DeskBox 关闭后会显示安装界面；升级会复用并锁定原安装路径，避免生成第二份应用。
 - 支持设置备份与恢复，并可导出经过隐私过滤的一键诊断包用于排查问题。
 - 设置使用可恢复快照，退出时刷新待保存内容；保存失败会明确记录和提示，不再静默恢复默认配置。
+
+## 1.5.2 更新亮点
+
+- **文件格子恢复完整显示。** 修复 1.5.1 的回归：文件格子最多只显示前 30 个项目。不高于渲染阈值的文件夹列出全部条目，更大的文件夹在可视区域尚未填满时自动扩展渲染窗口。
+
+完整内容见 [更新日志](CHANGELOG.md) 和 [1.5.2 发布说明](docs/releases/v1.5.2.md)。
 
 ## 1.5.1 更新亮点
 
