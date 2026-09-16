@@ -248,7 +248,7 @@ public sealed class DesktopOrganizationRecoveryJournal
 /// </summary>
 public sealed class DesktopOrganizationDestinationIdentity
 {
-    public uint VolumeSerialNumber { get; set; }
+    public ulong VolumeSerialNumber { get; set; }
 
     public ulong FileIdHigh { get; set; }
 

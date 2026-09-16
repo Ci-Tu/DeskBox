@@ -32,12 +32,18 @@ public sealed partial class DesktopOrganizationTransaction
                     TargetWidgetId = item.TargetWidgetId,
                     SourceScope = item.SourceScope,
                     Size = item.Size,
-                    LastWriteTimeUtc = item.LastWriteTimeUtc
+                    LastWriteTimeUtc = item.LastWriteTimeUtc,
+                    // The history receipt travels with the undo candidate:
+                    // verification compares the object at the destination
+                    // against the identity recorded at move time, never a
+                    // fresh capture (which would hand a replacement a valid
+                    // id). Legacy entries without one fall back to a fresh
+                    // capture — the pre-identity behavior.
+                    DestinationIdentity = item.DestinationIdentity
                 }).ToList()
             };
-            // The undo candidates verify the object still at the original
-            // destination before moving it back; capture its identity now.
-            foreach (var undoItem in journal.Items)
+            foreach (var undoItem in journal.Items.Where(
+                         undoItem => undoItem.DestinationIdentity is null))
             {
                 RecordDestinationIdentity(undoItem, undoItem.DestinationPath);
             }

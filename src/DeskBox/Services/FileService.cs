@@ -2871,7 +2871,7 @@ public sealed partial class FileService
     internal readonly record struct FileTransferSourceIdentity(
         long Length,
         DateTime LastWriteTimeUtc,
-        uint VolumeSerialNumber,
+        ulong VolumeSerialNumber,
         FileId128? FileId);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -2923,22 +2923,6 @@ public sealed partial class FileService
         {
             return null;
         }
-    }
-
-    private static FileTransferSourceIdentity? IdentityFromInformation(
-        in ByHandleFileInformation information)
-    {
-        // Legacy 64-bit view: only used where a 128-bit query already failed.
-        ulong fileIndex =
-            ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
-        long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
-        long lastWrite =
-            ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
-        return new FileTransferSourceIdentity(
-            length,
-            DateTime.FromFileTimeUtc(lastWrite),
-            information.VolumeSerialNumber,
-            fileIndex == 0 ? null : new FileId128(0, fileIndex));
     }
 
     internal static bool SourceFileMatchesIdentity(
@@ -3059,7 +3043,10 @@ public sealed partial class FileService
     [StructLayout(LayoutKind.Sequential)]
     private unsafe struct FileIdInfo
     {
-        public uint VolumeSerialNumber;
+        // Must mirror the native FILE_ID_INFO exactly: the volume serial is
+        // ULONGLONG (8 bytes), not DWORD — an undersized layout makes
+        // GetFileInformationByHandleEx reject the buffer outright.
+        public ulong VolumeSerialNumber;
         public fixed byte FileId[16];
     }
 
@@ -3076,7 +3063,10 @@ public sealed partial class FileService
     /// keep the handle open can validate and act without any path race. The
     /// id comes from FileIdInfo (full 128 bits — the 64-bit index is not
     /// unique on ReFS); length and timestamps come from the classic
-    /// BY_HANDLE view in the same call sequence.
+    /// BY_HANDLE view in the same call sequence. A failed 128-bit query
+    /// returns null: FileIdInfo is supported everywhere DeskBox runs, so a
+    /// failure means an exotic provider, and identity authority is denied
+    /// rather than degraded to the non-unique 64-bit index.
     /// </summary>
     internal static FileTransferSourceIdentity? IdentityFromHandle(SafeFileHandle handle)
     {
@@ -3097,9 +3087,7 @@ public sealed partial class FileService
                     out idInfo,
                     sizeof(FileIdInfo)))
             {
-                // The 128-bit query failed (very old / exotic providers): keep
-                // the legacy 64-bit index so identity stays usable where it was.
-                return IdentityFromInformation(information);
+                return null;
             }
 
             ulong low = *(ulong*)idInfo.FileId;
@@ -3238,7 +3226,7 @@ public sealed partial class FileService
             }
 
             if (!GetFileInformationByHandle(handle, out ByHandleFileInformation information) ||
-                IdentityFromInformation(information) is not { } currentIdentity)
+                IdentityFromHandle(handle) is not { } currentIdentity)
             {
                 App.Log($"[FileTransfer] Kept '{path}': its identity could not be read for deletion.");
                 return false;

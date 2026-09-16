@@ -728,6 +728,72 @@ public sealed class DesktopOrganizationTests : IDisposable
             "no identity means no automatic move");
     }
 
+    [Fact]
+    public async Task Undo_PartialFailureRetryMovesOnlyTheRemainingItem()
+    {
+        // A retry after a partial undo must not touch the already-restored
+        // item: its undo target is gone and re-running it would relocate
+        // whatever reappeared at that path.
+        string root = Directory.CreateDirectory(Path.Combine(_root, "undo-retry")).FullName;
+        string desktopPath = Path.Combine(root, "desktop");
+        string widgetPath = Path.Combine(root, "widget");
+        Directory.CreateDirectory(desktopPath);
+        Directory.CreateDirectory(widgetPath);
+        string firstSource = Path.Combine(desktopPath, "first.txt");
+        string secondSource = Path.Combine(desktopPath, "second.txt");
+        File.WriteAllText(firstSource, "first");
+        File.WriteAllText(secondSource, "second");
+        var settings = new SettingsService(Path.Combine(root, "settings"));
+        var history = new OrganizationHistoryEntry
+        {
+            Id = "undo-retry",
+            ActionType = OrganizationActionType.MoveBackToDesktop,
+            CanUndo = true,
+            Items =
+            [
+                new OrganizationHistoryItem
+                {
+                    Name = "first.txt",
+                    SourcePath = firstSource,
+                    DestinationPath = Path.Combine(widgetPath, "first.txt")
+                },
+                new OrganizationHistoryItem
+                {
+                    Name = "second.txt",
+                    SourcePath = secondSource,
+                    DestinationPath = Path.Combine(widgetPath, "second.txt")
+                }
+            ]
+        };
+        settings.Settings.RecentOrganizationHistory.Add(history);
+        await settings.SaveAsync(notifySubscribers: false);
+        // Simulate the state after a partial undo: the first item was already
+        // restored to the desktop (its data still sits at the widget path
+        // from the copy in this fixture, which is exactly the trap — moving
+        // it again would duplicate), the second is still in the widget.
+        File.WriteAllText(Path.Combine(widgetPath, "first.txt"), "first");
+        File.WriteAllText(Path.Combine(widgetPath, "second.txt"), "second");
+        File.WriteAllText(firstSource, "first");
+        history.Items[0].IsRestored = true;
+        history.Items[0].RestoredPath = firstSource;
+        await settings.SaveAsync(notifySubscribers: false);
+
+        var service = new OrganizerService(
+            settings,
+            new FileService(),
+            () => desktopPath);
+        await service.UndoAsync("undo-retry");
+
+        Assert.True(history.IsUndone);
+        Assert.Equal(
+            "second",
+            await File.ReadAllTextAsync(secondSource));
+        Assert.False(
+            File.Exists(Path.Combine(desktopPath, "first (2).txt")),
+            "the retry must never duplicate the restored item");
+        Assert.Single(Directory.GetFiles(desktopPath, "first*.txt"));
+    }
+
     private DesktopOrganizationFileSnapshot Snapshot(
         string name,
         string category,

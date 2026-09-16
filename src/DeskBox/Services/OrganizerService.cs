@@ -399,10 +399,14 @@ public sealed class OrganizerService
             return;
         }
 
+        // Only not-yet-restored items participate: a retry after a partial
+        // failure must never move an already-restored item again (its undo
+        // target is gone, and re-running it against whatever reappeared at
+        // that path would relocate an unrelated object).
         var reservedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var plans = new List<FileService.FileTransferPlan>(historyEntry.Items.Count);
-
-        foreach (var item in historyEntry.Items)
+        var pending = new List<(OrganizationHistoryItem Item, FileService.FileTransferPlan Plan)>(
+            historyEntry.Items.Count);
+        foreach (var item in historyEntry.Items.Where(item => !item.IsRestored))
         {
             if (!File.Exists(item.DestinationPath) && !Directory.Exists(item.DestinationPath))
             {
@@ -410,9 +414,10 @@ public sealed class OrganizerService
             }
 
             string restorePath = FileService.GetAvailablePath(item.SourcePath, reservedPaths);
-            plans.Add(new FileService.FileTransferPlan(item.DestinationPath, restorePath));
+            pending.Add((item, new FileService.FileTransferPlan(item.DestinationPath, restorePath)));
         }
 
+        var plans = pending.Select(pair => pair.Plan).ToList();
         string operationId = Guid.NewGuid().ToString("N");
         _autoOrganizationSuppressions.BeginOperation(operationId, plans);
         try
@@ -434,18 +439,18 @@ public sealed class OrganizerService
             {
                 foreach (FileService.FileTransferResult result in partial.CompletedResults)
                 {
-                    int index = plans.FindIndex(plan => string.Equals(
-                        plan.SourcePath,
+                    var match = pending.FirstOrDefault(pair => string.Equals(
+                        pair.Plan.SourcePath,
                         result.SourcePath,
                         StringComparison.OrdinalIgnoreCase));
-                    if (index < 0 || index >= historyEntry.Items.Count)
+                    if (match.Item is null)
                     {
                         continue;
                     }
 
-                    historyEntry.Items[index].IsRestored = true;
-                    historyEntry.Items[index].RestoredPath = result.DestinationPath;
-                    historyEntry.Items[index].DestinationPath = result.DestinationPath;
+                    match.Item.IsRestored = true;
+                    match.Item.RestoredPath = result.DestinationPath;
+                    match.Item.DestinationPath = result.DestinationPath;
                 }
 
                 historyEntry.IsUndone = historyEntry.Items.All(item => item.IsRestored);
@@ -458,9 +463,9 @@ public sealed class OrganizerService
 
         historyEntry.IsUndone = true;
         historyEntry.CanUndo = false;
-        for (int index = 0; index < plans.Count; index++)
+        foreach (var (item, plan) in pending)
         {
-            historyEntry.Items[index].DestinationPath = plans[index].DestinationPath;
+            item.DestinationPath = plan.DestinationPath;
         }
 
         await _settingsService.SaveAsync(notifySubscribers: false);

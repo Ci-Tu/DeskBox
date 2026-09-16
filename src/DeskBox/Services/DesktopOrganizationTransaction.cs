@@ -497,7 +497,11 @@ public sealed partial class DesktopOrganizationTransaction
                 TargetWidgetName = targetsById[item.TargetWidgetId].SuggestedDisplayName,
                 SourceScope = item.SourceScope,
                 Size = item.Size,
-                LastWriteTimeUtc = item.LastWriteTimeUtc
+                LastWriteTimeUtc = item.LastWriteTimeUtc,
+                // The receipt captured at move time travels with the history:
+                // undo must verify against the object that was moved, not
+                // whatever later occupies the destination path.
+                DestinationIdentity = item.DestinationIdentity
                 }).ToList()
         };
     }

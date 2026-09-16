@@ -2095,6 +2095,26 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
+    public void SourceIdentity_UsesThe128BitFileIdPath()
+    {
+        // The FileIdInfo query must actually succeed: the native struct's
+        // volume serial is ULONGLONG (24-byte layout), and an undersized
+        // layout made every call fail silently onto the legacy 64-bit view.
+        string path = Path.Combine(_tempRoot, "identity-128.txt");
+        File.WriteAllText(path, "payload");
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(path);
+        Assert.NotNull(identity);
+        Assert.NotNull(identity!.Value.FileId);
+        // NTFS file ids are currently allocated in a low range, so the high
+        // 64 bits stay zero there; the discriminator is that the identity
+        // came from the 128-bit query, which fails closed on capture errors
+        // (no legacy fallback anymore).
+        Assert.True(
+            FileService.SourceFileMatchesIdentity(path, identity.Value));
+    }
+
+    [Fact]
     public void TryDeleteFileByIdentity_RemovesTheVerifiedObjectAndKeepsAReplacement()
     {
         string path = Path.Combine(_tempRoot, "handle-delete.txt");
