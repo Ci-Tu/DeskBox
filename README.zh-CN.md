@@ -7,7 +7,7 @@
 > 目前暂不接受外部 PR 合并——欢迎通过 Issue / Discussion 提交 Bug、功能建议与技术讨论，详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 [![CI](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml/badge.svg)](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml)
-[![最新版本](https://img.shields.io/badge/release-1.5.2-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.2)
+[![1.5.3 版本](https://img.shields.io/badge/release-1.5.3-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.3)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4.svg)](#环境要求)
 [![x64 and ARM64](https://img.shields.io/badge/architecture-x64%20%7C%20ARM64-5C2D91.svg)](#下载)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
@@ -40,10 +40,10 @@ DeskBox 使用贴近 Windows 原生体验的材质，同时保留普通桌面文
 
 ## 下载
 
-当前线上稳定版为 DeskBox 1.5.2，可从 [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.2) 下载。
+DeskBox 1.5.3 已进入发版准备阶段。下方 [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.3) 下载链接会在正式发布后生效。
 
-- [DeskBox 1.5.2 x64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.2/DeskBox_Setup_1.5.2_x64.exe)，推荐大多数 Intel 和 AMD 电脑使用。
-- [DeskBox 1.5.2 ARM64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.2/DeskBox_Setup_1.5.2_arm64.exe)，推荐骁龙、Surface Pro X 等 Windows on ARM 电脑使用。
+- [DeskBox 1.5.3 x64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.3/DeskBox_Setup_1.5.3_x64.exe)，推荐大多数 Intel 和 AMD 电脑使用。
+- [DeskBox 1.5.3 ARM64 安装包](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.3/DeskBox_Setup_1.5.3_arm64.exe)，推荐骁龙、Surface Pro X 等 Windows on ARM 电脑使用。
 
 两个安装包都是 Full Native AOT 构建，并内置对应架构的私有 Windows App Runtime 2.4，可离线安装，不需要另外下载 .NET 10 或 Windows App Runtime。
 
@@ -124,6 +124,15 @@ DeskBox 使用贴近 Windows 原生体验的材质，同时保留普通桌面文
 - DeskBox 关闭后会显示安装界面；升级会复用并锁定原安装路径，避免生成第二份应用。
 - 支持设置备份与恢复，并可导出经过隐私过滤的一键诊断包用于排查问题。
 - 设置使用可恢复快照，退出时刷新待保存内容；保存失败会明确记录和提示，不再静默恢复默认配置。
+
+## 1.5.3 更新亮点
+
+- **直装版可选择开机自启方式。** 新用户默认标准方式，计划任务作为可选项；已有安装保留实际方式，任务注册失败时可回退到验证成功的标准自启，并尊重 Windows 禁用选择。
+- **中文路径可正常校验计划任务。** 直接按 Unicode 读取任务定义，避免账户名和安装路径因代码页不一致被错误拒绝。
+- **修复通知激活初始化顺序。** 先注册通知，再读取激活参数，初始化期间的通知等主实例就绪后处理。商店版继续使用 Windows StartupTask。
+- **改善启动恢复与诊断。** 桌面启动期间重试托盘创建，不可恢复的初始化失败退出并释放实例；诊断保留布尔检查结果，同时继续隐藏私密路径。
+
+完整内容见 [更新日志](CHANGELOG.md) 和 [1.5.3 发布说明](docs/releases/v1.5.3.md)。
 
 ## 1.5.2 更新亮点
 

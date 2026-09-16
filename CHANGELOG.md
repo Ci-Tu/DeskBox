@@ -1,4 +1,34 @@
-﻿# Changelog
+# Changelog
+
+## 1.5.3 - 2026-09-16
+
+### English
+
+#### New features
+
+- Add standard startup and an optional scheduled-task method to direct installations. New users default to standard startup; existing installations keep their active method. Failed task registration can fall back to verified standard startup, failed switches preserve the previous entry, and Windows disable choices are respected.
+
+#### Fixes
+
+- Read scheduled-task definitions and rollback snapshots directly as Unicode so non-ASCII account names and installation paths pass registration verification.
+- Register notifications before decoding activation arguments, preventing the uninitialized notification-deserializer path during notification launches. Queue early notification input until the main instance is ready, and keep ordinary startup available when notifications are unsupported or cannot register.
+- Retry tray creation while the desktop shell starts and terminate fatal initialization failures instead of leaving a headless process holding the instance lock. Extend the watchdog to constructor initialization.
+- Retry failed first-time autostart registration on a later launch without consuming the one-time default marker.
+- Preserve boolean verification results in diagnostic exports while continuing to hide actual paths and account identifiers.
+
+### 中文
+
+#### 新功能
+
+- 为直装版增加标准自启和可选计划任务。新用户默认标准方式，已有安装保留实际生效的方式；任务注册失败时可回退到验证成功的标准自启，切换失败保留旧入口，并尊重 Windows 禁用选择。
+
+#### 修复
+
+- 直接按 Unicode 读取计划任务定义和回滚快照，避免非 ASCII 账户名及安装路径在注册校验时被读错。
+- 先注册通知再解码激活参数，修复通知拉起应用时进入未初始化反序列化路径的问题；初始化期间的通知先排队，等主实例就绪后处理，通知不受支持或注册失败时仍保留普通启动。
+- 在桌面外壳启动期间重试托盘创建，不可恢复的初始化失败会退出，避免留下占用实例锁的无界面进程；看门狗同时覆盖构造阶段。
+- 首次自动开启自启失败后允许后续启动重试，不再提前消耗一次性默认标记。
+- 在诊断导出中保留布尔校验结果，同时继续隐藏实际路径和账户标识。
 
 ## 1.5.2 - 2026-09-15
 
