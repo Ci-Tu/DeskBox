@@ -272,15 +272,20 @@ public partial class WidgetViewModel
         finally
         {
             upsertStopwatch.Stop();
+            var finalizeStopwatch = Stopwatch.StartNew();
+            batchScope.Dispose();
+            finalizeStopwatch.Stop();
             if (materialized.Length > 0)
             {
+                // upsertLoopMs and finalizeSyncMs together bound the
+                // post-processing this widget runs on the UI thread; neither
+                // alone is the before/after number.
                 App.Log(
                     $"[OrganizerPerf] importBatch attempted={materialized.Length} " +
                     $"inserted={importedDestinationPaths.Count} " +
-                    $"upsertMs={upsertStopwatch.ElapsedMilliseconds}");
+                    $"upsertLoopMs={upsertStopwatch.ElapsedMilliseconds} " +
+                    $"finalizeSyncMs={finalizeStopwatch.ElapsedMilliseconds}");
             }
-
-            batchScope.Dispose();
         }
 
         if (insertedAny &&

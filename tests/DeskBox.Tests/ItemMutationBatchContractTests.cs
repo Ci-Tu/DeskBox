@@ -2,53 +2,98 @@ namespace DeskBox.Tests;
 
 /// <summary>
 /// Source contract for the batch import mutation scope. WidgetViewModel
-/// needs a live dispatcher, so the lifecycle itself is pinned at the source:
-/// both bulk import loops must open a scope, every per-item derived reaction
-/// (normalization, manual-order persistence, hydration, render-window and
-/// stack rebuild queues) must defer while one is active, and the scope must
-/// finalize each of them exactly once, in an order where normalization and
-/// persistence observe the settled list before anything rebuilds from it.
+/// needs a live dispatcher, so the lifecycle is pinned at the source. The
+/// pins deliberately encode asynchronous reality, not source adjacency: the
+/// queue calls only enqueue, hydration snapshots the rendered prefix
+/// synchronously at startup, and the deferred hydration start therefore
+/// lives inside the reconcile callback — the bug this guards is asserting
+/// the right calls in the wrong completion order.
 /// </summary>
 public sealed class ItemMutationBatchContractTests
 {
     [Fact]
-    public void Scope_Sequence_DefersReactionsThenFinalizesEachOnce()
+    public void Scope_Finalization_DefersEachReactionExactlyOnce()
     {
         string batch = File.ReadAllText(TestPaths.FromRepository(
-            "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs"));
+            "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs"))
+            .Replace("\r\n", "\n");
 
         Assert.Contains("internal IDisposable EnterItemMutationScope()", batch, StringComparison.Ordinal);
         Assert.Contains("MarkItemMutationBatchDirty() => _itemMutationBatchDirty = true;", batch, StringComparison.Ordinal);
-
-        // Finalization must run every deferred reaction exactly once...
-        foreach (string reaction in new[]
-                 {
-                     "owner.NormalizeSortOrder();",
-                     "owner.PersistManualOrderSnapshotIfChanged();",
-                     "owner.QueueStackDisplayRebuild();",
-                     "owner.QueueRenderWindowReconcile();",
-                     "owner.StartItemHydration();"
-                 })
-        {
-            Assert.Contains(reaction, batch, StringComparison.Ordinal);
-        }
-
-        // ...in an order where normalization and persistence settle the
-        // list before anything rebuilds a projection from it, and hydration
-        // starts against the freshly reconciled window.
-        Assert.True(
-            batch.IndexOf("owner.NormalizeSortOrder();", StringComparison.Ordinal) <
-            batch.IndexOf("owner.QueueStackDisplayRebuild();", StringComparison.Ordinal),
-            "normalize must precede the stack rebuild");
-        Assert.True(
-            batch.IndexOf("owner.QueueRenderWindowReconcile();", StringComparison.Ordinal) <
-            batch.IndexOf("owner.StartItemHydration();", StringComparison.Ordinal),
-            "the render reconcile must precede hydration");
         // Nested scopes finalize only when the last one closes.
         Assert.Contains(
             "owner._itemMutationBatchDepth > 0 || !owner._itemMutationBatchDirty",
             batch,
             StringComparison.Ordinal);
+
+        // Finalization runs each deferred reaction exactly once...
+        foreach (string reaction in new[]
+                 {
+                     "owner.NormalizeSortOrder();",
+                     "owner.PersistManualOrderSnapshotIfChanged();",
+                     "owner._addedAtPersistPending = false;",
+                     "owner.PersistAddedAtTracking();",
+                     "owner.QueueStackDisplayRebuild();",
+                     "owner.QueuePostBatchHydration();",
+                     "owner.RunDeferredFolderRefreshAsync();"
+                 })
+        {
+            Assert.Contains(reaction, batch, StringComparison.Ordinal);
+        }
+
+        // ...in an order where the persisted state settles before the
+        // projections rebuild, and hydration is NOT started at scope exit:
+        // the queues only enqueue and hydration snapshots the rendered
+        // prefix synchronously, so a direct start here would read the stale
+        // prefix. The start belongs to the reconcile callback.
+        Assert.Contains("owner.QueuePostBatchHydration();", batch, StringComparison.Ordinal);
+        Assert.DoesNotContain("owner.StartItemHydration();", batch, StringComparison.Ordinal);
+        Assert.True(
+            batch.IndexOf("owner.PersistAddedAtTracking();", StringComparison.Ordinal) <
+            batch.IndexOf("owner.QueueStackDisplayRebuild();", StringComparison.Ordinal),
+            "AddedAt persistence must settle before the projections rebuild");
+        Assert.True(
+            batch.IndexOf("owner.NormalizeSortOrder();", StringComparison.Ordinal) <
+            batch.IndexOf("owner.QueueStackDisplayRebuild();", StringComparison.Ordinal),
+            "normalize must precede the stack rebuild");
+    }
+
+    [Fact]
+    public void DeferredHydration_StartsInsideTheReconcileCallback()
+    {
+        string windowing = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.Windowing.cs"))
+            .Replace("\r\n", "\n");
+
+        int callback = windowing.IndexOf(
+            "_renderWindowReconcileQueued = false;",
+            StringComparison.Ordinal);
+        int reconciled = windowing.IndexOf(
+            "ReconcileRenderWindow();",
+            callback,
+            StringComparison.Ordinal);
+        int sourceChanged = windowing.IndexOf(
+            "RenderWindowSourceChanged?.Invoke();",
+            callback,
+            StringComparison.Ordinal);
+        int pendingCheck = windowing.IndexOf(
+            "if (_pendingPostBatchHydration)",
+            callback,
+            StringComparison.Ordinal);
+        int hydration = windowing.IndexOf(
+            "StartItemHydration();",
+            pendingCheck,
+            StringComparison.Ordinal);
+
+        // The pending flag must be consumed strictly after the callback has
+        // applied the settled rendered prefix — this ordering is the actual
+        // fix; asserting it on adjacent source lines would prove nothing.
+        Assert.True(callback > 0 && reconciled > callback && sourceChanged > reconciled &&
+            pendingCheck > sourceChanged && hydration > pendingCheck,
+            "deferred hydration must start after the reconcile applied the settled prefix");
+        Assert.Contains("owner.QueuePostBatchHydration()", File.ReadAllText(
+            TestPaths.FromRepository(
+                "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs")), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -106,6 +151,40 @@ public sealed class ItemMutationBatchContractTests
         Assert.True(removalGate > removal && removalDirty > removalGate &&
             removalNormalize > removalDirty,
             "RemoveItemByPath must gate on the batch depth before its tail");
+    }
+
+    [Fact]
+    public void AddedAtTracking_PersistsOncePerBatchNotOncePerFile()
+    {
+        string addedAt = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.AddedAt.cs"))
+            .Replace("\r\n", "\n");
+
+        // All four mutation sites (record, assign, transfer, remove) defer.
+        Assert.Equal(4, CountOccurrences(addedAt, "PersistAddedAtTrackingIfNeeded();"));
+        int helper = addedAt.IndexOf(
+            "private void PersistAddedAtTrackingIfNeeded()",
+            StringComparison.Ordinal);
+        int gate = addedAt.IndexOf(
+            "if (_itemMutationBatchDepth > 0)",
+            helper,
+            StringComparison.Ordinal);
+        int pending = addedAt.IndexOf(
+            "_addedAtPersistPending = true;",
+            gate,
+            StringComparison.Ordinal);
+        int fallback = addedAt.IndexOf(
+            "PersistAddedAtTracking();",
+            gate,
+            StringComparison.Ordinal);
+        Assert.True(helper > 0 && gate > helper && pending > gate && fallback > pending,
+            "the AddedAt helper must gate on the batch depth before its direct persist");
+
+        // The scope finalization consumes the pending persist exactly once.
+        string batch = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs"));
+        Assert.Equal(1, CountOccurrences(batch, "owner._addedAtPersistPending = false;"));
+        Assert.Equal(1, CountOccurrences(batch, "owner.PersistAddedAtTracking();"));
     }
 
     [Fact]
@@ -172,6 +251,50 @@ public sealed class ItemMutationBatchContractTests
     }
 
     [Fact]
+    public void WatcherFullReload_DefersToOneAuthoritativeRefreshPerBatch()
+    {
+        string watchers = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.SortingAndWatchers.cs"))
+            .Replace("\r\n", "\n");
+
+        // A full reload mid-import bypasses every per-item gate, so the
+        // ShouldUseFullReload branch defers while a batch is open.
+        int shouldUse = watchers.IndexOf(
+            "if (ShouldUseFullReload(changeBatch, CurrentFolderPath))",
+            StringComparison.Ordinal);
+        int gate = watchers.IndexOf(
+            "if (_itemMutationBatchDepth > 0)",
+            shouldUse,
+            StringComparison.Ordinal);
+        int defer = watchers.IndexOf(
+            "_pendingFolderRefreshAfterBatch = true;",
+            gate,
+            StringComparison.Ordinal);
+        int reload = watchers.IndexOf(
+            "await LoadFolderContentsAsync(CurrentFolderPath);",
+            shouldUse,
+            StringComparison.Ordinal);
+        Assert.True(shouldUse > 0 && gate > shouldUse && defer > gate && reload > defer,
+            "the full-reload branch must defer inside a batch before its direct reload");
+
+        // The deferred refresh re-enters through the folder refresh gate and
+        // the batch finalization triggers it at most once.
+        int deferredRunner = watchers.IndexOf(
+            "private async Task RunDeferredFolderRefreshAsync()",
+            StringComparison.Ordinal);
+        int gateWait = watchers.IndexOf(
+            "await _folderRefreshGate.WaitAsync();",
+            deferredRunner,
+            StringComparison.Ordinal);
+        Assert.True(deferredRunner > 0 && gateWait > deferredRunner,
+            "the deferred refresh must serialize through the folder refresh gate");
+        string batch = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs"));
+        Assert.Equal(1, CountOccurrences(batch, "owner._pendingFolderRefreshAfterBatch = false;"));
+        Assert.Equal(1, CountOccurrences(batch, "owner.RunDeferredFolderRefreshAsync();"));
+    }
+
+    [Fact]
     public void BulkImportLoops_OpenExactlyOneScopeEach()
     {
         string operations = File.ReadAllText(TestPaths.FromRepository(
@@ -185,10 +308,14 @@ public sealed class ItemMutationBatchContractTests
             operations,
             StringComparison.Ordinal);
         Assert.Contains("batchScope.Dispose();", operations, StringComparison.Ordinal);
-        Assert.Contains(
-            "[OrganizerPerf] importBatch attempted=",
-            operations,
-            StringComparison.Ordinal);
+        // The perf log must not stop the stopwatch before finalization:
+        // upsertLoopMs and finalizeSyncMs together bound the real cost.
+        Assert.Contains("upsertLoopMs=", operations, StringComparison.Ordinal);
+        Assert.Contains("finalizeSyncMs=", operations, StringComparison.Ordinal);
+        Assert.True(
+            operations.IndexOf("batchScope.Dispose();", StringComparison.Ordinal) <
+            operations.IndexOf("finalizeSyncMs=", StringComparison.Ordinal),
+            "the finalize measurement must include the scope disposal");
     }
 
     private static int CountOccurrences(string text, string needle)

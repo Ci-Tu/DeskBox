@@ -31,6 +31,7 @@ public partial class WidgetViewModel
 
     private int _renderWindowBudget = RenderWindowInitialSize;
     private bool _renderWindowReconcileQueued;
+    private bool _pendingPostBatchHydration;
 
     /// <summary>
     /// Fired (coalesced per dispatcher pass, and deferred to the batch
@@ -133,7 +134,33 @@ public partial class WidgetViewModel
 
             ReconcileRenderWindow();
             RenderWindowSourceChanged?.Invoke();
+            if (_pendingPostBatchHydration)
+            {
+                // Hydration snapshots HydrationUniverseItems synchronously at
+                // startup, so the batch finalization defers its start to here
+                // — after this callback has applied the settled prefix —
+                // instead of starting it against the stale one at scope exit.
+                _pendingPostBatchHydration = false;
+                StartItemHydration();
+            }
         });
+    }
+
+    /// <summary>
+    /// Defers a hydration start to the queued render reconcile callback. The
+    /// queues are enqueue-only and hydration snapshots the rendered prefix
+    /// synchronously, so starting hydration at the call site would read the
+    /// prefix the reconcile has not applied yet.
+    /// </summary>
+    private void QueuePostBatchHydration()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _pendingPostBatchHydration = true;
+        QueueRenderWindowReconcile();
     }
 
     /// <summary>

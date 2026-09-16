@@ -306,6 +306,19 @@ public partial class WidgetViewModel
 
             if (ShouldUseFullReload(changeBatch, CurrentFolderPath))
             {
+                // A full reload mid-import would re-sync, re-sort and
+                // re-hydrate the whole list, throwing away the batching the
+                // open scope just bought — and a large import reliably trips
+                // the reload threshold (desktop widgets reload on every
+                // batch). Defer one authoritative refresh to the batch
+                // finalization instead of fighting the import for the list.
+                if (_itemMutationBatchDepth > 0)
+                {
+                    _pendingFolderRefreshAfterBatch = true;
+                    MarkItemMutationBatchDirty();
+                    return;
+                }
+
                 await LoadFolderContentsAsync(CurrentFolderPath);
                 return;
             }
@@ -345,6 +358,37 @@ public partial class WidgetViewModel
         finally
         {
             _folderRefreshGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// One authoritative refresh deferred out of an open batch mutation
+    /// scope: the watcher asked for a full reload while an import was
+    /// post-processing. Runs through the folder refresh gate so it cannot
+    /// interleave a scheduled incremental pass.
+    /// </summary>
+    private async Task RunDeferredFolderRefreshAsync()
+    {
+        try
+        {
+            await _folderRefreshGate.WaitAsync();
+            try
+            {
+                if (!_isDisposed && !string.IsNullOrEmpty(CurrentFolderPath))
+                {
+                    await LoadFolderContentsAsync(CurrentFolderPath);
+                }
+            }
+            finally
+            {
+                _folderRefreshGate.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[FolderRefresh] Deferred post-batch refresh failed for " +
+                $"'{CurrentFolderPath}': {ex}");
         }
     }
 
