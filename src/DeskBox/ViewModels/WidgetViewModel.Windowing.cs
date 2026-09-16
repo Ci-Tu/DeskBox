@@ -124,7 +124,7 @@ public partial class WidgetViewModel
         }
 
         _renderWindowReconcileQueued = true;
-        _dispatcherQueue.TryEnqueue(() =>
+        if (!_dispatcherQueue.TryEnqueue(() =>
         {
             _renderWindowReconcileQueued = false;
             if (_isDisposed)
@@ -143,7 +143,15 @@ public partial class WidgetViewModel
                 _pendingPostBatchHydration = false;
                 StartItemHydration();
             }
-        });
+        }))
+        {
+            // The queued flag (and a deferred hydration start with it) must
+            // not survive a failed enqueue, or the widget would never
+            // reconcile or hydrate again. Only reachable at dispatcher
+            // shutdown.
+            _renderWindowReconcileQueued = false;
+            _pendingPostBatchHydration = false;
+        }
     }
 
     /// <summary>

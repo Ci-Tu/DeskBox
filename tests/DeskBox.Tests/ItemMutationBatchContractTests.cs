@@ -295,6 +295,87 @@ public sealed class ItemMutationBatchContractTests
     }
 
     [Fact]
+    public void FullReload_CommitsOnlyAfterACommitPointBatchCheck()
+    {
+        // The entry-time deferral alone cannot close the race: a reload that
+        // started before the batch opened awaits its directory enumeration
+        // for seconds, and the batch can open during that await. The guard
+        // must sit at the commit point - after the last enumeration await,
+        // before any Items mutation - with no await in between, so both the
+        // primary watcher path and the exception fallback path are covered
+        // by one check.
+        string hydration = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.ItemHydration.cs"))
+            .Replace("\r\n", "\n");
+
+        int guard = hydration.IndexOf(
+            "if (_itemMutationBatchDepth > 0)\n        {\n            // Commit-point race guard.",
+            StringComparison.Ordinal);
+        Assert.True(guard > 0, "the commit-point guard must exist in LoadFolderContentsAsync");
+        Assert.Contains("_pendingFolderRefreshAfterBatch = true;", hydration, StringComparison.Ordinal);
+        Assert.Contains(
+            "No await may\n            // appear between this check and the Items mutation below.",
+            hydration,
+            StringComparison.Ordinal);
+
+        int addedTimes = hydration.IndexOf(
+            "ApplyPersistedAddedTimes(items);",
+            guard,
+            StringComparison.Ordinal);
+        int sync = hydration.IndexOf(
+            "SyncFolderItems(items);",
+            guard,
+            StringComparison.Ordinal);
+        int sort = hydration.IndexOf(
+            "SortItems();",
+            sync,
+            StringComparison.Ordinal);
+        int hydrate = hydration.IndexOf(
+            "StartItemHydration();",
+            sort,
+            StringComparison.Ordinal);
+        Assert.True(addedTimes > guard && sync > addedTimes && sort > sync && hydrate > sort,
+            "the Items mutation sequence must run only after the commit guard");
+
+        string betweenGuardAndSync = hydration[guard..sync];
+        // Strip comment lines first - the guard's own comment explains the
+        // no-await rule and would otherwise trip the check itself.
+        string code = string.Join("\n", betweenGuardAndSync.Split('\n')
+            .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+        Assert.DoesNotContain(
+            "await ",
+            code,
+            StringComparison.Ordinal);
+        // The guard must be reachable from every reload path: both the
+        // primary watcher branch and the exception fallback funnel through
+        // LoadFolderContentsAsync, which returns false - the existing
+        // "snapshot not applied" convention - when it defers.
+        Assert.Contains("return false;", hydration[guard..(guard + betweenGuardAndSync.Length)], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderWindowQueue_RollsBackFlagsWhenEnqueueFails()
+    {
+        string windowing = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.Windowing.cs"))
+            .Replace("\r\n", "\n");
+
+        // A failed enqueue must not leave the coalescing flag or a deferred
+        // hydration start set, or the widget never reconciles or hydrates
+        // again.
+        int enqueue = windowing.IndexOf(
+            "if (!_dispatcherQueue.TryEnqueue(() =>",
+            StringComparison.Ordinal);
+        Assert.True(enqueue > 0, "the reconcile enqueue must be failure-checked");
+        int failureBranch = windowing.IndexOf(
+            "_renderWindowReconcileQueued = false;\n            _pendingPostBatchHydration = false;",
+            enqueue,
+            StringComparison.Ordinal);
+        Assert.True(failureBranch > enqueue,
+            "both flags must roll back when the enqueue fails");
+    }
+
+    [Fact]
     public void BulkImportLoops_OpenExactlyOneScopeEach()
     {
         string operations = File.ReadAllText(TestPaths.FromRepository(
