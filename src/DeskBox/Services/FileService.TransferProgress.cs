@@ -149,14 +149,37 @@ public sealed partial class FileService
                 $"[FileTransfer] Managed canceled count={operations.Count} " +
                 $"move={move} keptCompleted={completedOperations.Count} " +
                 $"elapsedMs={reporter.ElapsedMilliseconds}");
-            throw;
+            // The completed results ride the exception so callers (history,
+            // journals, undo) learn what physically moved even though the
+            // batch stopped early.
+            throw new FileTransferCanceledException(
+                completedOperations
+                    .Select(operation => new FileTransferResult(
+                        operation.SourcePath,
+                        operation.DestinationPath))
+                    .ToList(),
+                cancellationToken);
         }
-        catch
+        catch (Exception exception)
         {
             // Partial completion: completed items stay (same reasoning as
-            // cancellation); the failure itself propagates.
+            // cancellation); the failure itself propagates with the
+            // completed results attached. An item-level exception that
+            // carries its own receipts (e.g. a move whose source cleanup
+            // failed after the copy completed) keeps them in the wrapper:
+            // the data did physically move.
             reporter.Report(FileTransferPhase.Failed, force: true);
-            throw;
+            var completedSnapshot = completedOperations
+                .Select(operation => new FileTransferResult(
+                    operation.SourcePath,
+                    operation.DestinationPath))
+                .ToList();
+            if (exception is IFileTransferWithCompletedResults itemLevelResults)
+            {
+                completedSnapshot.AddRange(itemLevelResults.CompletedResults);
+            }
+
+            throw new FileTransferPartialFailureException(completedSnapshot, exception);
         }
     }
 

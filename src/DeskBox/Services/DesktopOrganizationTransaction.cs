@@ -53,7 +53,6 @@ public sealed partial class DesktopOrganizationTransaction
             var originalRules = settings.DesktopOrganizationRules.ToList();
             var originalHistory = settings.RecentOrganizationHistory.ToList();
             var createdDirectories = new List<string>();
-            var completedMoves = new List<FileService.FileTransferResult>();
             var retainedItems = new List<DesktopOrganizationRetainedItem>();
             var createdWidgets = CreateCandidateWidgets(plan, settings);
             var journal = BuildJournal(plan);
@@ -107,7 +106,6 @@ public sealed partial class DesktopOrganizationTransaction
                     if (item.Completed) return;
                     item.DestinationPath = result.DestinationPath;
                     item.Completed = true;
-                    completedMoves.Add(result);
                     _recoveryStore.Save(journal);
                 }
 
@@ -224,13 +222,14 @@ public sealed partial class DesktopOrganizationTransaction
                 settings.Widgets = originalWidgets;
                 settings.DesktopOrganizationRules = originalRules;
                 settings.RecentOrganizationHistory = originalHistory;
-                bool rolledBack = await RollBackMovesAsync(completedMoves);
+                // Completed physical moves are never reversed here. The
+                // journal keeps every recorded receipt, so the next launch's
+                // RecoverPendingAsync — the same path that handles a crash —
+                // restores what still matches its snapshot. An immediate
+                // reverse move would relocate whatever happens to sit at the
+                // destination now, with no content verification at all.
                 RemoveEmptyCreatedDirectories(createdDirectories);
                 await _settingsService.SaveAsync(notifySubscribers: false);
-                if (rolledBack)
-                {
-                    _recoveryStore.Clear();
-                }
                 throw;
             }
         }
@@ -572,33 +571,6 @@ public sealed partial class DesktopOrganizationTransaction
 
     private static bool EntryExists(string path) =>
         File.Exists(path) || Directory.Exists(path);
-
-    private async Task<bool> RollBackMovesAsync(IReadOnlyCollection<FileService.FileTransferResult> completedMoves)
-    {
-        bool succeeded = true;
-        foreach (FileService.FileTransferResult move in completedMoves.Reverse())
-        {
-            if (!EntryExists(move.DestinationPath))
-            {
-                continue;
-            }
-
-            try
-            {
-                string restorePath = FileService.GetAvailablePath(move.SourcePath);
-                await _fileService.ExecuteTransferPlanAsync(
-                    [new FileService.FileTransferPlan(move.DestinationPath, restorePath)],
-                    move: true,
-                    useShellProgress: false);
-            }
-            catch
-            {
-                succeeded = false;
-            }
-        }
-
-        return succeeded;
-    }
 
     private static void RemoveEmptyCreatedDirectories(IEnumerable<string> directories)
     {

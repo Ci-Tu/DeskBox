@@ -1441,11 +1441,30 @@ public sealed partial class FileService
                 }
             }
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Partial completion: completed items stay (Explorer semantics —
-            // same reasoning as the managed engine's cancellation path).
-            throw;
+            // Partial completion (Explorer semantics): completed items stay;
+            // the completed results ride the exception for callers.
+            throw new FileTransferCanceledException(
+                completedOperations
+                    .Select(operation => new FileTransferResult(operation.SourcePath, operation.DestinationPath))
+                    .ToList(),
+                CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            // Partial completion: completed items stay; the failure
+            // propagates with the completed results attached (including any
+            // item-level receipts the inner exception already carries).
+            var completedSnapshot = completedOperations
+                .Select(operation => new FileTransferResult(operation.SourcePath, operation.DestinationPath))
+                .ToList();
+            if (exception is IFileTransferWithCompletedResults itemLevelResults)
+            {
+                completedSnapshot.AddRange(itemLevelResults.CompletedResults);
+            }
+
+            throw new FileTransferPartialFailureException(completedSnapshot, exception);
         }
 
         return completedOperations
@@ -2312,30 +2331,6 @@ public sealed partial class FileService
     }
 
     /// <summary>
-    /// Content heuristic for the migration merge-back only: two sides of a
-    /// recovered pair are treated as duplicates while length and write time
-    /// agree. Deletion still goes through object identity; this only decides
-    /// whether the pair is a duplicate at all.
-    /// </summary>
-    private static bool FilesLookLikeCopies(string sourcePath, string destinationPath)
-    {
-        try
-        {
-            var source = new FileInfo(sourcePath);
-            var destination = new FileInfo(destinationPath);
-            return source.Length == destination.Length &&
-                source.LastWriteTimeUtc == destination.LastWriteTimeUtc;
-        }
-        catch (Exception ex)
-        {
-            App.Log(
-                $"[FileTransfer] Copy identity check failed for " +
-                $"'{sourcePath}' -> '{destinationPath}': {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>
     /// Copies one entry through the shared CreateNew-based core: a competing
     /// file at the planned destination fails the copy untouched, and this
     /// copy's own partial destination is cleaned up through its handle.
@@ -2576,11 +2571,14 @@ public sealed partial class FileService
     }
 
     /// <summary>
-    /// Restores a migrated directory copy back to its original location
-    /// without overwriting files that still exist there: a source twin may be
-    /// newer than the copy. Children whose original twin is gone are moved
-    /// back; children with an existing twin are removed from the copy. The
-    /// copy directory itself is deleted once it is fully restored.
+    /// Merges a migrated directory copy back to its original location,
+    /// conservatively: a child whose original is missing moves back; a child
+    /// with an existing original twin is KEPT as a duplicate (content
+    /// equality cannot be proven without deleting data, and this runs in a
+    /// rollback where the original side may already have been partially
+    /// deleted — a same-named subtree on the copy side can be the ONLY
+    /// remaining copy of some of its files); same-named directories merge
+    /// recursively. The copy directory disappears only once empty.
     /// </summary>
     internal static async Task RestoreMigratedDirectoryPreservingExistingAsync(
         string copiedDirectory,
@@ -2600,45 +2598,35 @@ public sealed partial class FileService
                 Path.GetFileName(copiedChild));
             try
             {
-                if (File.Exists(originalChild) || Directory.Exists(originalChild))
+                if (File.Exists(originalChild))
                 {
-                    if (File.Exists(copiedChild))
+                    // Both copies stay: deciding "same content" from size and
+                    // timestamp cannot authorize a delete, and the migration
+                    // residue flow already offers the user manual cleanup.
+                    App.Log(
+                        $"[FileTransfer] Migration merge-back kept " +
+                        $"'{copiedChild}' next to its original " +
+                        $"'{originalChild}' (duplicates are never auto-deleted).");
+                }
+                else if (Directory.Exists(originalChild))
+                {
+                    if (Directory.Exists(copiedChild))
                     {
-                        // Delete the duplicate only while the surviving
-                        // original still matches it (content) AND the copied
-                        // side still carries the identity captured just now —
-                        // through a handle bound to that identity, so a
-                        // replacement at the copied path is never deleted.
-                        // The original is re-verified right before the delete:
-                        // if it vanished in between, the copied file is the
-                        // last complete copy and must stay.
-                        if (File.Exists(originalChild) &&
-                            FilesLookLikeCopies(originalChild, copiedChild) &&
-                            TryCaptureSourceIdentity(originalChild) is { } originalIdentity &&
-                            SourceFileMatchesIdentity(originalChild, originalIdentity) &&
-                            TryCaptureSourceIdentity(copiedChild) is { } copiedIdentity)
-                        {
-                            if (!TryDeleteFileByIdentity(copiedChild, copiedIdentity))
-                            {
-                                App.Log(
-                                    $"[FileTransfer] Migration merge-back kept " +
-                                    $"'{copiedChild}': it could not be deleted through " +
-                                    $"a verified handle. Remove the leftover copy manually " +
-                                    $"if unwanted.");
-                            }
-                        }
-                        else
-                        {
-                            App.Log(
-                                $"[FileTransfer] Migration merge-back kept " +
-                                $"diverged copy '{copiedChild}' (original " +
-                                $"'{originalChild}' no longer matches).");
-                        }
+                        // Recurse child-by-child: never delete a same-named
+                        // copied subtree wholesale — part of it may be the
+                        // last remaining copy of files already deleted from
+                        // the original during the failed source cleanup.
+                        await RestoreMigratedDirectoryPreservingExistingAsync(
+                            copiedChild,
+                            originalChild);
                     }
-                    else
-                    {
-                        await DeleteDirectoryTreeBestEffortAsync(copiedChild);
-                    }
+                }
+                else if (Directory.Exists(copiedChild))
+                {
+                    Directory.CreateDirectory(originalChild);
+                    await RestoreMigratedDirectoryPreservingExistingAsync(
+                        copiedChild,
+                        originalChild);
                 }
                 else
                 {
@@ -2662,36 +2650,6 @@ public sealed partial class FileService
             !Directory.EnumerateFileSystemEntries(copiedDirectory).Any())
         {
             Directory.Delete(copiedDirectory, recursive: false);
-        }
-    }
-
-    /// <summary>
-    /// Deletes a DeskBox-owned directory copy as best effort: read-only
-    /// attributes are cleared, failures are logged, and the tree is only
-    /// ever removed file-by-file against its current manifest.
-    /// </summary>
-    internal static async Task DeleteDirectoryTreeBestEffortAsync(string directoryPath)
-    {
-        try
-        {
-            await Task.Run(() =>
-            {
-                if (!Directory.Exists(directoryPath))
-                {
-                    return;
-                }
-
-                DeleteSourceTreeByManifest(
-                    directoryPath,
-                    directoryPath,
-                    CollectCurrentFileManifest(directoryPath));
-            });
-        }
-        catch (Exception ex)
-        {
-            App.Log(
-                $"[FileTransfer] Best-effort delete failed for " +
-                $"'{directoryPath}': {ex.Message}");
         }
     }
 

@@ -492,13 +492,15 @@ public sealed class FileServiceTests : IDisposable
             IProgress<FileService.FileTransferProgress>? progress = reportProgress
                 ? new Progress<FileService.FileTransferProgress>(_ => { })
                 : null;
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                service.ExecuteTransferPlanAsync(
-                    [new FileService.FileTransferPlan(
-                        sourceDirectory,
-                        destinationDirectory)],
-                    move: false,
-                    progress: progress));
+            FileService.FileTransferPartialFailureException junctionFailure =
+                await Assert.ThrowsAsync<FileService.FileTransferPartialFailureException>(() =>
+                    service.ExecuteTransferPlanAsync(
+                        [new FileService.FileTransferPlan(
+                            sourceDirectory,
+                            destinationDirectory)],
+                        move: false,
+                        progress: progress));
+            Assert.IsType<InvalidOperationException>(junctionFailure.InnerException);
 
             Assert.False(Directory.Exists(
                 Path.Combine(destinationDirectory, "loop")));
@@ -782,12 +784,14 @@ public sealed class FileServiceTests : IDisposable
         await File.WriteAllTextAsync(sourcePath, "source");
         await File.WriteAllTextAsync(destinationPath, "existing destination");
 
-        await Assert.ThrowsAsync<IOException>(() =>
+        FileService.FileTransferPartialFailureException collisionFailure =
+            await Assert.ThrowsAsync<FileService.FileTransferPartialFailureException>(() =>
             service.ExecuteTransferPlanAsync(
                 [new FileService.FileTransferPlan(sourcePath, destinationPath)],
                 move: true,
                 progress: new InlineProgress<FileService.FileTransferProgress>(
                     _ => { })));
+        Assert.IsAssignableFrom<IOException>(collisionFailure.InnerException);
 
         Assert.Equal("source", await File.ReadAllTextAsync(sourcePath));
         Assert.Equal(
@@ -1292,14 +1296,17 @@ public sealed class FileServiceTests : IDisposable
             ? new InlineProgress<FileService.FileTransferProgress>(_ => { })
             : null;
 
-        FileService.FileTransferSourceCleanupException exception =
-            await Assert.ThrowsAsync<FileService.FileTransferSourceCleanupException>(
+        FileService.FileTransferPartialFailureException exception =
+            await Assert.ThrowsAsync<FileService.FileTransferPartialFailureException>(
                 () => service.ExecuteTransferPlanAsync(
                     [new FileService.FileTransferPlan(
                         sourceDirectory,
                         destinationDirectory)],
                     move: true,
                     progress: progress));
+        // The directory-move source cleanup failure rides as the inner
+        // exception; the wrapper carries what physically completed.
+        Assert.IsType<FileService.FileTransferSourceCleanupException>(exception.InnerException);
 
         FileService.FileTransferResult completed = Assert.Single(
             exception.CompletedResults);
@@ -1918,8 +1925,11 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RestoreMigratedDirectory_KeepsDivergedDuplicatesAndRemovesMatchingOnes()
+    public async Task RestoreMigratedDirectory_KeepsAllDuplicates()
     {
+        // Rollback merge never auto-deletes: size+timestamp equality is not
+        // an ownership proof, and the copied side may hold the last copy of
+        // files already deleted from a partially-cleaned original.
         string copiedDirectory = Path.Combine(_tempRoot, "merge-copied");
         string originalDirectory = Path.Combine(_tempRoot, "merge-original");
         Directory.CreateDirectory(copiedDirectory);
@@ -1942,7 +1952,9 @@ public sealed class FileServiceTests : IDisposable
             copiedDirectory,
             originalDirectory);
 
-        Assert.False(File.Exists(matchingCopied), "the matching duplicate must be removed");
+        Assert.True(
+            File.Exists(matchingCopied),
+            "even a matching duplicate stays: never auto-deleted in rollback");
         Assert.True(File.Exists(matchingOriginal));
         Assert.True(
             File.Exists(divergedCopied),
@@ -2192,6 +2204,49 @@ public sealed class FileServiceTests : IDisposable
 
         var withoutKeys = identity!.Value with { FileKey = null };
         Assert.False(FileService.SourceIdentityMatches(withoutKeys, withoutKeys));
+    }
+
+    [Fact]
+    public async Task ExecuteTransferPlanAsync_CancelSurfacesCompletedResults()
+    {
+        // Explorer semantics: completed items stay AND ride the exception so
+        // journals/history record what physically finished.
+        var service = new FileService();
+        string sourceDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "cr-src")).FullName;
+        string destinationDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "cr-dest")).FullName;
+        string firstSource = Path.Combine(sourceDirectory, "first.txt");
+        string secondSource = Path.Combine(sourceDirectory, "second.txt");
+        File.WriteAllText(firstSource, "first");
+        File.WriteAllText(secondSource, "second");
+
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<FileService.FileTransferProgress>(update =>
+        {
+            if (update.CompletedItems == 1)
+            {
+                cancellation.Cancel();
+            }
+        });
+
+        FileService.FileTransferCanceledException exception =
+            await Assert.ThrowsAsync<FileService.FileTransferCanceledException>(() =>
+                service.ExecuteTransferPlanAsync(
+                    [
+                        new FileService.FileTransferPlan(
+                            firstSource,
+                            Path.Combine(destinationDirectory, "first.txt")),
+                        new FileService.FileTransferPlan(
+                            secondSource,
+                            Path.Combine(destinationDirectory, "second.txt")),
+                    ],
+                    move: false,
+                    progress: progress,
+                    cancellationToken: cancellation.Token));
+
+        FileService.FileTransferResult completed = Assert.Single(exception.CompletedResults);
+        Assert.Equal(firstSource, completed.SourcePath);
     }
 
     [Fact]
