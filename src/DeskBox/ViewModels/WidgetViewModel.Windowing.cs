@@ -13,6 +13,13 @@ namespace DeskBox.ViewModels;
 /// opening them cannot lay out thousands of tiles at once. Metadata hydration
 /// follows the same prefix, so icons, folder counts, shortcut targets, and
 /// shell kinds are only resolved for items the user can actually see.
+///
+/// State model: <see cref="_renderWindowBudget"/> is the persistent large-folder
+/// window budget and only ever grows (except on an explicit
+/// <see cref="ResetRenderWindow"/> for folder navigation). The effective target
+/// is computed per reconcile — full below the threshold, clamped to the budget
+/// above it. Writing the rendered count of a small folder back into the budget
+/// used to freeze a later bulk import at that small prefix with no scrollbar.
 /// </summary>
 public partial class WidgetViewModel
 {
@@ -22,14 +29,44 @@ public partial class WidgetViewModel
 
     public ObservableCollection<WidgetItem> RenderedItems { get; } = [];
 
-    private int _renderWindowCount = RenderWindowInitialSize;
+    private int _renderWindowBudget = RenderWindowInitialSize;
     private bool _renderWindowReconcileQueued;
+
+    /// <summary>
+    /// Fired (already coalesced per dispatcher pass) after the rendered
+    /// prefix reconciled against a source change. The view listens to
+    /// re-check viewport coverage: bulk imports change the item count
+    /// without changing any geometry, so Loaded/SizeChanged alone cannot
+    /// keep the window covering the viewport across the activation
+    /// threshold.
+    /// </summary>
+    internal event Action? RenderWindowSourceChanged;
 
     private int VisibleItemCount => UsesStackProjection
         ? _stackDisplayItems.Count
         : Items.Count;
 
-    internal bool CanGrowRenderWindow => _renderWindowCount < VisibleItemCount;
+    private int EffectiveRenderTarget =>
+        DeriveRenderTarget(_renderWindowBudget, VisibleItemCount);
+
+    /// <summary>
+    /// Pure target derivation shared with behavior tests: folders at or below
+    /// the activation threshold render in full; larger folders render the
+    /// budget, clamped to the item count. Deriving the target per reconcile —
+    /// instead of writing the rendered count of a small folder back into the
+    /// budget — is what lets a later bulk import grow past that prefix.
+    /// </summary>
+    internal static int DeriveRenderTarget(int budget, int visibleItemCount)
+    {
+        if (visibleItemCount <= RenderWindowActivationThreshold)
+        {
+            return visibleItemCount;
+        }
+
+        return Math.Min(budget, visibleItemCount);
+    }
+
+    internal bool CanGrowRenderWindow => EffectiveRenderTarget < VisibleItemCount;
 
     /// <summary>
     /// Items eligible for metadata hydration (icons, folder counts, shortcut
@@ -81,6 +118,7 @@ public partial class WidgetViewModel
             }
 
             ReconcileRenderWindow();
+            RenderWindowSourceChanged?.Invoke();
         });
     }
 
@@ -91,27 +129,24 @@ public partial class WidgetViewModel
     /// </summary>
     internal void ResetRenderWindow()
     {
-        _renderWindowCount = RenderWindowInitialSize;
+        _renderWindowBudget = RenderWindowInitialSize;
         ReconcileRenderWindow();
     }
 
     /// <summary>
-    /// Raises the window so the rendered prefix covers a viewport-sized
-    /// page. The fixed initial size (30) can sit well below what a large
-    /// widget viewport shows, and the extent-based growth fallback only
-    /// reacts after a full layout pass — a prefix that never overflows
-    /// leaves unrendered items unreachable with no scrollbar. The caller
-    /// computes the page size from its real viewport and item dimensions;
-    /// this only clamps it to the visible item count.
+    /// Raises the budget so the rendered prefix covers a viewport-sized page.
+    /// Strictly monotonic: a request below the current budget (including a
+    /// page computed before any items loaded) never shrinks it, and only
+    /// <see cref="ResetRenderWindow"/> may lower the budget.
     /// </summary>
     internal void EnsureRenderWindowCoversViewport(int minimumCount)
     {
-        if (_isDisposed || minimumCount <= _renderWindowCount)
+        if (_isDisposed || minimumCount <= _renderWindowBudget)
         {
             return;
         }
 
-        _renderWindowCount = Math.Min(minimumCount, VisibleItemCount);
+        _renderWindowBudget = minimumCount;
         ReconcileRenderWindow();
         if (!UsesStackProjection)
         {
@@ -149,9 +184,7 @@ public partial class WidgetViewModel
             return;
         }
 
-        _renderWindowCount = Math.Min(
-            VisibleItemCount,
-            _renderWindowCount + Math.Max(1, chunk));
+        _renderWindowBudget = _renderWindowBudget + Math.Max(1, chunk);
         ReconcileRenderWindow();
         if (!UsesStackProjection)
         {
@@ -182,10 +215,12 @@ public partial class WidgetViewModel
             return;
         }
 
-        _renderWindowCount = ComputeRenderWindowTargetCount(
-            targetIndex,
-            _renderWindowCount,
-            VisibleItemCount);
+        _renderWindowBudget = Math.Max(
+            _renderWindowBudget,
+            ComputeRenderWindowTargetCount(
+                targetIndex,
+                EffectiveRenderTarget,
+                VisibleItemCount));
         ReconcileRenderWindow();
         if (!UsesStackProjection)
         {
@@ -233,42 +268,37 @@ public partial class WidgetViewModel
             Math.Max(currentCount + 1, aligned));
     }
 
-    /// <summary>
-    /// Mirrors the current VisibleItems prefix into <see cref="RenderedItems"/>
-    /// in place (move/insert/remove by index, never a Reset), mirroring the
-    /// reconcile strategy the stack projection already uses so container
-    /// realization and selection survive content changes. Returns the window
-    /// size that actually applied.
-    /// </summary>
     private void ReconcileRenderWindow()
     {
-        _renderWindowCount = ReconcileRenderWindowPrefix(
+        ReconcileRenderWindowPrefix(
             VisibleItems,
             RenderedItems,
-            _renderWindowCount,
+            EffectiveRenderTarget,
             VisibleItemCount);
+        if (VisibleItemCount > RenderWindowActivationThreshold)
+        {
+            // One line per reconcile is what makes a dead-end ("files exist
+            // but nothing scrolls") diagnosable from the log alone.
+            App.Log(
+                $"[RenderWindow] visible={VisibleItemCount} " +
+                $"rendered={RenderedItems.Count} budget={_renderWindowBudget}");
+        }
     }
 
     /// <summary>
-    /// Pure prefix mirror shared with behavior tests: folders at or below the
-    /// activation threshold always render in full; larger folders render the
-    /// first <paramref name="windowCount"/> visible items.
+    /// Pure prefix mirror shared with behavior tests: renders the first
+    /// <paramref name="renderTarget"/> visible items in place (move/insert/
+    /// remove by index, never a Reset). The caller derives
+    /// <paramref name="renderTarget"/> from the threshold rule and the
+    /// budget; nothing here writes the budget back.
     /// </summary>
-    internal static int ReconcileRenderWindowPrefix(
+    internal static void ReconcileRenderWindowPrefix(
         IEnumerable<WidgetItem> visibleItems,
         ObservableCollection<WidgetItem> renderedItems,
-        int windowCount,
+        int renderTarget,
         int visibleItemCount)
     {
-        if (visibleItemCount <= RenderWindowActivationThreshold)
-        {
-            // Folders within the activation threshold always render in full;
-            // the incremental window only applies above it. Without this the
-            // initial prefix caps every folder at RenderWindowInitialSize.
-            windowCount = visibleItemCount;
-        }
-
-        int targetCount = Math.Min(windowCount, visibleItemCount);
+        int targetCount = Math.Min(renderTarget, visibleItemCount);
         var desired = new List<WidgetItem>(targetCount);
         int collected = 0;
         foreach (WidgetItem item in visibleItems)
@@ -311,7 +341,5 @@ public partial class WidgetViewModel
         {
             renderedItems.RemoveAt(renderedItems.Count - 1);
         }
-
-        return windowCount;
     }
 }

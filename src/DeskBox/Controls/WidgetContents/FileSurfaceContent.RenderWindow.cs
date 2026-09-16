@@ -24,6 +24,11 @@ public sealed partial class FileSurfaceContent
         ItemsGrid.SizeChanged += ItemsView_SizeChangedForRenderWindow;
         ItemsList.SizeChanged += ItemsView_SizeChangedForRenderWindow;
         ViewModel.PropertyChanged += ViewModel_PropertyChangedForRenderWindow;
+        // Bulk imports change the item count without any geometry change, so
+        // the view model reports each (coalesced) source reconcile and the
+        // view re-checks viewport coverage — crossing the activation
+        // threshold must not strand unrendered items with no scrollbar.
+        ViewModel.RenderWindowSourceChanged += ViewModel_RenderWindowSourceChanged;
     }
 
     /// <summary>
@@ -39,6 +44,7 @@ public sealed partial class FileSurfaceContent
         ItemsGrid.SizeChanged -= ItemsView_SizeChangedForRenderWindow;
         ItemsList.SizeChanged -= ItemsView_SizeChangedForRenderWindow;
         ViewModel.PropertyChanged -= ViewModel_PropertyChangedForRenderWindow;
+        ViewModel.RenderWindowSourceChanged -= ViewModel_RenderWindowSourceChanged;
         if (_gridRenderWindowScrollViewer is { } gridScrollViewer)
         {
             gridScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
@@ -49,6 +55,27 @@ public sealed partial class FileSurfaceContent
             listScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
             _listRenderWindowScrollViewer = null;
         }
+    }
+
+    private void ViewModel_RenderWindowSourceChanged() =>
+        QueueRenderWindowViewportCoverage();
+
+    private void QueueRenderWindowViewportCoverage()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        // Coalesced through the view model's own queue flag, so a 2000-item
+        // import reconciles once and this check runs once after it.
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_isDisposed)
+            {
+                EnsureRenderWindowCoversViewport(GetActiveItemsView());
+            }
+        });
     }
 
     private void ItemsView_SizeChangedForRenderWindow(
@@ -80,8 +107,15 @@ public sealed partial class FileSurfaceContent
             return;
         }
 
-        double viewportWidth = itemsView.ActualWidth;
-        double viewportHeight = itemsView.ActualHeight;
+        ScrollViewer? scrollViewer = GetRenderWindowScrollViewer(itemsView);
+        // The ScrollViewer content viewport is what actually bounds visible
+        // items; the items control frame is only a fallback estimate.
+        double viewportWidth = scrollViewer?.ViewportWidth > 0
+            ? scrollViewer.ViewportWidth
+            : itemsView.ActualWidth;
+        double viewportHeight = scrollViewer?.ViewportHeight > 0
+            ? scrollViewer.ViewportHeight
+            : itemsView.ActualHeight;
         if (viewportWidth <= 0 || viewportHeight <= 0)
         {
             return;
@@ -99,16 +133,30 @@ public sealed partial class FileSurfaceContent
         }
         else
         {
-            // List rows size to content; the configured tile height is the
-            // closest stable estimate without waiting for a measured row.
+            // List rows size to content, not to the icon cell: measure the
+            // first realized container and fall back to a conservative small
+            // row height (over-rendering beats stranding items).
+            double rowHeight = EstimateListRowHeight(itemsView);
             ViewModel.EnsureRenderWindowCoversViewport(
                 WidgetViewModel.ComputeViewportRenderMinimum(
                     viewportWidth,
                     viewportHeight,
                     Math.Max(1, viewportWidth),
-                    Math.Max(1, ViewModel.IconCellHeight),
+                    rowHeight,
                     bufferRows: 2));
         }
+    }
+
+    private double EstimateListRowHeight(ListViewBase itemsView)
+    {
+        if (itemsView.ContainerFromIndex(0) is FrameworkElement { ActualHeight: > 0 } firstRow)
+        {
+            return firstRow.ActualHeight;
+        }
+
+        // No realized container yet: prefer a deliberately small estimate so
+        // the first page over-renders rather than leaves the viewport empty.
+        return Math.Max(24, Math.Min(ViewModel.IconCellHeight, 48));
     }
 
     private void ItemsView_LoadedForRenderWindow(object sender, RoutedEventArgs e)
