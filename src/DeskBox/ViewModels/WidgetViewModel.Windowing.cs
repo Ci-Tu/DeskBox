@@ -31,14 +31,15 @@ public partial class WidgetViewModel
 
     private int _renderWindowBudget = RenderWindowInitialSize;
     private bool _renderWindowReconcileQueued;
+    private bool _pendingPostBatchHydration;
 
     /// <summary>
-    /// Fired (already coalesced per dispatcher pass) after the rendered
-    /// prefix reconciled against a source change. The view listens to
-    /// re-check viewport coverage: bulk imports change the item count
-    /// without changing any geometry, so Loaded/SizeChanged alone cannot
-    /// keep the window covering the viewport across the activation
-    /// threshold.
+    /// Fired (coalesced per dispatcher pass, and deferred to the batch
+    /// finalization for bulk imports) after the rendered prefix reconciled
+    /// against a source change. The view listens to re-check viewport
+    /// coverage: bulk imports change the item count without changing any
+    /// geometry, so Loaded/SizeChanged alone cannot keep the window covering
+    /// the viewport across the activation threshold.
     /// </summary>
     internal event Action? RenderWindowSourceChanged;
 
@@ -103,13 +104,27 @@ public partial class WidgetViewModel
 
     private void QueueRenderWindowReconcile()
     {
-        if (_isDisposed || _renderWindowReconcileQueued)
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_itemMutationBatchDepth > 0)
+        {
+            // A bulk import defers this to the batch finalization; per-insert
+            // reconciles would re-mirror the prefix once per dispatcher pass
+            // and log a line each.
+            MarkItemMutationBatchDirty();
+            return;
+        }
+
+        if (_renderWindowReconcileQueued)
         {
             return;
         }
 
         _renderWindowReconcileQueued = true;
-        _dispatcherQueue.TryEnqueue(() =>
+        if (!_dispatcherQueue.TryEnqueue(() =>
         {
             _renderWindowReconcileQueued = false;
             if (_isDisposed)
@@ -119,7 +134,41 @@ public partial class WidgetViewModel
 
             ReconcileRenderWindow();
             RenderWindowSourceChanged?.Invoke();
-        });
+            if (_pendingPostBatchHydration)
+            {
+                // Hydration snapshots HydrationUniverseItems synchronously at
+                // startup, so the batch finalization defers its start to here
+                // — after this callback has applied the settled prefix —
+                // instead of starting it against the stale one at scope exit.
+                _pendingPostBatchHydration = false;
+                StartItemHydration();
+            }
+        }))
+        {
+            // The queued flag (and a deferred hydration start with it) must
+            // not survive a failed enqueue, or the widget would never
+            // reconcile or hydrate again. Only reachable at dispatcher
+            // shutdown.
+            _renderWindowReconcileQueued = false;
+            _pendingPostBatchHydration = false;
+        }
+    }
+
+    /// <summary>
+    /// Defers a hydration start to the queued render reconcile callback. The
+    /// queues are enqueue-only and hydration snapshots the rendered prefix
+    /// synchronously, so starting hydration at the call site would read the
+    /// prefix the reconcile has not applied yet.
+    /// </summary>
+    private void QueuePostBatchHydration()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _pendingPostBatchHydration = true;
+        QueueRenderWindowReconcile();
     }
 
     /// <summary>

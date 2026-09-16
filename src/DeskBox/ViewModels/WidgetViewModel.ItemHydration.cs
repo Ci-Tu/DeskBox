@@ -140,6 +140,25 @@ public partial class WidgetViewModel
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (_itemMutationBatchDepth > 0)
+        {
+            // Commit-point race guard. This reload may have started before an
+            // import batch opened, and the enumeration above awaited seconds
+            // on the thread pool while the Shell transfer finished and the
+            // batch began. The snapshot is stale relative to files the
+            // in-flight batch has already upserted; applying it mid-batch
+            // would delete live items (files stay on disk, the UI just loses
+            // them until the next refresh). Drop the snapshot and defer one
+            // authoritative refresh to the batch finalization. No await may
+            // appear between this check and the Items mutation below.
+            _pendingFolderRefreshAfterBatch = true;
+            MarkItemMutationBatchDirty();
+            App.Log(
+                "[FolderRefresh] Snapshot deferred to batch finalization " +
+                $"'{folderPath}'");
+            return false;
+        }
+
         long afterEnumerateMs = loadStopwatch.ElapsedMilliseconds;
         ApplyPersistedAddedTimes(items);
         cancellationToken.ThrowIfCancellationRequested();

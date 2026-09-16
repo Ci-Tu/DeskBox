@@ -67,8 +67,9 @@ public sealed partial class FileSurfaceContent
             return;
         }
 
-        // Coalesced through the view model's own queue flag, so a 2000-item
-        // import reconciles once and this check runs once after it.
+        // Scattered item changes coalesce once per dispatcher pass; a batched
+        // import defers all of them to its single end-of-batch reconcile, so
+        // this check runs once after the batch settles.
         _ = DispatcherQueue.TryEnqueue(() =>
         {
             if (!_isDisposed)
