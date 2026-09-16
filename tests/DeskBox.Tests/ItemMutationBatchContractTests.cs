@@ -399,6 +399,105 @@ public sealed class ItemMutationBatchContractTests
             "the finalize measurement must include the scope disposal");
     }
 
+    [Fact]
+    public void BatchPathIndex_IsScopedStoresReferencesAndSelfHeals()
+    {
+        // The scoped path dictionary exists only between scope open and
+        // close, maps paths to live references (never indexes - index
+        // shifts from concurrent inserts must not stale it), and falls back
+        // to the linear scan when a reference is gone.
+        string batch = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.ItemMutationBatch.cs"))
+            .Replace("\r\n", "\n");
+
+        Assert.Contains(
+            "private Dictionary<string, WidgetItem>? _batchItemsByPath;",
+            batch,
+            StringComparison.Ordinal);
+        // Built once when the first scope opens, not per file...
+        int open = batch.IndexOf(
+            "internal IDisposable EnterItemMutationScope()",
+            StringComparison.Ordinal);
+        int build = batch.IndexOf(
+            "_batchItemsByPath = index;",
+            open,
+            StringComparison.Ordinal);
+        Assert.True(open > 0 && build > open, "the index must be built inside the scope open");
+
+        // ...dropped when the last scope closes...
+        int close = batch.IndexOf(
+            "owner._itemMutationBatchDepth == 0",
+            StringComparison.Ordinal);
+        int dropped = batch.IndexOf(
+            "owner._batchItemsByPath = null;",
+            close,
+            StringComparison.Ordinal);
+        Assert.True(close > 0 && dropped > close, "the index must be dropped at scope close");
+
+        // ...reference-resolved with a linear fallback for stale entries.
+        int lookup = batch.IndexOf(
+            "private int FindItemIndexForManagedMutation(string path)",
+            StringComparison.Ordinal);
+        int referenceResolve = batch.IndexOf(
+            "IndexOfReference(Items, existing, 0)",
+            lookup,
+            StringComparison.Ordinal);
+        // The method contains two linear-scan returns (the no-batch early
+        // exit and the stale-reference fallback); the fallback one is the
+        // second, after the reference resolution.
+        int fallback = batch.IndexOf(
+            "return FindItemIndexByPath(path);",
+            referenceResolve,
+            StringComparison.Ordinal);
+        Assert.True(lookup > 0 && referenceResolve > lookup && fallback > referenceResolve,
+            "the lookup must resolve the reference to an index, then fall back to the linear scan");
+
+        // The two managed mutation paths route through the scoped lookup and
+        // keep the dictionary in sync with their Items mutations.
+        string watchers = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.SortingAndWatchers.cs"))
+            .Replace("\r\n", "\n");
+        int upsert = watchers.IndexOf(
+            "int existingIndex = FindItemIndexForManagedMutation(path);",
+            StringComparison.Ordinal);
+        int removal = watchers.IndexOf(
+            "int index = FindItemIndexForManagedMutation(path);",
+            StringComparison.Ordinal);
+        Assert.True(upsert > 0 && removal > upsert, "both mutation paths must use the routed lookup");
+        Assert.Equal(2, CountOccurrences(watchers, "TrackManagedItemByPath(path, item);"));
+        Assert.Equal(1, CountOccurrences(watchers, "UntrackManagedItemByPath(path);"));
+    }
+
+    [Fact]
+    public void SortedInsertIndex_IsABinaryLowerBoundNotALinearScan()
+    {
+        string watchers = File.ReadAllText(TestPaths.FromRepository(
+            "src/DeskBox/ViewModels/WidgetViewModel.SortingAndWatchers.cs"))
+            .Replace("\r\n", "\n");
+
+        int method = watchers.IndexOf(
+            "private int GetSortedInsertIndex(WidgetItem candidate)",
+            StringComparison.Ordinal);
+        int call = watchers.IndexOf(
+            "return BinarySearchSortedInsertIndex(",
+            method,
+            StringComparison.Ordinal);
+        int helper = watchers.IndexOf(
+            "internal static int BinarySearchSortedInsertIndex(",
+            StringComparison.Ordinal);
+        Assert.True(method > 0 && call > method && helper > call,
+            "GetSortedInsertIndex must delegate to the binary lower-bound search");
+
+        // The old per-candidate linear scan is gone - that scan is the O(n)
+        // per file this phase removes.
+        int methodEnd = watchers.IndexOf("\n    }\n", call, StringComparison.Ordinal);
+        string body = watchers[method..methodEnd];
+        Assert.DoesNotContain(
+            "for (int index = 0; index < Items.Count; index++)",
+            body,
+            StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string text, string needle)
     {
         int count = 0;

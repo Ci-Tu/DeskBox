@@ -1,3 +1,5 @@
+using DeskBox.Models;
+
 namespace DeskBox.ViewModels;
 
 /// <summary>
@@ -16,6 +18,16 @@ public partial class WidgetViewModel
     private bool _itemMutationBatchDirty;
     private bool _addedAtPersistPending;
     private bool _pendingFolderRefreshAfterBatch;
+
+    /// <summary>
+    /// Batch-scoped path index: path to the live item reference, built once
+    /// when the first scope opens and dropped when it closes. Values are
+    /// references rather than indexes on purpose - index shifts from the
+    /// inserts running mid-batch cannot stale it, and it never needs the
+    /// Move/Sort/rename bookkeeping that makes a permanent path-index map a
+    /// bug nursery.
+    /// </summary>
+    private Dictionary<string, WidgetItem>? _batchItemsByPath;
 
     /// <summary>
     /// True while a bulk mutation is in flight. Watcher events that land
@@ -39,9 +51,65 @@ public partial class WidgetViewModel
     /// </summary>
     internal IDisposable EnterItemMutationScope()
     {
+        if (_itemMutationBatchDepth == 0)
+        {
+            // One existence index per batch, not per file: the upsert path
+            // consults it instead of scanning the whole list per file.
+            var index = new Dictionary<string, WidgetItem>(
+                StringComparer.OrdinalIgnoreCase);
+            foreach (WidgetItem item in Items)
+            {
+                if (!string.IsNullOrEmpty(item.Path))
+                {
+                    index[item.Path] = item;
+                }
+            }
+
+            _batchItemsByPath = index;
+        }
+
         _itemMutationBatchDepth++;
         return new ItemMutationScope(this);
     }
+
+    /// <summary>
+    /// Path lookup for the managed mutation paths (upsert and removal).
+    /// Outside a batch this is the plain linear scan. Inside a batch the
+    /// scope dictionary answers existence in O(1); the reference becomes an
+    /// index only when a replacement actually needs one. A stale reference
+    /// (an out-of-band rebuild swapped the objects mid-batch) falls back to
+    /// the linear scan, so the dictionary can only over-perform, never
+    /// misreport.
+    /// </summary>
+    private int FindItemIndexForManagedMutation(string path)
+    {
+        if (_batchItemsByPath is null)
+        {
+            return FindItemIndexByPath(path);
+        }
+
+        if (_batchItemsByPath.TryGetValue(path, out WidgetItem? existing))
+        {
+            int referenceIndex = IndexOfReference(Items, existing, 0);
+            if (referenceIndex >= 0)
+            {
+                return referenceIndex;
+            }
+        }
+
+        return FindItemIndexByPath(path);
+    }
+
+    private void TrackManagedItemByPath(string path, WidgetItem item)
+    {
+        if (_batchItemsByPath is not null && !string.IsNullOrEmpty(path))
+        {
+            _batchItemsByPath[path] = item;
+        }
+    }
+
+    private void UntrackManagedItemByPath(string path) =>
+        _batchItemsByPath?.Remove(path);
 
     private void MarkItemMutationBatchDirty() => _itemMutationBatchDirty = true;
 
@@ -61,6 +129,11 @@ public partial class WidgetViewModel
             }
 
             owner._itemMutationBatchDepth--;
+            if (owner._itemMutationBatchDepth == 0)
+            {
+                owner._batchItemsByPath = null;
+            }
+
             if (owner._itemMutationBatchDepth > 0 || !owner._itemMutationBatchDirty)
             {
                 return;
