@@ -1554,7 +1554,7 @@
     "Widget.DropOnShortcutCannotOpen": "“{0}” cannot open this file",
     "Widget.DropOnShortcutOpenWith": "Open with “{0}”",
     "Widget.OpenItemShortcutTargetMissing": "This shortcut's target no longer exists. Windows was asked to handle it instead.",
-    "Widget.OpenItemBusy": "Another open request is still being handled. Try again shortly.",
+    "Widget.OpenItemBusy": "Another open request is still being handled. Try again shortly; if this keeps happening, the system Shell may be unresponsive, and restarting File Explorer restores it.",
     "Widget.OpenItemFailed": "Could not open this file. No default app may be set.",
     "Widget.ShowInExplorer": "Open file location",
     "Widget.CopyPath": "Copy Path",

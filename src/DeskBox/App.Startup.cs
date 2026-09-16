@@ -16,7 +16,7 @@ namespace DeskBox;
 public partial class App
 {
     /// <summary>Startup must reach a usable tray surface within this window.</summary>
-    private const int StartupWatchdogDeadlineMs = 90_000;
+    private const int StartupWatchdogStallMs = 90_000;
 
     /// <summary>How long the fatal dialog may stay up before the process exits anyway.</summary>
     private const int StartupFailureGraceMs = 20_000;
@@ -25,6 +25,7 @@ public partial class App
     private static int s_startupFailureHandled;
     private static int s_startupWatchdogArmed;
     private static bool s_startupLaunchQuietExit;
+    private static long s_lastStartupProgressTicks;
 
     /// <summary>
     /// True once the tray surface is usable. Before that point the process has
@@ -34,8 +35,20 @@ public partial class App
         Volatile.Read(ref s_startupLifelineEstablished) != 0;
 
     /// <summary>
-    /// Arms the watchdog thread that terminates a startup which never reaches
-    /// the lifeline. A dedicated thread, not the pool: startup work (snapshot
+    /// Records that startup advanced to a new phase. The watchdog measures
+    /// time since the last mark, not total elapsed time: legitimately long
+    /// phases (a multi-gigabyte data restore before the tray exists) keep
+    /// marking progress and must not be killed, while a real hang shows no
+    /// marks at all.
+    /// </summary>
+    internal static void MarkStartupProgress()
+    {
+        Volatile.Write(ref s_lastStartupProgressTicks, Environment.TickCount64);
+    }
+
+    /// <summary>
+    /// Arms the watchdog thread that terminates a startup which stops making
+    /// progress. A dedicated thread, not the pool: startup work (snapshot
     /// zip, schtasks, WMI queries) can saturate the pool, and the whole point
     /// is to fire when the rest of the process is stuck.
     /// </summary>
@@ -46,10 +59,11 @@ public partial class App
             return;
         }
 
+        MarkStartupProgress();
+
         var watchdog = new Thread(() =>
         {
-            int waitedMs = 0;
-            while (waitedMs < StartupWatchdogDeadlineMs)
+            while (true)
             {
                 if (IsStartupLifelineEstablished)
                 {
@@ -57,14 +71,19 @@ public partial class App
                 }
 
                 Thread.Sleep(500);
-                waitedMs += 500;
-            }
+                long stalledMs = Environment.TickCount64 -
+                    Volatile.Read(ref s_lastStartupProgressTicks);
+                if (stalledMs >= StartupWatchdogStallMs)
+                {
+                    if (!IsStartupLifelineEstablished)
+                    {
+                        FailStartup(
+                            $"startup made no progress for {stalledMs} ms",
+                            exception: null);
+                    }
 
-            if (!IsStartupLifelineEstablished)
-            {
-                FailStartup(
-                    $"startup did not reach a usable tray surface within {StartupWatchdogDeadlineMs} ms",
-                    exception: null);
+                    return;
+                }
             }
         })
         {
@@ -183,6 +202,7 @@ public partial class App
     /// </summary>
     private static async Task RunOptionalStartupStepAsync(string name, Func<Task> step)
     {
+        MarkStartupProgress();
         try
         {
             await step();
@@ -195,6 +215,7 @@ public partial class App
 
     private static void RunOptionalStartupStep(string name, Action step)
     {
+        MarkStartupProgress();
         try
         {
             step();

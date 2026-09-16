@@ -339,8 +339,29 @@ public sealed partial class WidgetManager
                 widgetPlan.Widget.MappedFolderPath = widgetPlan.DestinationFolder;
             }
 
-            await _settingsService.SaveAsync();
-            SyncStorageFolderEntries(oldRootPath);
+            if (!await _settingsService.SaveCheckedAsync())
+            {
+                // The disk still holds the old root. Throwing here rolls the
+                // directories and in-memory settings back while the persisted
+                // settings never moved, so all three stay consistent.
+                throw new InvalidOperationException(
+                    $"Failed to persist the managed storage root change to '{normalizedNewRootPath}'.");
+            }
+
+            try
+            {
+                // Past the commit point: a failure while cleaning up the old
+                // root's shortcut entries must not roll the physical migration
+                // back. The startup storage sync repairs what it can.
+                SyncStorageFolderEntries(oldRootPath);
+            }
+            catch (Exception ex)
+            {
+                App.Log(
+                    $"[ManagedStorageMigration] Old-root shortcut cleanup skipped " +
+                    $"for '{oldRootPath}': {ex.Message}");
+            }
+
             try
             {
                 // The migration is already committed at this point; a
@@ -412,7 +433,16 @@ public sealed partial class WidgetManager
         }
         finally
         {
-            SetManagedStorageMigrationBusy(affectedWidgets.Select(widget => widget.Widget.Id), isBusy: false);
+            try
+            {
+                SetManagedStorageMigrationBusy(affectedWidgets.Select(widget => widget.Widget.Id), isBusy: false);
+            }
+            catch (Exception ex)
+            {
+                // Throwing out of the finally would surface an already-committed
+                // migration as a failure to its caller.
+                App.Log($"[ManagedStorageMigration] Failed to clear the busy state: {ex.Message}");
+            }
         }
 
         return new ManagedStorageMigrationResult(

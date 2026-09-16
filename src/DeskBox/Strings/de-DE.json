@@ -1542,7 +1542,7 @@
     "Widget.DropOnShortcutCannotOpen": "„{0}“ kann diese Datei nicht öffnen",
     "Widget.DropOnShortcutOpenWith": "Mit „{0}“ öffnen",
     "Widget.OpenItemShortcutTargetMissing": "Das Ziel dieser Verknüpfung existiert nicht mehr. Windows wurde damit beauftragt.",
-    "Widget.OpenItemBusy": "Ein anderer Öffnungsauftrag wird noch verarbeitet. Bitte gleich erneut versuchen.",
+    "Widget.OpenItemBusy": "Ein anderer Öffnungsauftrag wird noch verarbeitet. Bitte gleich erneut versuchen. Tritt dies wiederholt auf, reagiert die Windows-Shell möglicherweise nicht mehr – ein Neustart des Explorers behebt das.",
     "Widget.OpenItemFailed": "Datei konnte nicht geöffnet werden. Möglicherweise ist keine Standard-App festgelegt.",
     "Widget.ShowInExplorer": "Dateispeicherort öffnen",
     "Widget.CopyPath": "Pfad kopieren",

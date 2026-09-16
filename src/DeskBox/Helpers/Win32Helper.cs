@@ -2118,7 +2118,9 @@ public static partial class Win32Helper
             .ContinueWith(
                 _ =>
                 {
-                    if (!localLaunchCompleted)
+                    // Volatile: the timer thread reads what the caller thread
+                    // writes; a stale read only costs a wrong pending log line.
+                    if (!Volatile.Read(ref localLaunchCompleted))
                     {
                         App.Log(
                             $"[OpenFile] local ShellExecuteEx still pending for '{path}' after " +
@@ -2130,7 +2132,7 @@ public static partial class Win32Helper
         try
         {
             Process.Start(startInfo);
-            localLaunchCompleted = true;
+            Volatile.Write(ref localLaunchCompleted, true);
             App.Log(
                 $"[OpenFile] backend=local-shell-execute path='{path}'");
             return true;

@@ -1554,7 +1554,7 @@
   "Widget.DropOnShortcutCannotOpen": "لا يمكن لـ “{0}” فتح هذا الملف",
   "Widget.DropOnShortcutOpenWith": "فتح باستخدام “{0}”",
     "Widget.OpenItemShortcutTargetMissing": "لم يعد هدف هذا الاختصار موجودًا. تم تكليف Windows بمعالجته.",
-  "Widget.OpenItemBusy": "لا يزال طلب فتح آخر قيد المعالجة. حاول مرة أخرى بعد قليل.",
+  "Widget.OpenItemBusy": "لا يزال طلب فتح آخر قيد المعالجة. حاول مرة أخرى بعد قليل. إذا تكرر ذلك، فقد تكون خدمة Shell في Windows غير مستجيبة — إعادة تشغيل مستكشف Windows تحل المشكلة.",
   "Widget.OpenItemFailed": "لا يمكن فتح هذا الملف. لا يجوز تعيين أي تطبيق افتراضي.",
   "Widget.ShowInExplorer": "فتح موقع الملف",
   "Widget.CopyPath": "نسخ المسار",

@@ -378,6 +378,10 @@ public sealed partial class FileSurfaceContent :
             return;
         }
 
+        // With stacks enabled the saved file may have joined a collapsed
+        // stack; expand it so the projected view actually contains the item.
+        ViewModel.RevealItemForInteraction(itemPath);
+
         // A revealed item can sort beyond the current render window.
         ViewModel.EnsureItemRendered(item);
 
@@ -1781,6 +1785,9 @@ public sealed partial class FileSurfaceContent :
     {
         const int realizationPasses = 5;
         ViewModel.RevealItemForInteraction(item.Path);
+        // A brand-new item can sort beyond the current render window; cover it
+        // before scanning the projected view, or every pass finds nothing.
+        ViewModel.EnsureItemRendered(item);
         for (int pass = 0; pass < realizationPasses; pass++)
         {
             ListViewBase activeView = GetActiveItemsView();
@@ -5244,6 +5251,7 @@ public sealed partial class FileSurfaceContent :
         }
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+        UnregisterRenderWindowTracking();
         DisposeScrollBarActivityTracking();
         ActualThemeChanged -= FileSurfaceContent_ActualThemeChanged;
         ViewModel.Items.CollectionChanged -= Items_CollectionChanged;

@@ -98,7 +98,7 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
 
         var manifest = new List<FileService.CopiedSourceFileRecord>
         {
-            new(copiedFile, new FileInfo(copiedFile).Length, new FileInfo(copiedFile).LastWriteTimeUtc)
+            new(copiedFile, new FileInfo(copiedFile).Length, new FileInfo(copiedFile).LastWriteTimeUtc, null)
         };
 
         Assert.Throws<FileService.FileTransferSourceChangedException>(
@@ -122,7 +122,7 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
 
         var manifest = new List<FileService.CopiedSourceFileRecord>
         {
-            new(changedFile, 1, DateTime.UtcNow - TimeSpan.FromHours(1))
+            new(changedFile, 1, DateTime.UtcNow - TimeSpan.FromHours(1), null)
         };
 
         Assert.Throws<FileService.FileTransferSourceChangedException>(
@@ -173,7 +173,10 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
             FileAccess.Read,
             FileShare.Read);
 
-        Assert.Throws<IOException>(
+        // A file locked by another process cannot be deleted through a
+        // verified handle: fail closed as a cleanup failure (both copies
+        // stay) instead of a raw delete error.
+        Assert.Throws<FileService.FileTransferSourceCleanupException>(
             () => FileService.DeleteSourceTreeByManifest(
                 sourceDirectory,
                 Path.Combine(_tempRoot, "locked-destination"),
@@ -195,9 +198,16 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
         string twinFile = Path.Combine(copiedDirectory, "twin.txt");
         string twinOriginal = Path.Combine(originalDirectory, "twin.txt");
         string uniqueFile = Path.Combine(copiedDirectory, "unique.txt");
+        string matchingFile = Path.Combine(copiedDirectory, "matching.txt");
+        string matchingOriginal = Path.Combine(originalDirectory, "matching.txt");
         File.WriteAllText(twinFile, "stale copy");
         File.WriteAllText(twinOriginal, "possibly newer original");
         File.WriteAllText(uniqueFile, "only in the copy");
+        File.WriteAllText(matchingFile, "identical twin");
+        File.WriteAllText(matchingOriginal, "identical twin");
+        DateTime stamp = DateTime.UtcNow.AddDays(-1);
+        File.SetLastWriteTimeUtc(matchingFile, stamp);
+        File.SetLastWriteTimeUtc(matchingOriginal, stamp);
 
         await FileService.RestoreMigratedDirectoryPreservingExistingAsync(
             copiedDirectory,
@@ -209,7 +219,51 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
         Assert.Equal(
             "only in the copy",
             File.ReadAllText(Path.Combine(originalDirectory, "unique.txt")));
-        Assert.False(Directory.Exists(copiedDirectory), "A fully restored copy must be removed.");
+        Assert.True(
+            File.Exists(twinFile),
+            "A diverged duplicate is kept: either side may hold the user's " +
+            "latest edit, and ownership cannot be proven without a match.");
+        Assert.True(
+            File.Exists(matchingFile),
+            "Duplicates are never auto-deleted: content equality from size " +
+            "and timestamp cannot authorize a delete in a rollback.");
+        Assert.True(Directory.Exists(copiedDirectory), "The copy stays for its duplicate content.");
+    }
+
+    [Fact]
+    public async Task RestoreMigratedDirectory_NestedSameNamedDirectoriesMergeConservatively()
+    {
+        // The failed source cleanup already deleted some files from the
+        // original subtree; the copied subtree holds the ONLY remaining copy
+        // of those files. A same-named nested directory must merge
+        // child-by-child, never delete the copied subtree wholesale.
+        string copiedDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "nested-copy")).FullName;
+        string originalDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "nested-original")).FullName;
+        string copiedSub = Directory.CreateDirectory(
+            Path.Combine(copiedDirectory, "documents")).FullName;
+        string originalSub = Directory.CreateDirectory(
+            Path.Combine(originalDirectory, "documents")).FullName;
+        // Original side after partial cleanup: only b.txt remains.
+        File.WriteAllText(Path.Combine(originalSub, "b.txt"), "b");
+        // Copied side: the complete tree (a.txt deleted from original).
+        File.WriteAllText(Path.Combine(copiedSub, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(copiedSub, "b.txt"), "b");
+
+        await FileService.RestoreMigratedDirectoryPreservingExistingAsync(
+            copiedDirectory,
+            originalDirectory);
+
+        Assert.True(
+            File.Exists(Path.Combine(originalSub, "a.txt")),
+            "a.txt must move back: the copied subtree held its last copy");
+        Assert.True(
+            File.Exists(Path.Combine(originalSub, "b.txt")),
+            "b.txt survives on the original side");
+        Assert.True(
+            File.Exists(Path.Combine(copiedSub, "b.txt")),
+            "the duplicate b.txt stays: duplicates are never auto-deleted");
     }
 
     [Fact]

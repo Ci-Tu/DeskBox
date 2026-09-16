@@ -73,8 +73,11 @@ public sealed class RenderWindowContractTests
         string windowing = File.ReadAllText(GetRepoFile(
             "src/DeskBox/ViewModels/WidgetViewModel.Windowing.cs"));
 
+        // The threshold check lives in the shared prefix mirror
+        // (ReconcileRenderWindowPrefix) since the 2026-09-15 reveal fix;
+        // behavior is additionally pinned by RenderWindowBehaviorTests.
         Assert.Contains(
-            "VisibleItemCount <= RenderWindowActivationThreshold",
+            "visibleItemCount <= RenderWindowActivationThreshold",
             windowing,
             StringComparison.Ordinal);
     }

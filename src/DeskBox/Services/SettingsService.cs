@@ -689,9 +689,12 @@ settings.FocusClickedWidgetOnRaise = false;
                     }
                 }
 
-                // Run schema migrations if the loaded version is older than current
+                // Run schema migrations if the loaded version is older than current.
+                // Copy-on-write: the pipeline returns the migrated graph (or the
+                // input untouched on failure) and this service swaps the reference.
                 var migrationPipeline = new SettingsMigrationPipeline();
-                changed |= migrationPipeline.RunMigrations(_settings);
+                (_settings, bool migrationsApplied) = migrationPipeline.RunMigrationsOnCopy(_settings);
+                changed |= migrationsApplied;
 
                 // Schema migration treats every existing profile as having resolved
                 // the legacy default file-widget setup. Only a genuinely missing
