@@ -1675,7 +1675,7 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void SourceIdentity_DetectsInPlaceEditDespiteSameFileKey()
+    public void SourceIdentity_DetectsInPlaceEditDespiteSameFileId()
     {
         // An in-place rewrite keeps the NTFS file key, so the key alone must
         // never authorize deleting the source: the copied content may be
@@ -1685,7 +1685,7 @@ public sealed class FileServiceTests : IDisposable
         FileService.FileTransferSourceIdentity? identity =
             FileService.TryCaptureSourceIdentity(path);
         Assert.NotNull(identity);
-        Assert.NotNull(identity!.Value.FileKey);
+        Assert.NotNull(identity!.Value.FileId);
 
         // Same object, same length, newer write time (a sub-timestamp-granularity
         // rewrite stays undetectable without a content hash — accepted).
@@ -1850,7 +1850,7 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void SourceIdentity_MatchingRequiresFileKeyAndLengthAndTimestampTogether()
+    public void SourceIdentity_MatchingRequiresFileIdAndLengthAndTimestampTogether()
     {
         // A matching key proves the same object, not unchanged content: the
         // conjunction must stay in the source so a future edit cannot regress
@@ -2053,20 +2053,45 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void SourceIdentity_RejectsAMissingFileKeyOnEitherSide()
+    public void SourceIdentity_RejectsAMissingFileIdOnEitherSide()
     {
         string path = Path.Combine(_tempRoot, "identity-asymmetric.txt");
         File.WriteAllText(path, "payload");
         FileService.FileTransferSourceIdentity? identity =
             FileService.TryCaptureSourceIdentity(path);
         Assert.NotNull(identity);
-        Assert.NotNull(identity!.Value.FileKey);
+        Assert.NotNull(identity!.Value.FileId);
 
         // One stat saw a key, the other did not: the object at the path is
         // no longer the one that was captured.
-        var withoutKey = identity.Value with { FileKey = null };
+        var withoutKey = identity.Value with { FileId = null };
         Assert.False(FileService.SourceIdentityMatches(withoutKey, identity.Value));
         Assert.False(FileService.SourceIdentityMatches(identity.Value, withoutKey));
+    }
+
+    [Fact]
+    public void SourceIdentity_CapturesDirectoriesToo()
+    {
+        // Recovery receipts identify folder items as objects, not by their
+        // mtime: the native handle opens directories via
+        // FILE_FLAG_BACKUP_SEMANTICS.
+        string directory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "identity-dir")).FullName;
+        File.WriteAllText(Path.Combine(directory, "child.txt"), "content");
+
+        FileService.FileTransferSourceIdentity? identity =
+            FileService.TryCaptureSourceIdentity(directory);
+        Assert.NotNull(identity);
+        Assert.NotNull(identity!.Value.FileId);
+
+        // Same directory restated matches; a replaced directory does not.
+        Assert.True(FileService.SourceFileMatchesIdentity(directory, identity.Value));
+        string replacement = Path.Combine(_tempRoot, "identity-dir-2");
+        Directory.CreateDirectory(replacement);
+        FileService.FileTransferSourceIdentity? otherIdentity =
+            FileService.TryCaptureSourceIdentity(replacement);
+        Assert.NotNull(otherIdentity);
+        Assert.False(FileService.SourceFileMatchesIdentity(replacement, identity.Value));
     }
 
     [Fact]
@@ -2091,7 +2116,7 @@ public sealed class FileServiceTests : IDisposable
         File.SetLastWriteTimeUtc(path, stamp);
         FileService.FileTransferSourceIdentity? replacedIdentity =
             FileService.TryCaptureSourceIdentity(path);
-        Assert.NotEqual(identity.Value.FileKey, replacedIdentity!.Value.FileKey);
+        Assert.NotEqual(identity.Value.FileId, replacedIdentity!.Value.FileId);
 
         Assert.False(FileService.TryDeleteFileByIdentity(path, identity.Value));
         Assert.True(File.Exists(path));
@@ -2191,7 +2216,7 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
-    public void SourceIdentity_RejectsMatchingWithoutAnyFileKey()
+    public void SourceIdentity_RejectsMatchingWithoutAnyFileId()
     {
         // File systems without stable object ids (some network/cloud
         // providers) cannot authorize a destructive delete: metadata alone
@@ -2202,7 +2227,7 @@ public sealed class FileServiceTests : IDisposable
             FileService.TryCaptureSourceIdentity(path);
         Assert.NotNull(identity);
 
-        var withoutKeys = identity!.Value with { FileKey = null };
+        var withoutKeys = identity!.Value with { FileId = null };
         Assert.False(FileService.SourceIdentityMatches(withoutKeys, withoutKeys));
     }
 

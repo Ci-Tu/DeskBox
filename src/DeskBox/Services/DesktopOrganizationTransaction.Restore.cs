@@ -35,6 +35,13 @@ public sealed partial class DesktopOrganizationTransaction
                     LastWriteTimeUtc = item.LastWriteTimeUtc
                 }).ToList()
             };
+            // The undo candidates verify the object still at the original
+            // destination before moving it back; capture its identity now.
+            foreach (var undoItem in journal.Items)
+            {
+                RecordDestinationIdentity(undoItem, undoItem.DestinationPath);
+            }
+
             await _recoveryStore.SaveAsync(journal);
             await RestoreItemsAsync(journal, ownerWindowHandle);
             ApplyUndoReceipts(history, journal);
@@ -218,6 +225,9 @@ public sealed partial class DesktopOrganizationTransaction
                 var item = batch.First(candidate => string.Equals(candidate.DestinationPath, result.SourcePath, StringComparison.OrdinalIgnoreCase));
                 item.RestorePath = result.DestinationPath;
                 item.Completed = true;
+                // The undo journal's receipts also carry the restored object's
+                // identity so a later reconcile can verify them the same way.
+                RecordDestinationIdentity(item, result.DestinationPath);
                 _recoveryStore.Save(journal);
             }
             try
@@ -280,18 +290,25 @@ public sealed partial class DesktopOrganizationTransaction
 
     private static bool MatchesSnapshot(string path, DesktopOrganizationRecoveryItem item)
     {
-        try
+        // Identity-only authority: recovery may only act while the object at
+        // the path still carries the exact identity recorded when the item
+        // physically completed its move. Items without a recorded identity
+        // (legacy journals written before this field existed, captures that
+        // failed, or the rare crash between the physical move and the
+        // receipt write) have NO automatic restore authority — the item
+        // stays where it is and the journal keeps the record for the user.
+        if (item.DestinationIdentity is not { } identity)
         {
-            if (File.Exists(path))
-            {
-                var file = new FileInfo(path);
-                return (!item.Size.HasValue || file.Length == item.Size.Value) &&
-                    (!item.LastWriteTimeUtc.HasValue || file.LastWriteTimeUtc == item.LastWriteTimeUtc.Value);
-            }
-            return Directory.Exists(path) && !item.Size.HasValue &&
-                (!item.LastWriteTimeUtc.HasValue || Directory.GetLastWriteTimeUtc(path) == item.LastWriteTimeUtc.Value);
+            return false;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+
+        return FileService.TryCaptureSourceIdentity(path) is { } current &&
+            current.FileId is { } currentId &&
+            currentId == new FileService.FileId128(identity.FileIdHigh, identity.FileIdLow) &&
+            current.VolumeSerialNumber == identity.VolumeSerialNumber &&
+            (!item.Size.HasValue || current.Length == item.Size.Value) &&
+            (!item.LastWriteTimeUtc.HasValue ||
+                current.LastWriteTimeUtc == item.LastWriteTimeUtc.Value);
     }
 
     private static bool IsEmptyDirectory(string path) => !Directory.Exists(path) || !Directory.EnumerateFileSystemEntries(path).Any();

@@ -651,20 +651,21 @@ public sealed class DesktopOrganizationTests : IDisposable
         });
         var store = new DesktopOrganizationRecoveryStore(
             Path.Combine(_root, "pending-recovery.json"));
+        var item = new DesktopOrganizationRecoveryItem
+        {
+            SourcePath = sourcePath,
+            DestinationPath = destinationPath,
+            TargetWidgetId = "temporary",
+            Completed = true
+        };
+        // A real crash after RecordCompleted persists the destination object
+        // identity alongside the receipt.
+        DesktopOrganizationTransaction.RecordDestinationIdentity(item, destinationPath);
         await store.SaveAsync(new DesktopOrganizationRecoveryJournal
         {
             TransactionId = "transaction",
             CreatedWidgetIds = ["temporary"],
-            Items =
-            [
-                new DesktopOrganizationRecoveryItem
-                {
-                    SourcePath = sourcePath,
-                    DestinationPath = destinationPath,
-                    TargetWidgetId = "temporary",
-                    Completed = false
-                }
-            ]
+            Items = [item]
         });
 
         int restored = await new DesktopOrganizationTransaction(
@@ -680,6 +681,51 @@ public sealed class DesktopOrganizationTests : IDisposable
         Assert.DoesNotContain(settings.Settings.RecentOrganizationHistory, entry => entry.Id == "transaction");
         Assert.False(store.HasPendingJournal);
 
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_KeepsItemsWithoutRecordedIdentity()
+    {
+        // Items without a destination identity (legacy journals, or the rare
+        // crash between the physical move and the receipt write) have no
+        // automatic restore authority: the file stays at the destination and
+        // the journal keeps the record.
+        string root = Directory.CreateDirectory(Path.Combine(_root, "identity-none")).FullName;
+        string desktopPath = Path.Combine(root, "desktop");
+        string storagePath = Path.Combine(root, "storage");
+        Directory.CreateDirectory(desktopPath);
+        Directory.CreateDirectory(storagePath);
+        string destinationPath = Path.Combine(storagePath, "moved.txt");
+        File.WriteAllText(destinationPath, "already moved");
+        var settings = new SettingsService(Path.Combine(root, "settings"));
+        var store = new DesktopOrganizationRecoveryStore(
+            Path.Combine(root, "pending-recovery.json"));
+        await store.SaveAsync(new DesktopOrganizationRecoveryJournal
+        {
+            TransactionId = "transaction",
+            CreatedWidgetIds = ["temporary"],
+            Items =
+            [
+                new DesktopOrganizationRecoveryItem
+                {
+                    SourcePath = Path.Combine(desktopPath, "moved.txt"),
+                    DestinationPath = destinationPath,
+                    TargetWidgetId = "temporary",
+                    Completed = true,
+                    DestinationIdentity = null
+                }
+            ]
+        });
+
+        int restored = await new DesktopOrganizationTransaction(
+            settings,
+            new FileService(),
+            store).RecoverPendingAsync();
+
+        Assert.Equal(0, restored);
+        Assert.True(
+            File.Exists(destinationPath),
+            "no identity means no automatic move");
     }
 
     private DesktopOrganizationFileSnapshot Snapshot(

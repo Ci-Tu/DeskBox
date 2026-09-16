@@ -310,13 +310,47 @@ public sealed class OrganizerService
             _autoOrganizationSuppressions.CompleteOperation(
                 operationId,
                 plans.Select(plan => plan.DestinationPath));
-            await AddHistoryEntryAsync(CreateFailureEntry(
-                widget.Id,
-                widgetName,
-                OrganizationActionType.MoveBackToDesktop,
-                move: true,
-                normalizedSourcePaths,
-                ex.Message));
+            // Explorer semantics: items that physically completed before the
+            // failure ride the exception — record them as an undoable entry
+            // instead of folding them into the failure record.
+            IReadOnlyList<FileService.FileTransferResult> completed =
+                ex is FileService.IFileTransferWithCompletedResults partial
+                    ? partial.CompletedResults
+                    : [];
+            if (completed.Count > 0)
+            {
+                await AddHistoryEntryAsync(CreateHistoryEntry(
+                    widget.Id,
+                    widgetName,
+                    OrganizationActionType.MoveBackToDesktop,
+                    move: true,
+                    completed.Select(result => new OrganizationHistoryItem
+                    {
+                        Name = Path.GetFileName(result.DestinationPath),
+                        SourcePath = result.SourcePath,
+                        DestinationPath = result.DestinationPath,
+                        TargetWidgetId = widget.Id,
+                        TargetWidgetName = widgetName
+                    }).ToList(),
+                    canUndo: true));
+            }
+
+            string[] failedPaths = normalizedSourcePaths
+                .Except(
+                    completed.Select(result => result.SourcePath),
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (failedPaths.Length > 0)
+            {
+                await AddHistoryEntryAsync(CreateFailureEntry(
+                    widget.Id,
+                    widgetName,
+                    OrganizationActionType.MoveBackToDesktop,
+                    move: true,
+                    failedPaths,
+                    ex.Message));
+            }
+
             throw;
         }
     }
@@ -389,11 +423,36 @@ public sealed class OrganizerService
                 operationId,
                 results.Select(result => result.DestinationPath));
         }
-        catch
+        catch (Exception ex)
         {
             _autoOrganizationSuppressions.CompleteOperation(
                 operationId,
                 plans.Select(plan => plan.DestinationPath));
+            // Explorer semantics: record the items that physically completed
+            // before the failure so a retry only targets the rest.
+            if (ex is FileService.IFileTransferWithCompletedResults partial)
+            {
+                foreach (FileService.FileTransferResult result in partial.CompletedResults)
+                {
+                    int index = plans.FindIndex(plan => string.Equals(
+                        plan.SourcePath,
+                        result.SourcePath,
+                        StringComparison.OrdinalIgnoreCase));
+                    if (index < 0 || index >= historyEntry.Items.Count)
+                    {
+                        continue;
+                    }
+
+                    historyEntry.Items[index].IsRestored = true;
+                    historyEntry.Items[index].RestoredPath = result.DestinationPath;
+                    historyEntry.Items[index].DestinationPath = result.DestinationPath;
+                }
+
+                historyEntry.IsUndone = historyEntry.Items.All(item => item.IsRestored);
+                historyEntry.CanUndo = !historyEntry.IsUndone;
+                await _settingsService.SaveAsync(notifySubscribers: false);
+            }
+
             throw;
         }
 

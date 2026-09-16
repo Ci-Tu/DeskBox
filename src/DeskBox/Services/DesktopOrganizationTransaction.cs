@@ -106,6 +106,7 @@ public sealed partial class DesktopOrganizationTransaction
                     if (item.Completed) return;
                     item.DestinationPath = result.DestinationPath;
                     item.Completed = true;
+                    RecordDestinationIdentity(item);
                     _recoveryStore.Save(journal);
                 }
 
@@ -567,6 +568,40 @@ public sealed partial class DesktopOrganizationTransaction
     {
         int code = exception.HResult & 0xFFFF;
         return code is 32 or 33;
+    }
+
+    /// <summary>
+    /// Captures the object identity at the item's final resting path right
+    /// after a physical move completed (files and directories alike). For a
+    /// forward journal that path is the organization destination; for an undo
+    /// journal it is the restore path. Recovery may only move the item again
+    /// while the object at that path still carries this identity; a failed
+    /// capture leaves it null, which means no automatic authority.
+    /// </summary>
+    private static void RecordDestinationIdentity(DesktopOrganizationRecoveryItem item) =>
+        RecordDestinationIdentity(item, item.DestinationPath);
+
+    internal static void RecordDestinationIdentity(
+        DesktopOrganizationRecoveryItem item,
+        string path)
+    {
+        // Captures only the object identity. The Size/LastWriteTimeUtc
+        // snapshot keeps the values from organization time — they are the
+        // conjunction baseline, so a file whose content changed after the
+        // move (same object id, different size/mtime) still fails the match.
+        if (FileService.TryCaptureSourceIdentity(path) is not { } identity ||
+            identity.FileId is not { } fileId)
+        {
+            item.DestinationIdentity = null;
+            return;
+        }
+
+        item.DestinationIdentity = new DesktopOrganizationDestinationIdentity
+        {
+            VolumeSerialNumber = identity.VolumeSerialNumber,
+            FileIdHigh = fileId.High,
+            FileIdLow = fileId.Low,
+        };
     }
 
     private static bool EntryExists(string path) =>

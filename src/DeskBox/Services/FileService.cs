@@ -2860,11 +2860,19 @@ public sealed partial class FileService
     /// stable file keys grant no deletion authority at all: matching never
     /// falls back to length + timestamp for destructive operations.
     /// </summary>
+    /// <summary>
+    /// A full 128-bit file system object id (FILE_ID_128). The legacy 64-bit
+    /// nFileIndex from BY_HANDLE_FILE_INFORMATION is not guaranteed unique
+    /// on ReFS, so identity comparisons use the full id from
+    /// GetFileInformationByHandleEx(FileIdInfo).
+    /// </summary>
+    internal readonly record struct FileId128(ulong High, ulong Low);
+
     internal readonly record struct FileTransferSourceIdentity(
         long Length,
         DateTime LastWriteTimeUtc,
         uint VolumeSerialNumber,
-        ulong? FileKey);
+        FileId128? FileId);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct ByHandleFileInformation
@@ -2893,19 +2901,23 @@ public sealed partial class FileService
     {
         try
         {
-            using var stream = new FileStream(
+            // Native open (not FileStream): FILE_FLAG_BACKUP_SEMANTICS makes
+            // this work for DIRECTORIES as well as files, so recovery
+            // receipts can identify folder items too.
+            using SafeFileHandle handle = CreateFileW(
                 path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read | FileShare.Write);
-            if (!GetFileInformationByHandle(
-                    stream.SafeFileHandle,
-                    out ByHandleFileInformation information))
+                GenericReadAccess,
+                ShareRead | ShareWrite,
+                IntPtr.Zero,
+                OpenExisting,
+                FileFlagBackupSemantics,
+                IntPtr.Zero);
+            if (handle.IsInvalid)
             {
                 return null;
             }
 
-            return IdentityFromInformation(information);
+            return IdentityFromHandle(handle);
         }
         catch
         {
@@ -2916,6 +2928,7 @@ public sealed partial class FileService
     private static FileTransferSourceIdentity? IdentityFromInformation(
         in ByHandleFileInformation information)
     {
+        // Legacy 64-bit view: only used where a 128-bit query already failed.
         ulong fileIndex =
             ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
         long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
@@ -2925,7 +2938,7 @@ public sealed partial class FileService
             length,
             DateTime.FromFileTimeUtc(lastWrite),
             information.VolumeSerialNumber,
-            fileIndex == 0 ? null : fileIndex);
+            fileIndex == 0 ? null : new FileId128(0, fileIndex));
     }
 
     internal static bool SourceFileMatchesIdentity(
@@ -2940,7 +2953,7 @@ public sealed partial class FileService
         FileTransferSourceIdentity current,
         FileTransferSourceIdentity expected)
     {
-        if (expected.FileKey is null && current.FileKey is null)
+        if (expected.FileId is null && current.FileId is null)
         {
             // This file system provides no stable object ids: metadata
             // alone is not an ownership proof, so destructive operations
@@ -2948,17 +2961,17 @@ public sealed partial class FileService
             return false;
         }
 
-        if ((expected.FileKey is null) != (current.FileKey is null))
+        if ((expected.FileId is null) != (current.FileId is null))
         {
-            // The same file system answers file-key queries consistently for
-            // the same object; one stat seeing a key and the other not means
+            // The same file system answers file-id queries consistently for
+            // the same object; one stat seeing an id and the other not means
             // the object at the path is no longer the one that was captured.
             return false;
         }
 
-        if (expected.FileKey is { } expectedKey &&
-            current.FileKey is { } currentKey &&
-            expectedKey != currentKey)
+        if (expected.FileId is { } expectedId &&
+            current.FileId is { } currentId &&
+            expectedId != currentId)
         {
             // The path holds a different file object than the one copied.
             return false;
@@ -3038,19 +3051,65 @@ public sealed partial class FileService
         int dwBufferSize);
 
     private const int FileBasicInfoClass = 0;
+    private const int FileIdInfoClass = 18; // FILE_INFO_BY_HANDLE_CLASS.FileIdInfo
     private const uint ReadOnlyAttribute = 0x00000001;
     private const uint FileAttributeNormal = 0x00000080;
+    private const uint FileFlagBackupSemantics = 0x02000000;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct FileIdInfo
+    {
+        public uint VolumeSerialNumber;
+        public fixed byte FileId[16];
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern unsafe bool GetFileInformationByHandleEx(
+        SafeFileHandle hFile,
+        int fileInformationClass,
+        out FileIdInfo lpFileInformation,
+        int dwBufferSize);
 
     /// <summary>
     /// Reads the object identity from an already-open handle. The identity
     /// describes exactly the object the handle is bound to, so callers that
-    /// keep the handle open can validate and act without any path race.
+    /// keep the handle open can validate and act without any path race. The
+    /// id comes from FileIdInfo (full 128 bits — the 64-bit index is not
+    /// unique on ReFS); length and timestamps come from the classic
+    /// BY_HANDLE view in the same call sequence.
     /// </summary>
     internal static FileTransferSourceIdentity? IdentityFromHandle(SafeFileHandle handle)
     {
-        return GetFileInformationByHandle(handle, out ByHandleFileInformation information)
-            ? IdentityFromInformation(information)
-            : null;
+        if (!GetFileInformationByHandle(handle, out ByHandleFileInformation information))
+        {
+            return null;
+        }
+
+        long length = ((long)information.FileSizeHigh << 32) | information.FileSizeLow;
+        long lastWrite =
+            ((long)information.LastWriteTimeHigh << 32) | information.LastWriteTimeLow;
+        unsafe
+        {
+            FileIdInfo idInfo = default;
+            if (!GetFileInformationByHandleEx(
+                    handle,
+                    FileIdInfoClass,
+                    out idInfo,
+                    sizeof(FileIdInfo)))
+            {
+                // The 128-bit query failed (very old / exotic providers): keep
+                // the legacy 64-bit index so identity stays usable where it was.
+                return IdentityFromInformation(information);
+            }
+
+            ulong low = *(ulong*)idInfo.FileId;
+            ulong high = *(ulong*)(idInfo.FileId + 8);
+            return new FileTransferSourceIdentity(
+                length,
+                DateTime.FromFileTimeUtc(lastWrite),
+                idInfo.VolumeSerialNumber,
+                new FileId128(high, low));
+        }
     }
 
     /// <summary>
