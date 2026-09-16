@@ -115,7 +115,10 @@ public sealed class OrganizerService
             // Capture undo receipts off the UI thread: each is a native
             // open+stat pair, and a 2000-item drop would otherwise freeze
             // the caller for seconds after the transfer already finished.
-            var receipts = await CaptureUndoReceiptsAsync(results);
+            // Copy imports can never be undone, so they skip the cost.
+            var receipts = move
+                ? await CaptureUndoReceiptsAsync(results)
+                : UndoReceiptBatch.Empty;
             var historyEntry = CreateHistoryEntry(
                 widget.Id,
                 widgetName,
@@ -149,7 +152,9 @@ public sealed class OrganizerService
                     result =>
                         !File.Exists(result.SourcePath) &&
                         !Directory.Exists(result.SourcePath));
-                var partialReceipts = await CaptureUndoReceiptsAsync(completedResults);
+                var partialReceipts = canUndoCompletedMove
+                    ? await CaptureUndoReceiptsAsync(completedResults)
+                    : UndoReceiptBatch.Empty;
                 await AddHistoryEntryAsync(CreateHistoryEntry(
                     widget.Id,
                     widgetName,

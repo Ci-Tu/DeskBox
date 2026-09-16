@@ -133,6 +133,53 @@ public sealed class RenderWindowBehaviorTests
         Assert.Same(visible[99], rendered[99]);
     }
 
+    [Fact]
+    public void ComputeViewportRenderMinimum_CoversViewportPlusBuffer()
+    {
+        // A prefix that never overflows leaves unrendered items unreachable
+        // with no scrollbar; the minimum window must come from the viewport
+        // itself, not from a fixed constant.
+        int minimum = WidgetViewModel.ComputeViewportRenderMinimum(
+            viewportWidth: 1100,
+            viewportHeight: 800,
+            itemWidth: 75,
+            itemHeight: 85,
+            bufferRows: 2);
+        // 15 columns x (10 visible + 2 buffer) rows.
+        Assert.Equal(15 * 12, minimum);
+    }
+
+    [Fact]
+    public void ComputeViewportRenderMinimum_NeverShrinksBelowInitialSize()
+    {
+        // A tiny widget (small viewport) must not force hundreds of tiles
+        // through the growth path either.
+        int minimum = WidgetViewModel.ComputeViewportRenderMinimum(
+            viewportWidth: 150,
+            viewportHeight: 80,
+            itemWidth: 75,
+            itemHeight: 85,
+            bufferRows: 2);
+        Assert.True(minimum >= 30);
+    }
+
+    [Fact]
+    public void ComputeViewportRenderMinimum_InvalidDimensionsKeepInitialSize()
+    {
+        Assert.Equal(
+            30,
+            WidgetViewModel.ComputeViewportRenderMinimum(0, 800, 75, 85, 2));
+        Assert.Equal(
+            30,
+            WidgetViewModel.ComputeViewportRenderMinimum(1100, 0, 75, 85, 2));
+        Assert.Equal(
+            30,
+            WidgetViewModel.ComputeViewportRenderMinimum(1100, 800, 0, 85, 2));
+        Assert.Equal(
+            30,
+            WidgetViewModel.ComputeViewportRenderMinimum(1100, 800, 75, 0, 2));
+    }
+
     private static List<WidgetItem> CreateItems(int count)
     {
         var items = new List<WidgetItem>(count);

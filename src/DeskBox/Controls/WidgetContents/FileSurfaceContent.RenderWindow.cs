@@ -1,3 +1,4 @@
+using DeskBox.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -20,6 +21,9 @@ public sealed partial class FileSurfaceContent
         ItemsList.Loaded += ItemsView_LoadedForRenderWindow;
         ItemsGrid.LayoutUpdated += ItemsView_LayoutUpdatedForRenderWindow;
         ItemsList.LayoutUpdated += ItemsView_LayoutUpdatedForRenderWindow;
+        ItemsGrid.SizeChanged += ItemsView_SizeChangedForRenderWindow;
+        ItemsList.SizeChanged += ItemsView_SizeChangedForRenderWindow;
+        ViewModel.PropertyChanged += ViewModel_PropertyChangedForRenderWindow;
     }
 
     /// <summary>
@@ -32,6 +36,9 @@ public sealed partial class FileSurfaceContent
         ItemsList.Loaded -= ItemsView_LoadedForRenderWindow;
         ItemsGrid.LayoutUpdated -= ItemsView_LayoutUpdatedForRenderWindow;
         ItemsList.LayoutUpdated -= ItemsView_LayoutUpdatedForRenderWindow;
+        ItemsGrid.SizeChanged -= ItemsView_SizeChangedForRenderWindow;
+        ItemsList.SizeChanged -= ItemsView_SizeChangedForRenderWindow;
+        ViewModel.PropertyChanged -= ViewModel_PropertyChangedForRenderWindow;
         if (_gridRenderWindowScrollViewer is { } gridScrollViewer)
         {
             gridScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
@@ -41,6 +48,66 @@ public sealed partial class FileSurfaceContent
         {
             listScrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
             _listRenderWindowScrollViewer = null;
+        }
+    }
+
+    private void ItemsView_SizeChangedForRenderWindow(
+        object sender,
+        Microsoft.UI.Xaml.SizeChangedEventArgs e) =>
+        EnsureRenderWindowCoversViewport(sender as ListViewBase);
+
+    private void ViewModel_PropertyChangedForRenderWindow(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(WidgetViewModel.IconCellWidth) or
+            nameof(WidgetViewModel.IconCellHeight))
+        {
+            EnsureRenderWindowCoversViewport(ItemsGrid);
+        }
+    }
+
+    /// <summary>
+    /// Raises the render window to cover the current viewport directly from
+    /// its dimensions and item size — the extent-based fallback below only
+    /// reacts after a layout pass, so a fixed small prefix that never
+    /// overflows could leave unrendered items with no scrollbar at all.
+    /// </summary>
+    private void EnsureRenderWindowCoversViewport(ListViewBase? itemsView)
+    {
+        if (_isDisposed || itemsView is null)
+        {
+            return;
+        }
+
+        double viewportWidth = itemsView.ActualWidth;
+        double viewportHeight = itemsView.ActualHeight;
+        if (viewportWidth <= 0 || viewportHeight <= 0)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(itemsView, ItemsGrid))
+        {
+            ViewModel.EnsureRenderWindowCoversViewport(
+                WidgetViewModel.ComputeViewportRenderMinimum(
+                    viewportWidth,
+                    viewportHeight,
+                    ViewModel.IconCellWidth,
+                    ViewModel.IconCellHeight,
+                    bufferRows: 2));
+        }
+        else
+        {
+            // List rows size to content; the configured tile height is the
+            // closest stable estimate without waiting for a measured row.
+            ViewModel.EnsureRenderWindowCoversViewport(
+                WidgetViewModel.ComputeViewportRenderMinimum(
+                    viewportWidth,
+                    viewportHeight,
+                    Math.Max(1, viewportWidth),
+                    Math.Max(1, ViewModel.IconCellHeight),
+                    bufferRows: 2));
         }
     }
 
@@ -61,6 +128,7 @@ public sealed partial class FileSurfaceContent
             StoreRenderWindowScrollViewer(itemsView, scrollViewer);
             scrollViewer.ViewChanged -= ItemsView_ViewChangedForRenderWindow;
             scrollViewer.ViewChanged += ItemsView_ViewChangedForRenderWindow;
+            EnsureRenderWindowCoversViewport(itemsView);
             TryGrowRenderWindowToFillViewport(scrollViewer);
             return;
         }

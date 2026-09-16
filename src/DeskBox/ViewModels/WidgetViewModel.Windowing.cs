@@ -95,6 +95,53 @@ public partial class WidgetViewModel
         ReconcileRenderWindow();
     }
 
+    /// <summary>
+    /// Raises the window so the rendered prefix covers a viewport-sized
+    /// page. The fixed initial size (30) can sit well below what a large
+    /// widget viewport shows, and the extent-based growth fallback only
+    /// reacts after a full layout pass — a prefix that never overflows
+    /// leaves unrendered items unreachable with no scrollbar. The caller
+    /// computes the page size from its real viewport and item dimensions;
+    /// this only clamps it to the visible item count.
+    /// </summary>
+    internal void EnsureRenderWindowCoversViewport(int minimumCount)
+    {
+        if (_isDisposed || minimumCount <= _renderWindowCount)
+        {
+            return;
+        }
+
+        _renderWindowCount = Math.Min(minimumCount, VisibleItemCount);
+        ReconcileRenderWindow();
+        if (!UsesStackProjection)
+        {
+            StartItemHydration();
+        }
+    }
+
+    /// <summary>
+    /// The smallest render window that fills a viewport: enough columns for
+    /// the width, enough rows for the height plus two buffer rows so the
+    /// scrollbar has extent to grow from. Pure so tests can pin it.
+    /// </summary>
+    internal static int ComputeViewportRenderMinimum(
+        double viewportWidth,
+        double viewportHeight,
+        double itemWidth,
+        double itemHeight,
+        int bufferRows)
+    {
+        if (viewportWidth <= 0 || viewportHeight <= 0 ||
+            itemWidth <= 0 || itemHeight <= 0)
+        {
+            return RenderWindowInitialSize;
+        }
+
+        int columns = (int)Math.Ceiling(viewportWidth / itemWidth);
+        int rows = (int)Math.Ceiling(viewportHeight / itemHeight) + bufferRows;
+        return Math.Max(RenderWindowInitialSize, columns * Math.Max(1, rows));
+    }
+
     internal void GrowRenderWindow(int chunk = RenderWindowGrowChunk)
     {
         if (_isDisposed || !CanGrowRenderWindow)
