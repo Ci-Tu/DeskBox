@@ -552,9 +552,7 @@ public partial class WidgetViewModel
                 Items[existingIndex] = item;
             }
 
-            NormalizeSortOrder();
-            PersistManualOrderSnapshotIfChanged();
-            StartItemHydration();
+            FinishItemUpsert();
             return true;
         }
 
@@ -570,10 +568,27 @@ public partial class WidgetViewModel
             : GetSortedInsertIndex(item);
         item.SortOrder = insertIndex;
         Items.Insert(insertIndex, item);
+        FinishItemUpsert();
+        return true;
+    }
+
+    /// <summary>
+    /// Per-upsert derived work: sort-order normalization, manual-order
+    /// persistence, metadata hydration. A batch mutation scope defers these
+    /// to its single end-of-batch finalization, so a 2000-file import runs
+    /// them once instead of once per file.
+    /// </summary>
+    private void FinishItemUpsert()
+    {
+        if (_itemMutationBatchDepth > 0)
+        {
+            MarkItemMutationBatchDirty();
+            return;
+        }
+
         NormalizeSortOrder();
         PersistManualOrderSnapshotIfChanged();
         StartItemHydration();
-        return true;
     }
 
     private void RemoveItemByPath(string path, bool persistManualOrder = true)
@@ -591,6 +606,12 @@ public partial class WidgetViewModel
             resetTransientFailures: true);
         Items.RemoveAt(index);
         RemoveFileAddedAt(path);
+        if (_itemMutationBatchDepth > 0)
+        {
+            MarkItemMutationBatchDirty();
+            return;
+        }
+
         NormalizeSortOrder();
         if (persistManualOrder)
         {

@@ -33,12 +33,12 @@ public partial class WidgetViewModel
     private bool _renderWindowReconcileQueued;
 
     /// <summary>
-    /// Fired (already coalesced per dispatcher pass) after the rendered
-    /// prefix reconciled against a source change. The view listens to
-    /// re-check viewport coverage: bulk imports change the item count
-    /// without changing any geometry, so Loaded/SizeChanged alone cannot
-    /// keep the window covering the viewport across the activation
-    /// threshold.
+    /// Fired (coalesced per dispatcher pass, and deferred to the batch
+    /// finalization for bulk imports) after the rendered prefix reconciled
+    /// against a source change. The view listens to re-check viewport
+    /// coverage: bulk imports change the item count without changing any
+    /// geometry, so Loaded/SizeChanged alone cannot keep the window covering
+    /// the viewport across the activation threshold.
     /// </summary>
     internal event Action? RenderWindowSourceChanged;
 
@@ -103,7 +103,21 @@ public partial class WidgetViewModel
 
     private void QueueRenderWindowReconcile()
     {
-        if (_isDisposed || _renderWindowReconcileQueued)
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_itemMutationBatchDepth > 0)
+        {
+            // A bulk import defers this to the batch finalization; per-insert
+            // reconciles would re-mirror the prefix once per dispatcher pass
+            // and log a line each.
+            MarkItemMutationBatchDirty();
+            return;
+        }
+
+        if (_renderWindowReconcileQueued)
         {
             return;
         }
