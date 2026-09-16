@@ -1,3 +1,5 @@
+using DeskBox.Models;
+
 namespace DeskBox.Services;
 
 public enum StartupRegistrationState
@@ -13,7 +15,9 @@ public enum StartupRegistrationState
 
 public sealed record StartupOperationResult(
     StartupRegistrationState State,
-    string ErrorMessage = "")
+    string ErrorMessage = "",
+    StartupMode? EffectiveMode = null,
+    bool UsedFallback = false)
 {
     public bool IsEnabled => State == StartupRegistrationState.Enabled;
 

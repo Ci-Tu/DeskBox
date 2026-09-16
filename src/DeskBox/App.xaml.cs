@@ -90,6 +90,8 @@ public partial class App : Application
     internal event Action<int>? OnboardingFileImportCompleted;
     internal event Action<bool>? OnboardingWidgetsVisibilityChanged;
     private NativeAppNotificationService? _nativeNotificationService;
+    private NativeNotificationActivationBootstrap? _nativeNotificationBootstrap;
+    private bool _initialNotificationHandled;
     private TodoReminderService? _todoReminderService;
     private DisplayAreaWatcherService? _displayAreaWatcher;
     private DisplayTopologyTransitionCoordinator? _displayTopologyTransitionCoordinator;
@@ -173,8 +175,6 @@ public partial class App : Application
         _processStartupLaunchDetected = StartupLaunchPolicy.IsStartupLaunch(
             Environment.GetCommandLineArgs(),
             isStartupTaskActivation: IsStartupTaskActivation());
-        NativeAppNotificationActivation? nativeNotificationActivation =
-            TryGetCurrentNativeNotificationActivation();
         _activationEvent = new EventWaitHandle(
             false,
             EventResetMode.AutoReset,
@@ -183,6 +183,17 @@ public partial class App : Application
             true,
             DeskBoxDataPathService.Current.SingleInstanceMutexName,
             out bool createdNew);
+        bool notificationLaunch = NativeNotificationActivationBootstrap.IsNotificationLaunch(
+            Environment.GetCommandLineArgs());
+        if (createdNew || notificationLaunch)
+        {
+            s_startupLaunchQuietExit = _processStartupLaunchDetected || notificationLaunch;
+            // Cover constructor/COM initialization as well as OnLaunched.
+            StartStartupWatchdog();
+            EnsureNativeNotificationService();
+        }
+        NativeAppNotificationActivation? nativeNotificationActivation =
+            TryGetCurrentNativeNotificationActivation();
         if (!createdNew)
         {
             string? jumpListArg = nativeNotificationActivation is null &&
@@ -213,6 +224,13 @@ public partial class App : Application
                     $"userInput={writeResult.Envelope?.UserInput.Count ?? 0} " +
                     $"error={writeResult.Error ?? "none"}");
             }
+            else if (notificationLaunch)
+            {
+                Log("[Notification] Secondary notification activation unavailable; leaving the primary instance running");
+                _nativeNotificationService?.Dispose();
+                DrainLogQueue();
+                Environment.Exit(1);
+            }
             else if (_processStartupLaunchDetected)
             {
                 Log("Another instance running; startup launch exiting silently");
@@ -236,6 +254,8 @@ public partial class App : Application
                 Log($"Failed to signal existing instance: {ex}");
             }
 
+            _nativeNotificationService?.Dispose();
+            DrainLogQueue();
             Environment.Exit(0);
         }
 
@@ -261,7 +281,7 @@ public partial class App : Application
         QuickCaptureService = Services.GetRequiredService<QuickCaptureService>();
         ResizeGuideOverlay = Services.GetRequiredService<ResizeGuideOverlayService>();
 
-        StartupService.Configure(StartupServiceFactory.Create(DistributionService));
+        StartupService.Configure(StartupServiceFactory.Create(DistributionService, SettingsService));
         AppUpdateService.CheckCompleted += OnUpdateCheckCompleted;
         UnhandledException += OnUnhandledException;
         Log($"Distribution channel={DistributionService.ChannelName} packaged={DistributionService.IsPackaged}");
@@ -804,10 +824,15 @@ public partial class App : Application
 
     private static bool IsStartupTaskActivation()
     {
+        if (!AppDistributionService.Current.IsPackaged)
+            return false;
         try
         {
-            return AppInstance.GetCurrent().GetActivatedEventArgs().Kind ==
-                   ExtendedActivationKind.StartupTask;
+            // The platform API does not enter Windows App SDK notification
+            // deserialization. Startup detection must also work if notifications
+            // cannot be registered on this machine.
+            return Windows.ApplicationModel.AppInstance.GetActivatedEventArgs()?.Kind ==
+                   Windows.ApplicationModel.Activation.ActivationKind.StartupTask;
         }
         catch (Exception ex)
         {
@@ -1632,21 +1657,47 @@ public partial class App : Application
 
     private void StartNativeNotificationService()
     {
-        _nativeNotificationService?.Dispose();
-        _nativeNotificationService = new NativeAppNotificationService(
-            HandleNativeNotificationActivation);
-        if (_nativeNotificationService.Register())
+        EnsureNativeNotificationService();
+        HandleCurrentNativeNotificationActivation();
+    }
+
+    private void EnsureNativeNotificationService()
+    {
+        // Keep the constructor's registration and wait handle alive. Replacing
+        // it here could lose a notification received before settings/widgets load.
+        NativeAppNotificationService service = _nativeNotificationService ??=
+            new NativeAppNotificationService(QueueNativeNotificationActivation);
+        _nativeNotificationBootstrap ??= new NativeNotificationActivationBootstrap(
+            () => service.Register(),
+            ReadCurrentNativeNotificationActivation,
+            ex => Log($"[Notification] Activation bootstrap unavailable: {ex}"));
+    }
+
+    private static void QueueNativeNotificationActivation(NativeAppNotificationActivation activation)
+    {
+        try
         {
-            HandleCurrentNativeNotificationActivation();
+            NativeNotificationActivationEnvelopeWriteResult result =
+                PendingNativeNotificationActivationStore.Store(activation);
+            Log($"[Notification] Queued activation disposition={result.Disposition} error={result.Error ?? "none"}");
+            if (result.Disposition == NativeNotificationActivationEnvelopeWriteDisposition.Stored)
+                _activationEvent?.Set();
+        }
+        catch (Exception ex)
+        {
+            Log($"[Notification] Activation queue failed: {ex}");
         }
     }
 
     private void HandleCurrentNativeNotificationActivation()
     {
+        if (_initialNotificationHandled)
+            return;
         NativeAppNotificationActivation? activation = TryGetCurrentNativeNotificationActivation();
         if (activation is not null)
         {
-            HandleNativeNotificationActivation(activation);
+            _initialNotificationHandled = true;
+            QueueNativeNotificationActivation(activation);
         }
     }
 
@@ -2086,7 +2137,7 @@ public partial class App : Application
         return parsed;
     }
 
-    private static NativeAppNotificationActivation? TryGetCurrentNativeNotificationActivation()
+    private NativeAppNotificationActivation? TryGetCurrentNativeNotificationActivation()
     {
 #if DESKBOX_NATIVE_AOT && DESKBOX_AOT_SMOKE_HARNESS
         NativeAppNotificationActivation? controlledActivation =
@@ -2097,36 +2148,11 @@ public partial class App : Application
         }
 #endif
 
-        try
-        {
-            var activatedArgs = AppInstance.GetCurrent().GetActivatedEventArgs();
-            if (activatedArgs.Kind == ExtendedActivationKind.AppNotification &&
-                activatedArgs.Data is AppNotificationActivatedEventArgs notificationArgs)
-            {
-                var userInput = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var input in notificationArgs.UserInput)
-                {
-                    if (!string.IsNullOrWhiteSpace(input.Key))
-                    {
-                        userInput[input.Key] = input.Value ?? string.Empty;
-                    }
-                }
-
-                return new NativeAppNotificationActivation(
-                    notificationArgs.Argument,
-                    userInput,
-                    NativeAppNotificationActivationSource.CurrentAppInstance,
-                    DateTimeOffset.UtcNow,
-                    Environment.ProcessId);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"[Notification] Failed to read native notification activation args: {ex.Message}");
-        }
-
-        return null;
+        return _nativeNotificationBootstrap?.Capture();
     }
+
+    private NativeAppNotificationActivation? ReadCurrentNativeNotificationActivation() =>
+        _nativeNotificationService?.ReadCurrentActivation();
 
     private static void StorePendingJumpListArgument(string argument)
     {

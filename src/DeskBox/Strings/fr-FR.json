@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Méthode de démarrage",
+    "Settings.AutoStart.Mode.Description": "Le mode standard se gère dans les applications de démarrage Windows ; une tâche planifiée peut tenter un démarrage plus tôt.",
+    "Settings.AutoStart.Mode.Standard": "Standard (recommandé)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Tâche planifiée",
+    "Settings.AutoStart.Fallback": "La tâche planifiée n’a pas pu être activée. Le démarrage standard est maintenant actif.",
+    "Settings.AutoStart.ChangeFailed": "Les paramètres de démarrage n’ont pas pu être mis à jour. L’interrupteur indique l’état actuel du système.",
     "Settings.AutoStart.TaskDisabled": "Désactivé dans le Planificateur de tâches. Activez ce bouton pour le réactiver.",
     "Settings.Performance.Title": "Performances et ressources",
     "Display.VirtualAdapter.Warning.Title": "Écran virtuel détecté",

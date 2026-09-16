@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "طريقة بدء التشغيل",
+    "Settings.AutoStart.Mode.Description": "تُدار الطريقة القياسية ضمن تطبيقات بدء التشغيل في Windows؛ ويمكن للمهمة المجدولة محاولة البدء مبكرًا.",
+    "Settings.AutoStart.Mode.Standard": "قياسي (موصى به)",
+    "Settings.AutoStart.Mode.ScheduledTask": "مهمة مجدولة",
+    "Settings.AutoStart.Fallback": "تعذّر تمكين المهمة المجدولة. أصبح بدء التشغيل القياسي مفعّلًا.",
+    "Settings.AutoStart.ChangeFailed": "تعذّر تحديث إعدادات بدء التشغيل. يعرض المفتاح حالة النظام الحالية.",
     "Settings.AutoStart.TaskDisabled": "تم تعطيله في مجدول المهام. شغّل هذا المفتاح لتمكينه مجددًا.",
     "Settings.Performance.Title": "الأداء والموارد",
     "Display.VirtualAdapter.Warning.Title": "تم اكتشاف شاشة افتراضية",

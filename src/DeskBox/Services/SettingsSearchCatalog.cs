@@ -12,6 +12,7 @@ internal static class SettingsSearchCatalog
         new("General", "Settings.Language.Title", "Settings.Language.Description"),
         new("General", "Settings.AttachmentStorageMode.Title", "Settings.AttachmentStorageMode.Description"),
         new("General", "Settings.AutoStart.Title", "Settings.AutoStart.Description"),
+        new("General", "Settings.AutoStart.Mode.Title", "Settings.AutoStart.Mode.Description"),
         new("General", "Settings.Onboarding.Title", "Settings.Onboarding.Description"),
         new("Appearance", "Settings.Theme.Title", "Settings.Theme.Description"),
         new("Appearance", "Settings.TrayIcon.Title", "Settings.TrayIcon.Description"),

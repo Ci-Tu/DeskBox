@@ -16,6 +16,9 @@ public sealed class StartupRegistryAccessTests
 
             var store = new RegistryStartupRunEntryStore(path, "Probe");
             Assert.Equal("startup-command", await Task.Run(store.Read));
+            const string unicodeCommand = "\"C:\\小 桌面\\DeskBox.exe\" --startup";
+            await Task.Run(() => store.Write(unicodeCommand));
+            Assert.Equal(unicodeCommand, await Task.Run(store.Read));
             await Task.Run(store.Delete);
             using RegistryKey? verify = Registry.CurrentUser.OpenSubKey(path);
             Assert.Null(verify?.GetValue("Probe"));

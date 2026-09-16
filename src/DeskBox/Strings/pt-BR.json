@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Método de inicialização",
+    "Settings.AutoStart.Mode.Description": "O modo padrão é gerenciado nos aplicativos de inicialização do Windows; uma tarefa agendada pode tentar iniciar mais cedo.",
+    "Settings.AutoStart.Mode.Standard": "Padrão (recomendado)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Tarefa agendada",
+    "Settings.AutoStart.Fallback": "Não foi possível ativar a tarefa agendada. A inicialização padrão está ativa.",
+    "Settings.AutoStart.ChangeFailed": "Não foi possível atualizar as configurações de inicialização. O botão mostra o estado atual do sistema.",
     "Settings.AutoStart.TaskDisabled": "Desativado no Agendador de Tarefas. Ative esta opção para habilitar novamente.",
     "Settings.Performance.Title": "Desempenho e recursos",
     "Display.VirtualAdapter.Warning.Title": "Tela virtual detectada",

@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Startmethode",
+    "Settings.AutoStart.Mode.Description": "Standard wird über die Windows-Autostart-Apps verwaltet; eine geplante Aufgabe kann einen früheren Start versuchen.",
+    "Settings.AutoStart.Mode.Standard": "Standard (empfohlen)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Geplante Aufgabe",
+    "Settings.AutoStart.Fallback": "Die geplante Aufgabe konnte nicht aktiviert werden. Der Standard-Autostart ist jetzt aktiv.",
+    "Settings.AutoStart.ChangeFailed": "Die Autostart-Einstellungen konnten nicht aktualisiert werden. Der Schalter zeigt den aktuellen Systemstatus.",
     "Settings.AutoStart.TaskDisabled": "In der Aufgabenplanung deaktiviert. Mit diesem Schalter erneut aktivieren.",
     "Settings.Performance.Title": "Leistung und Ressourcen",
     "Display.VirtualAdapter.Warning.Title": "Virtueller Bildschirm erkannt",

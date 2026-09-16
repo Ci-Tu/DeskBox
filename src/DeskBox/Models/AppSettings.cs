@@ -50,6 +50,9 @@ public class AppSettings
     /// </summary>
     public bool AutoStartDefaultApplied { get; set; }
 
+    /// <summary>Null adopts the existing registration on upgrade; new installs use Standard.</summary>
+    public StartupMode? AutoStartMode { get; set; }
+
     /// <summary>Performance state. Selectable presets are <c>Balanced</c> and <c>ResourceSaver</c>; <c>Custom</c> records manual detail changes.</summary>
     public string PerformanceMode { get; set; } = "ResourceSaver";
 

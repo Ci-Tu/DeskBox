@@ -1,9 +1,10 @@
 using DeskBox.Helpers;
+using DeskBox.Models;
 using Microsoft.Win32;
 
 namespace DeskBox.Services;
 
-public sealed class DirectStartupService : IStartupService
+public sealed partial class DirectStartupService : IStartupService
 {
     private const string AppName = "DeskBox";
     private readonly object _registrationLock = new();
@@ -16,7 +17,7 @@ public sealed class DirectStartupService : IStartupService
     private readonly Action<string> _log;
     private readonly Func<bool> _runEntryApprovedProvider;
 
-    public DirectStartupService()
+    public DirectStartupService(SettingsService? settingsService = null)
         : this(
             new DirectStartupTaskBackend(),
             new RegistryStartupRunEntryStore(),
@@ -27,7 +28,13 @@ public sealed class DirectStartupService : IStartupService
             path => ShortcutHelper.ReadStoredMetadata(path)?.TargetPath,
             File.Delete,
             null,
-            null)
+            null,
+            settingsService is null ? null : () => settingsService.Settings.AutoStartMode,
+            settingsService is null ? null : mode =>
+            {
+                settingsService.Settings.AutoStartMode = mode;
+                settingsService.SaveDebounced();
+            })
     {
     }
 
@@ -39,7 +46,9 @@ public sealed class DirectStartupService : IStartupService
         Func<string, string?>? shortcutTargetReader = null,
         Action<string>? shortcutDelete = null,
         Action<string>? logger = null,
-        Func<bool>? runEntryApprovedProvider = null)
+        Func<bool>? runEntryApprovedProvider = null,
+        Func<StartupMode?>? modeProvider = null,
+        Action<StartupMode>? modeWriter = null)
     {
         _taskBackend = taskBackend;
         _runEntryStore = runEntryStore;
@@ -50,6 +59,8 @@ public sealed class DirectStartupService : IStartupService
         _log = logger ?? (message =>
             global::DeskBox.App.Log($"[DirectStartupService] {message}"));
         _runEntryApprovedProvider = runEntryApprovedProvider ?? IsRunEntryApproved;
+        _modeProvider = modeProvider;
+        _modeWriter = modeWriter;
     }
 
 
@@ -84,6 +95,9 @@ public sealed class DirectStartupService : IStartupService
             // A failed migration leaves the existing Run registration usable.
             if (ownsRun || IsLegacyShortcutOwnedBy(executablePath))
                 return StartupRegistrationState.Enabled;
+
+            if (_taskBackend.ReadFailed)
+                return StartupRegistrationState.BlockedOrFailed;
 
             return !string.IsNullOrWhiteSpace(runValue) || task is not null
                 ? StartupRegistrationState.PathMismatch
@@ -147,7 +161,13 @@ public sealed class DirectStartupService : IStartupService
                 return new(StartupRegistrationState.DisabledByUser, cleanupError);
             }
 
-            return EnableTaskAndRemoveLegacyEntries(executablePath);
+            StartupMode mode = GetActiveMode(executablePath) ?? ResolveMode(executablePath);
+            StartupOperationResult result = mode == StartupMode.ScheduledTask
+                ? EnableTaskAndRemoveLegacyEntries(executablePath)
+                : EnableStandardAndRemoveAlternatives(executablePath);
+            if (result.IsEnabled)
+                SaveMode(result.EffectiveMode ?? mode);
+            return result;
         }
         catch (Exception ex)
         {
@@ -172,10 +192,22 @@ public sealed class DirectStartupService : IStartupService
                 "The startup task belongs to another DeskBox installation.");
 
         if (!TryEnableScheduledTask(executablePath))
-            return new(StartupRegistrationState.BlockedOrFailed, _taskBackend.LastError);
+        {
+            string taskError = _taskBackend.LastError;
+            StartupOperationResult fallback = EnableStandardAndRemoveAlternatives(executablePath);
+            return fallback with
+            {
+                ErrorMessage = CombineErrors(taskError, fallback.ErrorMessage),
+                UsedFallback = fallback.IsEnabled
+            };
+        }
 
         try
         {
+            // Remove the shortcut before Run, so a failed shortcut cleanup
+            // leaves the previous standard registration available for rollback.
+            if (!DeleteLegacyStartupShortcutIfOwnedBy(executablePath, out string shortcutError))
+                throw new IOException(shortcutError);
             if (!string.IsNullOrWhiteSpace(existingRun) &&
                 !IsCommandOwnedBy(existingRun, executablePath) &&
                 !CommandTargetExists(existingRun) &&
@@ -189,21 +221,22 @@ public sealed class DirectStartupService : IStartupService
             {
                 DeleteLegacyRunEntryIfOwnedBy(executablePath);
             }
-            if (!DeleteLegacyStartupShortcutIfOwnedBy(executablePath, out string shortcutError))
-                throw new IOException(shortcutError);
         }
         catch (Exception ex)
         {
             // If an old launch path cannot be removed, roll back the new task
             // instead of deliberately leaving two active registrations.
-            string rollbackError = _taskBackend.TryDelete()
+            string rollbackError = (existingTask is null
+                ? _taskBackend.TryDelete()
+                : _taskBackend.TryRestore(existingTask))
                 ? string.Empty : _taskBackend.LastError;
+            rollbackError = CombineErrors(rollbackError, RestoreRunValue(existingRun));
             return new(StartupRegistrationState.BlockedOrFailed,
                 CombineErrors(ex.Message, rollbackError));
         }
 
         Log("Startup enabled through the least-privilege logon task");
-        return new(StartupRegistrationState.Enabled);
+        return new(StartupRegistrationState.Enabled, EffectiveMode: StartupMode.ScheduledTask);
     }
 
     public StartupOperationResult Disable()
@@ -315,13 +348,17 @@ public sealed class DirectStartupService : IStartupService
                 return;
             }
 
-            if (ownsTask && _taskBackend.IsPreferred(task!, executablePath) &&
+            StartupMode mode = GetActiveMode(executablePath) ?? ResolveMode(executablePath);
+            SaveMode(mode);
+            if (mode == StartupMode.Standard && ownsRun && !ownsTask && !ownsShortcut)
+                return;
+            if (mode == StartupMode.ScheduledTask && ownsTask && _taskBackend.IsPreferred(task!, executablePath) &&
                 !ownsRun && !ownsShortcut)
                 return;
 
-            StartupOperationResult result = EnableTaskAndRemoveLegacyEntries(executablePath);
+            StartupOperationResult result = EnableCore();
             Log(result.State == StartupRegistrationState.Enabled
-                ? "Migrated startup registration to the least-privilege logon task"
+                ? $"Startup registration reconciled using {result.EffectiveMode}"
                 : $"Startup migration deferred; previous registration preserved: {result.ErrorMessage}");
         }
         catch (Exception ex)
@@ -545,6 +582,8 @@ internal interface IDirectStartupRunEntryStore
 {
     string? Read();
 
+    void Write(string commandLine);
+
     void Delete();
 }
 
@@ -588,5 +627,16 @@ internal sealed class RegistryStartupRunEntryStore : IDirectStartupRunEntryStore
             _registryKeyPath,
             writable: true);
         key?.DeleteValue(_valueName, throwOnMissingValue: false);
+    }
+
+    public void Write(string commandLine)
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        string sid = identity.User?.Value ??
+            throw new InvalidOperationException("The current Windows user SID is unavailable.");
+        using RegistryKey users = RegistryKey.OpenBaseKey(RegistryHive.Users, RegistryView.Default);
+        using RegistryKey key = users.CreateSubKey($"{sid}\\{_registryKeyPath}", writable: true)
+            ?? throw new IOException("The current user's Run key could not be opened.");
+        key.SetValue(_valueName, commandLine, RegistryValueKind.String);
     }
 }

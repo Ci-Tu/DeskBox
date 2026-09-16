@@ -353,6 +353,7 @@ public const int DefaultSearchMaxResults = 100;
                 [nameof(AppSettings.Language)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.AutoStart)] = DefaultPreferencePreservationReason.SystemIntegration,
                 [nameof(AppSettings.AutoStartDefaultApplied)] = DefaultPreferencePreservationReason.SystemIntegration,
+                [nameof(AppSettings.AutoStartMode)] = DefaultPreferencePreservationReason.SystemIntegration,
                 [nameof(AppSettings.FeatureWidgetEnabledStates)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.QuickCaptureEnabled)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.TodoEnabled)] = DefaultPreferencePreservationReason.UserChoice,

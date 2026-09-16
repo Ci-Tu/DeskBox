@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Xml.Linq;
@@ -26,6 +25,8 @@ internal sealed record DirectStartupTaskRegistration(
     int RestartOnFailureCount = 0,
     string TaskName = "")
 {
+    internal string? Xml { get; init; }
+
     public string CommandLine =>
         $"\"{ExecutablePath}\" {Arguments}".TrimEnd();
 
@@ -37,6 +38,8 @@ internal interface IDirectStartupTaskBackend
 {
     string LastError { get; }
 
+    bool ReadFailed { get; }
+
     DirectStartupTaskRegistration? Read();
 
     bool IsPreferred(
@@ -46,12 +49,14 @@ internal interface IDirectStartupTaskBackend
     bool TryRegister(string executablePath);
 
     bool TryDelete();
+
+    bool TryRestore(DirectStartupTaskRegistration registration);
 }
 
 /// <summary>
-/// Registers the direct-distribution startup entry with Task Scheduler 2.0 by
-/// using the inbox schtasks.exe client. This stays Native AOT friendly and runs
-/// only when startup registration is queried or changed; it adds no resident
+/// Registers the direct-distribution startup entry with the inbox schtasks.exe
+/// client and reads it back through Unicode COM. This stays Native AOT friendly
+/// and runs only when startup registration is queried or changed; it adds no resident
 /// helper process or service to DeskBox.
 /// </summary>
 internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBackend
@@ -69,9 +74,12 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
 
     public string LastError { get; private set; } = string.Empty;
 
+    public bool ReadFailed { get; private set; }
+
     public DirectStartupTaskRegistration? Read()
     {
         LastError = string.Empty;
+        ReadFailed = false;
         string currentUserSid;
         try
         {
@@ -80,15 +88,22 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
         catch (Exception ex)
         {
             LastError = ex.Message;
+            ReadFailed = true;
             return null;
         }
 
         DirectStartupTaskRegistration? currentTask = ReadTask(
             GetTaskName(currentUserSid),
-            out string currentError);
+            out string currentError, out bool currentReadFailed);
         if (currentTask is not null)
         {
             return currentTask;
+        }
+        if (currentReadFailed)
+        {
+            ReadFailed = true;
+            LastError = currentError;
+            return null;
         }
 
         // Read the old fixed-name task only as a migration source. A successful
@@ -96,16 +111,15 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
         // users can configure startup independently on an all-users install.
         DirectStartupTaskRegistration? legacyTask = ReadTask(
             LegacyTaskName,
-            out string legacyError);
+            out string legacyError, out bool legacyReadFailed);
         if (legacyTask is not null &&
             IsCurrentUserRegistration(legacyTask, currentUserSid))
         {
             return legacyTask;
         }
 
-        LastError = string.IsNullOrWhiteSpace(currentError)
-            ? legacyError
-            : currentError;
+        ReadFailed = legacyReadFailed;
+        LastError = legacyReadFailed ? legacyError : string.Empty;
         return null;
     }
 
@@ -161,12 +175,23 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
                     registration.TriggerDelay,
                     "PT0S",
                     StringComparison.OrdinalIgnoreCase)) &&
-               string.Equals(
-                   registration.RestartOnFailureInterval,
-                   TaskRestartInterval,
-                   StringComparison.OrdinalIgnoreCase) &&
-               registration.RestartOnFailureCount == TaskRestartCount;
+               IsRestartPolicySatisfied(registration);
     }
+
+    /// <summary>
+    /// The restart policy is an enhancement, not a correctness property of the
+    /// registration: an absent policy is accepted for compatibility with older
+    /// registrations. Values that are present but different stay non-preferred.
+    /// </summary>
+    private static bool IsRestartPolicySatisfied(
+        DirectStartupTaskRegistration registration) =>
+        (string.IsNullOrWhiteSpace(registration.RestartOnFailureInterval) &&
+            registration.RestartOnFailureCount == 0) ||
+        (string.Equals(
+             registration.RestartOnFailureInterval,
+             TaskRestartInterval,
+             StringComparison.OrdinalIgnoreCase) &&
+            registration.RestartOnFailureCount == TaskRestartCount);
 
     public bool TryRegister(string executablePath)
     {
@@ -177,7 +202,17 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
         string temporaryPath = Path.Combine(
             Path.GetTempPath(),
             $"DeskBox-startup-{Guid.NewGuid():N}.xml");
-        SchtasksResult previousTask = RunSchtasks("/Query", "/TN", taskName, "/XML");
+        TaskXmlSnapshot previousTask = QueryTaskXml(taskName);
+        if (!previousTask.Succeeded && !previousTask.IsMissing)
+        {
+            LastError = $"The previous startup task could not be safely backed up: {previousTask.Error}";
+            return false;
+        }
+        if (previousTask.Succeeded && !IsParseableXml(previousTask.Xml))
+        {
+            LastError = "The previous startup task returned invalid XML; registration was left unchanged.";
+            return false;
+        }
 
         try
         {
@@ -203,26 +238,17 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
                         ? $"The registered task could not be read back: {verificationReadError}"
                         : DescribePreferenceMismatch(verified, executablePath)
                     : LastError;
-                if (previousTask.ExitCode == 0)
+                if (previousTask.Succeeded)
                 {
                     // An update must not destroy the previous registration if
                     // Windows refuses or normalizes the replacement unexpectedly.
-                    // Only a parseable snapshot is restored: writing back a
-                    // corrupt read would replace the task with garbage.
-                    if (IsParseableXml(previousTask.StandardOutput))
-                    {
-                        File.WriteAllText(temporaryPath, previousTask.StandardOutput, Encoding.Unicode);
-                        SchtasksResult rollback = RunSchtasks(
-                            "/Create", "/TN", taskName, "/XML", temporaryPath, "/F");
-                        LastError = rollback.ExitCode == 0
-                            ? $"{verificationError} Previous task restored."
-                            : $"{verificationError} {FormatFailure("restore", rollback)}";
-                    }
-                    else
-                    {
-                        LastError =
-                            $"{verificationError} Previous task snapshot was unreadable and was left in place.";
-                    }
+                    // The Unicode snapshot was validated before registration.
+                    File.WriteAllText(temporaryPath, previousTask.Xml, Encoding.Unicode);
+                    SchtasksResult rollback = RunSchtasks(
+                        "/Create", "/TN", taskName, "/XML", temporaryPath, "/F");
+                    LastError = rollback.ExitCode == 0
+                        ? $"{verificationError} Previous task restored."
+                        : $"{verificationError} {FormatFailure("restore", rollback)}";
                 }
                 else
                 {
@@ -298,31 +324,113 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
 
     private static DirectStartupTaskRegistration? ReadTask(
         string taskName,
-        out string error)
+        out string error) => ReadTask(taskName, out error, out _);
+
+    private static DirectStartupTaskRegistration? ReadTask(
+        string taskName,
+        out string error,
+        out bool readFailed)
     {
         error = string.Empty;
-        SchtasksResult result = RunSchtasks("/Query", "/TN", taskName, "/XML");
-        if (result.ExitCode != 0)
+        readFailed = false;
+        TaskXmlSnapshot result = QueryTaskXml(taskName);
+        if (!result.Succeeded)
         {
-            error = FormatFailure("query", result);
+            error = result.Error;
+            readFailed = !result.IsMissing;
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(result.StandardOutput))
+        if (string.IsNullOrWhiteSpace(result.Xml))
         {
             error = "Task query succeeded but returned no XML.";
+            readFailed = true;
             return null;
         }
 
         try
         {
-            return ParseTaskXml(result.StandardOutput) with { TaskName = taskName };
+            return ParseTaskXml(result.Xml) with { TaskName = taskName };
         }
         catch (Exception ex)
         {
             error = $"Task XML could not be parsed: {ex.Message}";
+            readFailed = true;
             return null;
         }
+    }
+
+    public bool TryRestore(DirectStartupTaskRegistration registration)
+    {
+        LastError = string.Empty;
+        string sid = GetCurrentUserSid();
+        if (string.IsNullOrWhiteSpace(registration.Xml) || !IsParseableXml(registration.Xml) ||
+            !IsCurrentUserRegistration(registration, sid) ||
+            (registration.TaskName != GetTaskName(sid) && registration.TaskName != LegacyTaskName))
+        {
+            LastError = "The previous task is not a valid current-user snapshot.";
+            return false;
+        }
+
+        string temporaryPath = Path.Combine(Path.GetTempPath(), $"DeskBox-startup-restore-{Guid.NewGuid():N}.xml");
+        try
+        {
+            File.WriteAllText(temporaryPath, registration.Xml, Encoding.Unicode);
+            SchtasksResult result = RunSchtasks("/Create", "/TN", registration.TaskName, "/XML", temporaryPath, "/F");
+            if (result.ExitCode != 0)
+            {
+                LastError = FormatFailure("restore", result);
+                return false;
+            }
+            DirectStartupTaskRegistration? restored = ReadTask(registration.TaskName, out string error);
+            if (restored is null || !restored.IsOwnedBy(registration.ExecutablePath) ||
+                restored.Enabled != registration.Enabled || restored.Arguments != registration.Arguments)
+            {
+                LastError = $"Task snapshot restore did not verify: {error}";
+                return false;
+            }
+            // A legacy snapshot can predate the SID-scoped task created by the
+            // attempted switch. Restore the old task without leaving its new twin.
+            if (registration.TaskName == LegacyTaskName)
+            {
+                string replacementName = GetTaskName(sid);
+                DirectStartupTaskRegistration? replacement = ReadTask(replacementName, out _);
+                if (replacement?.IsOwnedBy(registration.ExecutablePath) == true &&
+                    !TryDeleteTask(replacementName, out string cleanupError))
+                {
+                    LastError = cleanupError;
+                    return false;
+                }
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LastError = $"Task snapshot restore failed: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            try { File.Delete(temporaryPath); } catch { }
+        }
+    }
+
+    private static TaskXmlSnapshot QueryTaskXml(string taskName)
+    {
+        try
+        {
+            return new(DirectStartupTaskXmlReader.Read(taskName), string.Empty, false);
+        }
+        catch (Exception ex)
+        {
+            bool missing = ex.HResult is unchecked((int)0x80070002) or unchecked((int)0x80070003);
+            return new(string.Empty, $"Task query failed (0x{ex.HResult:X8}): {ex.Message}", missing);
+        }
+    }
+
+    private readonly record struct TaskXmlSnapshot(string Xml, string Error, bool IsMissing)
+    {
+        public bool Succeeded => string.IsNullOrEmpty(Error);
     }
 
     private static bool TryDeleteTask(string taskName, out string error)
@@ -503,7 +611,7 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             Value(trigger, ns, "Delay"),
             Value(restartOnFailure, ns, "Interval"),
             restartCount,
-            Value(registrationInfo, ns, "URI").TrimStart('\\'));
+            Value(registrationInfo, ns, "URI").TrimStart('\\')) { Xml = taskXml };
     }
 
     internal static bool PathsEqual(string? first, string? second)
@@ -548,7 +656,51 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             $"disallowBattery={registration.DisallowStartIfOnBatteries} " +
             $"stopOnBattery={registration.StopIfGoingOnBatteries} " +
             $"runOnlyIfIdle={registration.RunOnlyIfIdle} " +
-            $"delay='{registration.TriggerDelay}'.";
+            $"delay='{registration.TriggerDelay}' " +
+            $"restartInterval='{registration.RestartOnFailureInterval}' " +
+            $"restartCount={registration.RestartOnFailureCount} " +
+            $"checks={DescribePreferenceCheckResults(registration, executablePath)}.";
+    }
+
+    /// <summary>
+    /// Per-check booleans for a failed validation. Values are never included —
+    /// only which comparisons failed — so the diagnostic log line survives
+    /// sanitization and pinpoints the failing field without another round trip.
+    /// </summary>
+    internal static string DescribePreferenceCheckResults(
+        DirectStartupTaskRegistration registration,
+        string executablePath)
+    {
+        using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+        string currentUserSid = identity.User?.Value ?? string.Empty;
+        string currentUserName = identity.Name;
+
+        bool IsUserId(string? candidate) => IsCurrentUserId(
+            candidate ?? string.Empty,
+            currentUserSid,
+            currentUserName);
+
+        bool triggerDelayOk = string.IsNullOrWhiteSpace(registration.TriggerDelay) ||
+            string.Equals(registration.TriggerDelay, "PT0S", StringComparison.OrdinalIgnoreCase);
+
+        return
+            $"taskName={string.Equals(registration.TaskName, GetTaskName(currentUserSid), StringComparison.OrdinalIgnoreCase)} " +
+            $"path={registration.IsOwnedBy(executablePath)} " +
+            $"arguments={string.Equals(registration.Arguments.Trim(), StartupArguments, StringComparison.OrdinalIgnoreCase)} " +
+            $"principal={IsUserId(registration.PrincipalUserId)} " +
+            $"trigger={IsUserId(registration.TriggerUserId)} " +
+            $"logonType={string.Equals(registration.LogonType, "InteractiveToken", StringComparison.OrdinalIgnoreCase)} " +
+            $"runLevel={string.Equals(registration.RunLevel, "LeastPrivilege", StringComparison.OrdinalIgnoreCase)} " +
+            $"priority={registration.Priority == InteractiveTaskPriority} " +
+            $"enabled={registration.Enabled} " +
+            $"executionLimit={string.Equals(registration.ExecutionTimeLimit, "PT0S", StringComparison.OrdinalIgnoreCase)} " +
+            $"instances={string.Equals(registration.MultipleInstancesPolicy, "IgnoreNew", StringComparison.OrdinalIgnoreCase)} " +
+            $"startWhenAvailable={registration.StartWhenAvailable} " +
+            $"disallowBattery={!registration.DisallowStartIfOnBatteries} " +
+            $"stopOnBattery={!registration.StopIfGoingOnBatteries} " +
+            $"runOnlyIfIdle={!registration.RunOnlyIfIdle} " +
+            $"delay={triggerDelayOk} " +
+            $"restart={IsRestartPolicySatisfied(registration)}";
     }
 
     private static bool IsCurrentUserId(
@@ -573,81 +725,6 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             throw new InvalidOperationException("The current Windows user SID is unavailable.");
     }
 
-    /// <summary>
-    /// Decodes byte-preserving schtasks pipe text. schtasks redirects transcode
-    /// its output to the active console code page while the embedded XML
-    /// declaration keeps claiming UTF-16, so the decoder probes instead of
-    /// trusting either: a BOM means UTF-16, then strict UTF-8, then the active
-    /// ANSI code page via MultiByteToWideChar (the .NET baseline carries no
-    /// ANSI encodings on this target).
-    /// </summary>
-    internal static string DecodeSchtasksOutput(string latin1Text)
-    {
-        if (string.IsNullOrEmpty(latin1Text))
-        {
-            return string.Empty;
-        }
-
-        byte[] bytes = Encoding.Latin1.GetBytes(latin1Text);
-        if (bytes.Length >= 2)
-        {
-            if (bytes[0] == 0xFF && bytes[1] == 0xFE)
-            {
-                return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
-            }
-
-            if (bytes[0] == 0xFE && bytes[1] == 0xFF)
-            {
-                return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
-            }
-        }
-
-        try
-        {
-            return new UTF8Encoding(
-                encoderShouldEmitUTF8Identifier: false,
-                throwOnInvalidBytes: true).GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            return DecodeActiveCodePage(bytes);
-        }
-    }
-
-    private static string DecodeActiveCodePage(byte[] bytes)
-    {
-        int characterCount = MultiByteToWideChar(
-            ActiveCodePage,
-            MbPrecomposed,
-            bytes,
-            bytes.Length,
-            IntPtr.Zero,
-            0);
-        if (characterCount <= 0)
-        {
-            return Encoding.Latin1.GetString(bytes);
-        }
-
-        IntPtr buffer = Marshal.AllocHGlobal(characterCount * 2);
-        try
-        {
-            int written = MultiByteToWideChar(
-                ActiveCodePage,
-                MbPrecomposed,
-                bytes,
-                bytes.Length,
-                buffer,
-                characterCount);
-            return written > 0
-                ? Marshal.PtrToStringUni(buffer, written) ?? string.Empty
-                : Encoding.Latin1.GetString(bytes);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(buffer);
-        }
-    }
-
     private static bool IsParseableXml(string candidate)
     {
         try
@@ -660,18 +737,6 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             return false;
         }
     }
-
-    private const uint ActiveCodePage = 0;
-    private const uint MbPrecomposed = 1;
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    private static partial int MultiByteToWideChar(
-        uint codePage,
-        uint flags,
-        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 3)] byte[] source,
-        int sourceLength,
-        IntPtr target,
-        int targetLength);
 
     private static SchtasksResult RunSchtasks(params string[] arguments)
     {
@@ -691,15 +756,8 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             // The inherited working directory can be an installer temp folder
             // that has already been deleted, which fails the child launch.
             WorkingDirectory = AppContext.BaseDirectory,
-            // Latin-1 maps every byte 0x00-0xFF onto one code point, so the
-            // pipe text preserves the raw bytes and DecodeSchtasksOutput can
-            // pick the real encoding afterwards. A fixed decoder cannot work:
-            // schtasks transcodes redirected output to the active console code
-            // page (UTF-8 on some hosts, the ANSI page on others) while the
-            // XML declaration always claims UTF-16, so user names and paths
-            // with non-ASCII characters come back as mojibake otherwise.
-            StandardOutputEncoding = Encoding.Latin1,
-            StandardErrorEncoding = Encoding.Latin1
+            // Only human-readable create/delete messages use these pipes.
+            // Task XML and rollback snapshots are read as Unicode through COM.
         };
         foreach (string argument in arguments)
         {
@@ -733,8 +791,8 @@ internal sealed partial class DirectStartupTaskBackend : IDirectStartupTaskBacke
             Task.WaitAll([outputTask, errorTask], TimeSpan.FromSeconds(2));
             return new SchtasksResult(
                 process.ExitCode,
-                outputTask.IsCompletedSuccessfully ? DecodeSchtasksOutput(outputTask.Result) : string.Empty,
-                errorTask.IsCompletedSuccessfully ? DecodeSchtasksOutput(errorTask.Result) : string.Empty);
+                outputTask.IsCompletedSuccessfully ? outputTask.Result : string.Empty,
+                errorTask.IsCompletedSuccessfully ? errorTask.Result : string.Empty);
         }
         catch (Exception ex)
         {

@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "启动方式",
+    "Settings.AutoStart.Mode.Description": "标准方式可在 Windows“启动应用”中管理；计划任务尝试更早启动。",
+    "Settings.AutoStart.Mode.Standard": "标准（推荐）",
+    "Settings.AutoStart.Mode.ScheduledTask": "计划任务",
+    "Settings.AutoStart.Fallback": "计划任务未能启用，已改用标准自启。",
+    "Settings.AutoStart.ChangeFailed": "启动设置未能更新。开关显示当前实际启动状态。",
     "Settings.AutoStart.TaskDisabled": "已在任务计划程序中禁用。打开此开关可重新启用。",
     "Settings.Performance.Title": "性能与资源",
     "Display.VirtualAdapter.Warning.Title": "检测到虚拟显示器",

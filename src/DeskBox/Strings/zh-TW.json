@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "啟動方式",
+    "Settings.AutoStart.Mode.Description": "標準方式可在 Windows「啟動應用程式」中管理；排程工作嘗試提早啟動。",
+    "Settings.AutoStart.Mode.Standard": "標準（建議）",
+    "Settings.AutoStart.Mode.ScheduledTask": "排程工作",
+    "Settings.AutoStart.Fallback": "排程工作未能啟用，已改用標準自動啟動。",
+    "Settings.AutoStart.ChangeFailed": "啟動設定未能更新。開關顯示目前實際啟動狀態。",
     "Settings.AutoStart.TaskDisabled": "已在工作排程器中停用。開啟此開關可重新啟用。",
     "Settings.Performance.Title": "效能與資源",
     "Display.VirtualAdapter.Warning.Title": "偵測到虛擬顯示器",

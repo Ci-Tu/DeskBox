@@ -1,4 +1,5 @@
 using DeskBox.Services;
+using DeskBox.Models;
 
 namespace DeskBox.Tests;
 
@@ -79,15 +80,16 @@ public sealed class DirectStartupServiceTests
     }
 
 [Fact]
-    public void Migration_ReplacesOwnedRunWithVerifiedTask()
+    public void Migration_AdoptsExistingStandardModeWithoutReplacingIt()
     {
         var backend = new FakeTaskBackend();
         var run = new FakeRunEntryStore { Value = $"\"{ExecutablePath}\" --startup" };
-        var service = CreateService(backend, run);
+        var service = CreateService(backend, run, preference: null);
         service.TryMigrateLegacyRegistration();
-        Assert.Equal(1, backend.RegisterCount);
-        Assert.NotNull(backend.Registration);
-        Assert.Null(run.Value);
+        Assert.Equal(0, backend.RegisterCount);
+        Assert.Null(backend.Registration);
+        Assert.NotNull(run.Value);
+        Assert.Equal(StartupMode.Standard, service.Mode);
         Assert.Equal(0, run.WriteCount);
         Assert.True(service.IsEnabled());
     }
@@ -99,8 +101,9 @@ public sealed class DirectStartupServiceTests
         string command = $"\"{ExecutablePath}\" --startup";
         var run = new FakeRunEntryStore { Value = command };
         var service = CreateService(backend, run);
-        service.TryMigrateLegacyRegistration();
-        Assert.Equal(command, run.Value);
+        service.SetMode(StartupMode.ScheduledTask);
+        Assert.True(DirectStartupService.IsCommandOwnedBy(run.Value, ExecutablePath));
+        Assert.Equal(StartupMode.Standard, service.Mode);
         Assert.Null(backend.Registration);
         Assert.Equal(0, run.DeleteCount);
         Assert.True(service.IsEnabled());
@@ -143,19 +146,21 @@ public sealed class DirectStartupServiceTests
     }
 
     [Fact]
-    public void Enable_FailureDoesNotCreateRegistryFallback()
+    public void Enable_TaskRegistrationFailureFallsBackToVerifiedStandardStartup()
     {
         var backend = new FakeTaskBackend { RegisterResult = false };
         var run = new FakeRunEntryStore();
         var result = CreateService(backend, run).Enable();
-        Assert.Equal(StartupRegistrationState.BlockedOrFailed, result.State);
-        Assert.False(result.IsEnabled);
-        Assert.Equal(0, run.WriteCount);
-        Assert.Null(run.Value);
+        Assert.Equal(StartupRegistrationState.Enabled, result.State);
+        Assert.True(result.IsEnabled);
+        Assert.True(result.UsedFallback);
+        Assert.Equal(StartupMode.Standard, result.EffectiveMode);
+        Assert.Equal(1, run.WriteCount);
+        Assert.NotNull(run.Value);
     }
 
     [Fact]
-    public void Enable_RemovesOwnedRunAfterTaskRegistration()
+    public void SwitchToTask_RemovesOwnedRunAfterTaskRegistration()
     {
         var backend = new FakeTaskBackend();
         var run = new FakeRunEntryStore
@@ -163,20 +168,20 @@ public sealed class DirectStartupServiceTests
             Value = $"\"{ExecutablePath}\" --startup",
             BeforeDelete = () => Assert.NotNull(backend.Registration)
         };
-        Assert.True(CreateService(backend, run).Enable().IsEnabled);
+        Assert.True(CreateService(backend, run).SetMode(StartupMode.ScheduledTask).IsEnabled);
         Assert.Null(run.Value);
         Assert.Equal(0, backend.DeleteCount);
     }
 
     [Fact]
-    public void Enable_CleanupFailureRollsBackTaskAndPreservesRun()
+    public void SwitchToTask_CleanupFailureRollsBackTaskAndPreservesRun()
     {
         var backend = new FakeTaskBackend();
         var run = new FakeRunEntryStore
         {
             Value = $"\"{ExecutablePath}\" --startup", FailDelete = true
         };
-        var result = CreateService(backend, run).Enable();
+        var result = CreateService(backend, run).SetMode(StartupMode.ScheduledTask);
         Assert.Equal(StartupRegistrationState.BlockedOrFailed, result.State);
         Assert.NotNull(run.Value);
         Assert.Null(backend.Registration);
@@ -184,7 +189,7 @@ public sealed class DirectStartupServiceTests
     }
 
     [Fact]
-    public void Enable_SilentlyIgnoredRunRemovalDoesNotReportSuccess()
+    public void SwitchToTask_SilentlyIgnoredRunRemovalDoesNotReportSuccess()
     {
         var backend = new FakeTaskBackend();
         var run = new FakeRunEntryStore
@@ -192,7 +197,7 @@ public sealed class DirectStartupServiceTests
             Value = $"\"{ExecutablePath}\" --startup", IgnoreDelete = true
         };
         Assert.Equal(StartupRegistrationState.BlockedOrFailed,
-            CreateService(backend, run).Enable().State);
+            CreateService(backend, run).SetMode(StartupMode.ScheduledTask).State);
         Assert.NotNull(run.Value);
         Assert.Null(backend.Registration);
     }
@@ -326,17 +331,161 @@ public sealed class DirectStartupServiceTests
             new AppDistributionService(AppDistributionChannel.Direct)));
     }
 
+    [Fact]
+    public void FreshInstall_DefaultsToStandardStartupAndPersistsTheMode()
+    {
+        var backend = new FakeTaskBackend();
+        var run = new FakeRunEntryStore();
+        var service = CreateService(backend, run, preference: null);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+        Assert.True(service.Enable().IsEnabled);
+        Assert.Equal(0, backend.RegisterCount);
+        Assert.Contains("--startup-source=run", run.Value);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+    }
+
+    [Fact]
+    public void Upgrade_AdoptsAnExistingTaskInsteadOfChangingItsMode()
+    {
+        var backend = new FakeTaskBackend { Registration = CreatePreferredRegistration(ExecutablePath) };
+        var run = new FakeRunEntryStore();
+        var service = CreateService(backend, run, preference: null);
+        service.TryMigrateLegacyRegistration();
+        Assert.Equal(StartupMode.ScheduledTask, service.Mode);
+        Assert.Equal(0, backend.RegisterCount);
+        Assert.Equal(0, run.WriteCount);
+    }
+
+    [Fact]
+    public void SwitchTaskToStandard_RemovesTaskOnlyAfterRunWasVerified()
+    {
+        var backend = new FakeTaskBackend { Registration = CreatePreferredRegistration(ExecutablePath) };
+        var run = new FakeRunEntryStore();
+        var service = CreateService(backend, run);
+        Assert.True(service.SetMode(StartupMode.Standard).IsEnabled);
+        Assert.NotNull(run.Value);
+        Assert.Null(backend.Registration);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void SwitchTaskToStandard_WriteFailurePreservesTask(bool failWrite, bool ignoreWrite)
+    {
+        var original = CreatePreferredRegistration(ExecutablePath);
+        var backend = new FakeTaskBackend { Registration = original };
+        var run = new FakeRunEntryStore { FailWrite = failWrite, IgnoreWrite = ignoreWrite };
+        var service = CreateService(backend, run);
+        Assert.False(service.SetMode(StartupMode.Standard).IsEnabled);
+        Assert.Same(original, backend.Registration);
+        Assert.Null(run.Value);
+        Assert.Equal(StartupMode.ScheduledTask, service.Mode);
+        Assert.True(service.IsEnabled());
+    }
+
+    [Fact]
+    public void SwitchTaskToStandard_TaskCleanupFailureRollsBackRun()
+    {
+        var original = CreatePreferredRegistration(ExecutablePath);
+        var backend = new FakeTaskBackend { Registration = original, DeleteResult = false };
+        var run = new FakeRunEntryStore();
+        var service = CreateService(backend, run);
+        Assert.False(service.SetMode(StartupMode.Standard).IsEnabled);
+        Assert.Same(original, backend.Registration);
+        Assert.Null(run.Value);
+        Assert.Equal(StartupMode.ScheduledTask, service.Mode);
+    }
+
+    [Fact]
+    public void FailedTaskSelection_PersistsStandardFallbackInsteadOfRetryingEveryLaunch()
+    {
+        var backend = new FakeTaskBackend { RegisterResult = false };
+        var run = new FakeRunEntryStore { Value = $"\"{ExecutablePath}\" --startup" };
+        var service = CreateService(backend, run, preference: StartupMode.Standard);
+        var result = service.SetMode(StartupMode.ScheduledTask);
+        Assert.True(result.IsEnabled);
+        Assert.True(result.UsedFallback);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+        service.TryMigrateLegacyRegistration();
+        Assert.Equal(1, backend.RegisterCount);
+        Assert.Null(backend.Registration);
+    }
+
+    [Fact]
+    public void StandardStartup_DoesNotBypassWindowsOptOut()
+    {
+        var backend = new FakeTaskBackend { RegisterResult = false };
+        var run = new FakeRunEntryStore { Value = $"\"{ExecutablePath}\" --startup" };
+        var service = CreateService(backend, run, runEntryApproved: false, preference: StartupMode.Standard);
+        Assert.Equal(StartupRegistrationState.DisabledByUser, service.SetMode(StartupMode.ScheduledTask).State);
+        Assert.Equal(StartupRegistrationState.DisabledByUser, service.Enable().State);
+        Assert.Equal(0, backend.RegisterCount);
+        Assert.Equal(0, run.WriteCount);
+    }
+
+    [Fact]
+    public void SelectingModeWhileTaskIsDisabled_DoesNotEnableAnotherEntry()
+    {
+        var backend = new FakeTaskBackend
+        {
+            Registration = CreatePreferredRegistration(ExecutablePath) with { Enabled = false }
+        };
+        var run = new FakeRunEntryStore();
+        var service = CreateService(backend, run);
+        Assert.Equal(StartupRegistrationState.DisabledByTaskScheduler, service.SetMode(StartupMode.Standard).State);
+        service.TryMigrateLegacyRegistration();
+        Assert.False(backend.Registration!.Enabled);
+        Assert.Equal(0, run.WriteCount);
+    }
+
+    [Fact]
+    public void UnknownTaskState_PreventsCreatingADuplicateFallback()
+    {
+        var backend = new FakeTaskBackend { ReadFailed = true, RegisterResult = false };
+        var run = new FakeRunEntryStore();
+        Assert.False(CreateService(backend, run).Enable().IsEnabled);
+        Assert.Null(run.Value);
+    }
+
+    [Fact]
+    public void ExternalStandardRegistrationIsShownAndPreservedOverAnOldTaskPreference()
+    {
+        var backend = new FakeTaskBackend();
+        var run = new FakeRunEntryStore { Value = $"\"{ExecutablePath}\" --startup" };
+        var service = CreateService(backend, run, preference: StartupMode.ScheduledTask);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+        service.TryMigrateLegacyRegistration();
+        Assert.Equal(0, backend.RegisterCount);
+        Assert.NotNull(run.Value);
+        Assert.Equal(StartupMode.Standard, service.Mode);
+    }
+
+    [Fact]
+    public void ExistingTaskIsShownOverAnOldStandardPreference()
+    {
+        var backend = new FakeTaskBackend { Registration = CreatePreferredRegistration(ExecutablePath) };
+        var service = CreateService(backend, new FakeRunEntryStore(), preference: StartupMode.Standard);
+        Assert.Equal(StartupMode.ScheduledTask, service.Mode);
+        service.TryMigrateLegacyRegistration();
+        Assert.Equal(0, backend.DeleteCount);
+        Assert.Equal(StartupMode.ScheduledTask, service.Mode);
+    }
+
     private static DirectStartupService CreateService(
         IDirectStartupTaskBackend taskBackend,
         IDirectStartupRunEntryStore runStore,
         bool runEntryApproved = true,
-        Action<string>? logger = null) =>
+        Action<string>? logger = null,
+        StartupMode? preference = StartupMode.ScheduledTask) =>
         new(
             taskBackend,
             runStore,
             () => ExecutablePath,
             logger: logger ?? (_ => { }),
-            runEntryApprovedProvider: () => runEntryApproved);
+            runEntryApprovedProvider: () => runEntryApproved,
+            modeProvider: () => preference,
+            modeWriter: mode => preference = mode);
 
     private static DirectStartupTaskRegistration CreatePreferredRegistration(
         string executablePath) =>
@@ -363,7 +512,10 @@ public sealed class DirectStartupServiceTests
 
         public string LastError => Error;
 
+        public bool ReadFailed { get; set; }
+
         public bool RegisterResult { get; set; } = true;
+        public bool DeleteResult { get; set; } = true;
 
         public int RegisterCount { get; private set; }
 
@@ -397,7 +549,14 @@ public sealed class DirectStartupServiceTests
         public bool TryDelete()
         {
             DeleteCount++;
+            if (!DeleteResult) return false;
             Registration = null;
+            return true;
+        }
+
+        public bool TryRestore(DirectStartupTaskRegistration registration)
+        {
+            Registration = registration;
             return true;
         }
     }
@@ -407,6 +566,8 @@ public sealed class DirectStartupServiceTests
         public string? Value { get; set; }
         public bool FailDelete { get; set; }
         public bool IgnoreDelete { get; set; }
+        public bool FailWrite { get; set; }
+        public bool IgnoreWrite { get; set; }
         public Action? BeforeDelete { get; set; }
 
         public int WriteCount { get; private set; }
@@ -418,6 +579,8 @@ public sealed class DirectStartupServiceTests
         public void Write(string commandLine)
         {
             WriteCount++;
+            if (FailWrite) throw new IOException("Run entry is locked");
+            if (IgnoreWrite) return;
             Value = commandLine;
         }
 

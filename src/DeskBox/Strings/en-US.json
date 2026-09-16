@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Startup method",
+    "Settings.AutoStart.Mode.Description": "Standard is managed in Windows Startup apps; a scheduled task can attempt an earlier start.",
+    "Settings.AutoStart.Mode.Standard": "Standard (recommended)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Scheduled task",
+    "Settings.AutoStart.Fallback": "The scheduled task could not be enabled. Standard startup is now active.",
+    "Settings.AutoStart.ChangeFailed": "Startup settings could not be updated. The switch shows the current system state.",
     "Settings.AutoStart.TaskDisabled": "Disabled in Task Scheduler. Turn this switch on to enable it again.",
     "Settings.Performance.Title": "Performance & resources",
     "Display.VirtualAdapter.Warning.Title": "Virtual display detected",

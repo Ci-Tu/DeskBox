@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "স্টার্টআপ পদ্ধতি",
+    "Settings.AutoStart.Mode.Description": "স্ট্যান্ডার্ড পদ্ধতি Windows-এর স্টার্টআপ অ্যাপে পরিচালিত হয়; নির্ধারিত কাজ আগে চালু হওয়ার চেষ্টা করতে পারে।",
+    "Settings.AutoStart.Mode.Standard": "স্ট্যান্ডার্ড (প্রস্তাবিত)",
+    "Settings.AutoStart.Mode.ScheduledTask": "নির্ধারিত কাজ",
+    "Settings.AutoStart.Fallback": "নির্ধারিত কাজ চালু করা যায়নি। এখন স্ট্যান্ডার্ড স্টার্টআপ সক্রিয় আছে।",
+    "Settings.AutoStart.ChangeFailed": "স্টার্টআপ সেটিং আপডেট করা যায়নি। সুইচটি সিস্টেমের বর্তমান অবস্থা দেখায়।",
     "Settings.AutoStart.TaskDisabled": "টাস্ক শিডিউলারে বন্ধ করা হয়েছে। আবার চালু করতে এই সুইচটি চালু করুন।",
     "Settings.Performance.Title": "কর্মক্ষমতা ও রিসোর্স",
     "Display.VirtualAdapter.Warning.Title": "ভার্চুয়াল ডিসপ্লে শনাক্ত হয়েছে",

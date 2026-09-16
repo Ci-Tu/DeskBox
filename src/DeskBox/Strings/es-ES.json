@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Método de inicio",
+    "Settings.AutoStart.Mode.Description": "El modo estándar se gestiona en las aplicaciones de inicio de Windows; una tarea programada puede intentar iniciarse antes.",
+    "Settings.AutoStart.Mode.Standard": "Estándar (recomendado)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Tarea programada",
+    "Settings.AutoStart.Fallback": "No se pudo activar la tarea programada. Ahora está activo el inicio estándar.",
+    "Settings.AutoStart.ChangeFailed": "No se pudo actualizar la configuración de inicio. El interruptor muestra el estado actual del sistema.",
     "Settings.AutoStart.TaskDisabled": "Deshabilitado en el Programador de tareas. Activa este interruptor para volver a habilitarlo.",
     "Settings.Performance.Title": "Rendimiento y recursos",
     "Display.VirtualAdapter.Warning.Title": "Pantalla virtual detectada",

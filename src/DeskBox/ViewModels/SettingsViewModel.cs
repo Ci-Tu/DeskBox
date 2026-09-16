@@ -170,6 +170,19 @@ private string[]? _cachedWeatherDataSourceDisplayNames;
 private string[]? _cachedWeatherRefreshIntervalDisplayNames;
 
     [ObservableProperty] public partial bool AutoStart { get; set; }
+    private bool _autoStartUsedFallback;
+    private bool _autoStartOperationFailed;
+    [ObservableProperty] public partial string SelectedAutoStartMode { get; set; } = nameof(StartupMode.Standard);
+    public object[] AvailableAutoStartModeOptions =>
+    [
+        new SettingsOption(nameof(StartupMode.Standard), _localizationService.T("Settings.AutoStart.Mode.Standard")),
+        new SettingsOption(nameof(StartupMode.ScheduledTask), _localizationService.T("Settings.AutoStart.Mode.ScheduledTask"))
+    ];
+    // Keep the choice available while off, including when Standard cannot be
+    // registered (for example an executable command longer than Run's limit).
+    // SetMode only records a preference while startup is disabled.
+    public Visibility AutoStartModeVisibility => StartupService.Current is DirectStartupService
+        ? Visibility.Visible : Visibility.Collapsed;
     public string AutoStartStatusText => _autoStartState switch
     {
         StartupRegistrationState.DisabledByUser =>
@@ -178,19 +191,17 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
             _localizationService.T("Settings.AutoStart.TaskDisabled"),
         StartupRegistrationState.Pending =>
             _localizationService.T("Settings.AutoStart.Pending"),
+        StartupRegistrationState.Enabled when _autoStartUsedFallback =>
+            _localizationService.T("Settings.AutoStart.Fallback"),
+        _ when _autoStartOperationFailed =>
+            _localizationService.T("Settings.AutoStart.ChangeFailed"),
         StartupRegistrationState.PathMismatch or
         StartupRegistrationState.BlockedOrFailed =>
             _localizationService.T("Settings.AutoStart.Failed"),
         _ => string.Empty
     };
-    public Visibility AutoStartStatusVisibility =>
-        _autoStartState is StartupRegistrationState.DisabledByUser or
-            StartupRegistrationState.DisabledByTaskScheduler or
-            StartupRegistrationState.Pending or
-            StartupRegistrationState.PathMismatch or
-            StartupRegistrationState.BlockedOrFailed
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+    public Visibility AutoStartStatusVisibility => string.IsNullOrEmpty(AutoStartStatusText)
+        ? Visibility.Collapsed : Visibility.Visible;
     public Visibility AutoStartSystemSettingsVisibility =>
         _autoStartState == StartupRegistrationState.DisabledByUser
             ? Visibility.Visible
@@ -303,6 +314,8 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _autoStartState = AutoStart
             ? StartupRegistrationState.Enabled
             : StartupService.GetState();
+        if (StartupService.Current is DirectStartupService directStartup)
+            SelectedAutoStartMode = directStartup.Mode.ToString();
         AutoCheckForUpdates = settings.AutoCheckForUpdates;
         DoubleClickToOpen = settings.DoubleClickToOpen;
         FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;

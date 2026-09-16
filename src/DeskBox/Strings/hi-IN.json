@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "स्टार्टअप का तरीका",
+    "Settings.AutoStart.Mode.Description": "मानक तरीका Windows के स्टार्टअप ऐप्स में प्रबंधित होता है; शेड्यूल किया गया कार्य पहले शुरू होने का प्रयास कर सकता है।",
+    "Settings.AutoStart.Mode.Standard": "मानक (अनुशंसित)",
+    "Settings.AutoStart.Mode.ScheduledTask": "शेड्यूल किया गया कार्य",
+    "Settings.AutoStart.Fallback": "शेड्यूल किया गया कार्य सक्षम नहीं हो सका। अब मानक स्टार्टअप सक्रिय है।",
+    "Settings.AutoStart.ChangeFailed": "स्टार्टअप सेटिंग अपडेट नहीं हो सकीं। स्विच सिस्टम की वर्तमान स्थिति दिखाता है।",
     "Settings.AutoStart.TaskDisabled": "टास्क शेड्यूलर में बंद है। दोबारा चालू करने के लिए यह स्विच चालू करें।",
     "Settings.Performance.Title": "प्रदर्शन और संसाधन",
     "Display.VirtualAdapter.Warning.Title": "वर्चुअल डिस्प्ले का पता चला",

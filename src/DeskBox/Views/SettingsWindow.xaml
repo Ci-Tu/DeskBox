@@ -3218,6 +3218,17 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
+                            HorizontalContentAlignment="Right"
+                            svc:Localized.HeaderKey="Settings.AutoStart.Mode.Title"
+                            svc:Localized.DescriptionKey="Settings.AutoStart.Mode.Description"
+                            Visibility="{Binding AutoStartModeVisibility}">
+                            <ComboBox
+                                MinWidth="176"
+                                ItemsSource="{Binding AvailableAutoStartModeOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedAutoStartMode, Mode=TwoWay}" />
+                        </toolkit:SettingsCard>
+
+                        <toolkit:SettingsCard
                             Header="{Binding AutoStartStatusText}"
                             HorizontalContentAlignment="Right"
                             Visibility="{Binding AutoStartStatusVisibility}">

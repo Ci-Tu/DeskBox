@@ -543,7 +543,7 @@ public sealed class AotPublishContractTests
 
     [Theory]
     [InlineData("src/DeskBox/ViewModels/SearchPopupViewModel.cs", 15)]
-    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 75)]
+    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 76)]
     public void AotSensitiveViewModels_UseObservablePartialProperties(
         string relativePath,
         int expectedCount)

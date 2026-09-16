@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "Способ автозапуска",
+    "Settings.AutoStart.Mode.Description": "Стандартный режим управляется в автозагрузке Windows; задача планировщика может запускаться раньше.",
+    "Settings.AutoStart.Mode.Standard": "Стандартный (рекомендуется)",
+    "Settings.AutoStart.Mode.ScheduledTask": "Задача планировщика",
+    "Settings.AutoStart.Fallback": "Не удалось включить задачу планировщика. Включён стандартный автозапуск.",
+    "Settings.AutoStart.ChangeFailed": "Не удалось обновить настройки автозапуска. Переключатель показывает текущее состояние системы.",
     "Settings.AutoStart.TaskDisabled": "Отключено в планировщике заданий. Включите этот переключатель для повторного запуска.",
     "Settings.Performance.Title": "Производительность и ресурсы",
     "Display.VirtualAdapter.Warning.Title": "Обнаружен виртуальный дисплей",

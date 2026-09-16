@@ -1,4 +1,10 @@
 {
+    "Settings.AutoStart.Mode.Title": "起動方法",
+    "Settings.AutoStart.Mode.Description": "標準方式は Windows のスタートアップアプリで管理できます。スケジュールされたタスクは早めの起動を試みます。",
+    "Settings.AutoStart.Mode.Standard": "標準（推奨）",
+    "Settings.AutoStart.Mode.ScheduledTask": "スケジュールされたタスク",
+    "Settings.AutoStart.Fallback": "タスクを有効にできなかったため、標準の自動起動に切り替えました。",
+    "Settings.AutoStart.ChangeFailed": "起動設定を更新できませんでした。スイッチは現在のシステム状態を表示しています。",
     "Settings.AutoStart.TaskDisabled": "タスク スケジューラで無効になっています。このスイッチで再び有効にできます。",
     "Settings.Performance.Title": "パフォーマンスとリソース",
     "Display.VirtualAdapter.Warning.Title": "仮想ディスプレイを検出しました",
