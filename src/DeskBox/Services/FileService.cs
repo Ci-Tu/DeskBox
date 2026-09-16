@@ -2933,6 +2933,46 @@ public sealed partial class FileService
             SourceIdentityMatches(current, expected);
     }
 
+    /// <summary>
+    /// Captures the durable undo receipt for a history item: the object
+    /// identity of whatever this result's physical move just produced at its
+    /// destination. Null means the file system could not provide one, and the
+    /// entry gets no automatic undo authority.
+    /// </summary>
+    internal static Models.DesktopOrganizationDestinationIdentity? CaptureUndoReceiptIdentity(
+        string destinationPath)
+    {
+        return TryCaptureSourceIdentity(destinationPath) is { } identity &&
+            identity.FileId is { } fileId
+                ? new Models.DesktopOrganizationDestinationIdentity
+                {
+                    VolumeSerialNumber = identity.VolumeSerialNumber,
+                    FileIdHigh = fileId.High,
+                    FileIdLow = fileId.Low,
+                }
+                : null;
+    }
+
+    /// <summary>
+    /// True while the object at the history item's destination still carries
+    /// the recorded receipt. Entries without a receipt (legacy history) have
+    /// no automatic undo authority.
+    /// </summary>
+    internal static bool UndoReceiptStillMatches(
+        string destinationPath,
+        Models.DesktopOrganizationDestinationIdentity? receipt)
+    {
+        if (receipt is null)
+        {
+            return false;
+        }
+
+        return TryCaptureSourceIdentity(destinationPath) is { } current &&
+            current.FileId is { } currentId &&
+            currentId == new FileId128(receipt.FileIdHigh, receipt.FileIdLow) &&
+            current.VolumeSerialNumber == receipt.VolumeSerialNumber;
+    }
+
     internal static bool SourceIdentityMatches(
         FileTransferSourceIdentity current,
         FileTransferSourceIdentity expected)

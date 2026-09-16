@@ -586,13 +586,12 @@ public sealed partial class FileService
                 isAsync: true);
             if (IdentityFromHandle(sourceHandle) is null)
             {
-                // Without an identity the disposition cannot be tied to the
-                // copied object; keep both copies.
-                throw new FileTransferSourceCleanupException(
-                    sourceFilePath,
-                    destinationFilePath,
-                    new InvalidOperationException(
-                        "The source file identity was unavailable before the copy."));
+                // Nothing has been copied yet, so this is an ordinary move
+                // failure — it must not surface completed results or read as
+                // "copied but source retained" to the history/journal layers.
+                throw new IOException(
+                    $"The source '{sourceFilePath}' cannot be moved safely: its " +
+                    "object identity could not be read on this file system.");
             }
 
             (destination, _) = await CopyFileCoreAsync(

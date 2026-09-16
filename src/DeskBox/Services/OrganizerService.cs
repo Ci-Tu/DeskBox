@@ -123,7 +123,12 @@ public sealed class OrganizerService
                     SourcePath = result.SourcePath,
                     DestinationPath = result.DestinationPath,
                     TargetWidgetId = widget.Id,
-                    TargetWidgetName = widgetName
+                    TargetWidgetName = widgetName,
+                    // Durable undo receipt: undo verifies the object at the
+                    // destination against the identity recorded here, never a
+                    // fresh capture of whatever later occupies the path.
+                    DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                        result.DestinationPath)
                 }).ToList(),
                 canUndo: move);
 
@@ -153,7 +158,9 @@ public sealed class OrganizerService
                             SourcePath = result.SourcePath,
                             DestinationPath = result.DestinationPath,
                             TargetWidgetId = widget.Id,
-                            TargetWidgetName = widgetName
+                            TargetWidgetName = widgetName,
+                            DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                                result.DestinationPath)
                         }).ToList(),
                     canUndo: canUndoCompletedMove));
             }
@@ -298,7 +305,9 @@ public sealed class OrganizerService
                     SourcePath = result.SourcePath,
                     DestinationPath = result.DestinationPath,
                     TargetWidgetId = widget.Id,
-                    TargetWidgetName = widgetName
+                    TargetWidgetName = widgetName,
+                    DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                        result.DestinationPath)
                 }).ToList(),
                 canUndo: true);
 
@@ -330,7 +339,9 @@ public sealed class OrganizerService
                         SourcePath = result.SourcePath,
                         DestinationPath = result.DestinationPath,
                         TargetWidgetId = widget.Id,
-                        TargetWidgetName = widgetName
+                        TargetWidgetName = widgetName,
+                        DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                            result.DestinationPath)
                     }).ToList(),
                     canUndo: true));
             }
@@ -411,6 +422,19 @@ public sealed class OrganizerService
             if (!File.Exists(item.DestinationPath) && !Directory.Exists(item.DestinationPath))
             {
                 throw new InvalidOperationException($"Could not find undo target: {item.Name}");
+            }
+
+            // Undo authority comes from the receipt recorded at move time.
+            // A replacement that later occupies the destination path fails
+            // this check; legacy entries without a receipt have no automatic
+            // undo at all rather than a freshly captured identity.
+            if (!FileService.UndoReceiptStillMatches(
+                    item.DestinationPath,
+                    item.DestinationIdentity))
+            {
+                throw new InvalidOperationException(
+                    $"The undo target changed on disk and can no longer be " +
+                    $"undone safely: {item.Name}");
             }
 
             string restorePath = FileService.GetAvailablePath(item.SourcePath, reservedPaths);

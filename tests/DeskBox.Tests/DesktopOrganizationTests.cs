@@ -743,6 +743,10 @@ public sealed class DesktopOrganizationTests : IDisposable
         string secondSource = Path.Combine(desktopPath, "second.txt");
         File.WriteAllText(firstSource, "first");
         File.WriteAllText(secondSource, "second");
+        // The widget-side objects must exist before their identities are
+        // captured as undo receipts (a real move records them on arrival).
+        File.WriteAllText(Path.Combine(widgetPath, "first.txt"), "first");
+        File.WriteAllText(Path.Combine(widgetPath, "second.txt"), "second");
         var settings = new SettingsService(Path.Combine(root, "settings"));
         var history = new OrganizationHistoryEntry
         {
@@ -755,24 +759,26 @@ public sealed class DesktopOrganizationTests : IDisposable
                 {
                     Name = "first.txt",
                     SourcePath = firstSource,
-                    DestinationPath = Path.Combine(widgetPath, "first.txt")
+                    DestinationPath = Path.Combine(widgetPath, "first.txt"),
+                    DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                        Path.Combine(widgetPath, "first.txt"))
                 },
                 new OrganizationHistoryItem
                 {
                     Name = "second.txt",
                     SourcePath = secondSource,
-                    DestinationPath = Path.Combine(widgetPath, "second.txt")
+                    DestinationPath = Path.Combine(widgetPath, "second.txt"),
+                    DestinationIdentity = FileService.CaptureUndoReceiptIdentity(
+                        Path.Combine(widgetPath, "second.txt"))
                 }
             ]
         };
         settings.Settings.RecentOrganizationHistory.Add(history);
         await settings.SaveAsync(notifySubscribers: false);
         // Simulate the state after a partial undo: the first item was already
-        // restored to the desktop (its data still sits at the widget path
-        // from the copy in this fixture, which is exactly the trap — moving
-        // it again would duplicate), the second is still in the widget.
-        File.WriteAllText(Path.Combine(widgetPath, "first.txt"), "first");
-        File.WriteAllText(Path.Combine(widgetPath, "second.txt"), "second");
+        // restored to the desktop (its data still sits at the widget path,
+        // which is exactly the trap — moving it again would duplicate), the
+        // second is still in the widget.
         File.WriteAllText(firstSource, "first");
         history.Items[0].IsRestored = true;
         history.Items[0].RestoredPath = firstSource;

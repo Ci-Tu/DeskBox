@@ -35,18 +35,13 @@ public sealed partial class DesktopOrganizationTransaction
                     LastWriteTimeUtc = item.LastWriteTimeUtc,
                     // The history receipt travels with the undo candidate:
                     // verification compares the object at the destination
-                    // against the identity recorded at move time, never a
-                    // fresh capture (which would hand a replacement a valid
-                    // id). Legacy entries without one fall back to a fresh
-                    // capture — the pre-identity behavior.
+                    // against the identity recorded at move time. Legacy
+                    // entries without one keep their null identity — no
+                    // automatic undo authority — instead of capturing a
+                    // fresh identity that would hand a replacement a valid id.
                     DestinationIdentity = item.DestinationIdentity
                 }).ToList()
             };
-            foreach (var undoItem in journal.Items.Where(
-                         undoItem => undoItem.DestinationIdentity is null))
-            {
-                RecordDestinationIdentity(undoItem, undoItem.DestinationPath);
-            }
 
             await _recoveryStore.SaveAsync(journal);
             await RestoreItemsAsync(journal, ownerWindowHandle);
@@ -288,7 +283,9 @@ public sealed partial class DesktopOrganizationTransaction
         return MatchesSnapshot(item.DestinationPath, new DesktopOrganizationRecoveryItem
         {
             Size = item.Size,
-            LastWriteTimeUtc = item.LastWriteTimeUtc
+            LastWriteTimeUtc = item.LastWriteTimeUtc,
+            // Without the recorded receipt every item reads as Changed.
+            DestinationIdentity = item.DestinationIdentity
         })
             ? "DesktopOrganization.Public.StuckReason.Busy"
             : "DesktopOrganization.Public.StuckReason.Changed";
