@@ -434,14 +434,23 @@ public sealed class ItemMutationBatchContractTests
             StringComparison.Ordinal);
         Assert.True(close > 0 && dropped > close, "the index must be dropped at scope close");
 
-        // ...reference-resolved with a linear fallback for stale entries.
+        // ...reference-resolved, with the linear fallback ONLY for a stale
+        // reference. A dictionary miss must return -1 directly - the miss is
+        // the fresh-import fast path, and falling back to the full-list
+        // scan there was the bug that kept the O(n^2) alive.
         int lookup = batch.IndexOf(
             "private int FindItemIndexForManagedMutation(string path)",
+            StringComparison.Ordinal);
+        int missReturn = batch.IndexOf(
+            "if (!_batchItemsByPath.TryGetValue(path, out WidgetItem? existing))\n        {\n            return -1;\n        }",
+            lookup,
             StringComparison.Ordinal);
         int referenceResolve = batch.IndexOf(
             "IndexOfReference(Items, existing, 0)",
             lookup,
             StringComparison.Ordinal);
+        Assert.True(lookup > 0 && missReturn > lookup && referenceResolve > missReturn,
+            "a dictionary miss must return -1 immediately, before any index resolution");
         // The method contains two linear-scan returns (the no-batch early
         // exit and the stale-reference fallback); the fallback one is the
         // second, after the reference resolution.
@@ -449,8 +458,8 @@ public sealed class ItemMutationBatchContractTests
             "return FindItemIndexByPath(path);",
             referenceResolve,
             StringComparison.Ordinal);
-        Assert.True(lookup > 0 && referenceResolve > lookup && fallback > referenceResolve,
-            "the lookup must resolve the reference to an index, then fall back to the linear scan");
+        Assert.True(fallback > referenceResolve,
+            "the linear scan may only serve the stale-reference fallback");
 
         // The two managed mutation paths route through the scoped lookup and
         // keep the dictionary in sync with their Items mutations.

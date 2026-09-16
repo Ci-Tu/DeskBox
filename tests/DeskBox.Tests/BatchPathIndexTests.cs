@@ -6,10 +6,11 @@ namespace DeskBox.Tests;
 /// <summary>
 /// Phase 2 of the import-performance plan: kill the per-file full-list
 /// scans. The binary insert search must be exactly equivalent to the linear
-/// lower-bound scan it replaced over sorted input (ties included), and the
-/// batch path dictionary must stay a scoped index of live references - not
-/// the permanent path-to-index map that every prior review rejected as a
-/// bug nursery.
+/// first-strictly-greater scan it replaced over sorted input (ties land
+/// after the equal run - upper-bound semantics, not classic lower_bound),
+/// and the batch path dictionary must stay a scoped membership authority of
+/// live references - not the permanent path-to-index map that every prior
+/// review rejected as a bug nursery.
 /// </summary>
 public sealed class BatchPathIndexTests
 {
@@ -19,7 +20,7 @@ public sealed class BatchPathIndexTests
     private static readonly Comparison<WidgetItem> BySortOrder =
         (left, right) => left.SortOrder.CompareTo(right.SortOrder);
 
-    private static int LinearLowerBound(
+    private static int LinearUpperBound(
         List<WidgetItem> items,
         WidgetItem candidate,
         Comparison<WidgetItem> compare)
@@ -56,7 +57,7 @@ public sealed class BatchPathIndexTests
         {
             WidgetItem candidate = ItemWithSortOrder(key, "probe");
             Assert.Equal(
-                LinearLowerBound(items, candidate, BySortOrder),
+                LinearUpperBound(items, candidate, BySortOrder),
                 WidgetViewModel.BinarySearchSortedInsertIndex(
                     items.Count,
                     index => items[index],
@@ -74,7 +75,7 @@ public sealed class BatchPathIndexTests
     [InlineData(new[] { 1, 3, 5 }, 4, 2)]
     [InlineData(new[] { 1, 3, 5 }, 6, 3)]
     [InlineData(new[] { 1, 2, 2, 2, 9 }, 2, 4)]  // ties land after the run
-    public void BinarySearch_FindsTheLowerBoundPosition(
+    public void BinarySearch_FindsTheUpperBoundPosition(
         int[] keys,
         int candidateKey,
         int expected)

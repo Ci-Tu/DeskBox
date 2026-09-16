@@ -688,7 +688,7 @@ public partial class WidgetViewModel
         }
 
         // Items is kept sorted under the active sort mode, so the linear
-        // first-strictly-smaller scan is a lower-bound search: a 2000-file
+        // first-strictly-greater scan is an upper-bound search: a 2000-file
         // import pays ~11 comparisons per insert instead of ~1000.
         return BinarySearchSortedInsertIndex(
             Items.Count,
@@ -698,11 +698,10 @@ public partial class WidgetViewModel
     }
 
     /// <summary>
-    /// Pure lower-bound search shared with behavior tests: the first index
-    /// where <paramref name="compare"/>(candidate, itemAt(index)) is
-    /// negative, mirroring the linear scan it replaced. Requires the
-    /// sequence to be sorted under the same comparison; ties land after the
-    /// equal run in both formulations.
+    /// Upper-bound insert search shared with behavior tests: the first index
+    /// whose item compares strictly greater than the candidate (equal keys
+    /// land after the equal run), mirroring the linear scan it replaced.
+    /// Requires the sequence to be sorted under the same comparison.
     /// </summary>
     internal static int BinarySearchSortedInsertIndex(
         int count,

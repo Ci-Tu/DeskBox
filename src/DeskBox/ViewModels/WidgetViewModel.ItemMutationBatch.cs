@@ -75,11 +75,14 @@ public partial class WidgetViewModel
     /// <summary>
     /// Path lookup for the managed mutation paths (upsert and removal).
     /// Outside a batch this is the plain linear scan. Inside a batch the
-    /// scope dictionary answers existence in O(1); the reference becomes an
-    /// index only when a replacement actually needs one. A stale reference
-    /// (an out-of-band rebuild swapped the objects mid-batch) falls back to
-    /// the linear scan, so the dictionary can only over-perform, never
-    /// misreport.
+    /// scope dictionary is the membership authority: a miss is "not
+    /// present", O(1) - the fresh-import fast path, and the whole point of
+    /// the index. Every mid-batch Items mutation flows through the tracked
+    /// upsert/removal paths (full reloads are deferred by the commit-point
+    /// guard, the sort-mode rebuild re-adds the same references), so a miss
+    /// cannot be false. Only a hit whose reference has gone stale (an
+    /// out-of-band object swap) pays one linear scan as a defensive
+    /// fallback - the index can only over-perform, never misreport.
     /// </summary>
     private int FindItemIndexForManagedMutation(string path)
     {
@@ -88,13 +91,15 @@ public partial class WidgetViewModel
             return FindItemIndexByPath(path);
         }
 
-        if (_batchItemsByPath.TryGetValue(path, out WidgetItem? existing))
+        if (!_batchItemsByPath.TryGetValue(path, out WidgetItem? existing))
         {
-            int referenceIndex = IndexOfReference(Items, existing, 0);
-            if (referenceIndex >= 0)
-            {
-                return referenceIndex;
-            }
+            return -1;
+        }
+
+        int referenceIndex = IndexOfReference(Items, existing, 0);
+        if (referenceIndex >= 0)
+        {
+            return referenceIndex;
         }
 
         return FindItemIndexByPath(path);
