@@ -381,7 +381,10 @@ public sealed class ItemMutationBatchContractTests
         string operations = File.ReadAllText(TestPaths.FromRepository(
             "src/DeskBox/ViewModels/WidgetViewModel.Operations.cs"));
 
-        Assert.Equal(2, CountOccurrences(operations, "EnterItemMutationScope()"));
+        // Three scope consumers: the two bulk import loops and the move-out
+        // handler (drag-out is the mirror amplifier of the import; both pay
+        // the same per-item derived work without the scope).
+        Assert.Equal(3, CountOccurrences(operations, "EnterItemMutationScope()"));
         // The transfer-results batch must finalize even when an upsert
         // throws: scope disposal sits in a finally alongside the perf log.
         Assert.Contains(

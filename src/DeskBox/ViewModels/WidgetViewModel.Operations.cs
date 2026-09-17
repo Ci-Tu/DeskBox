@@ -730,12 +730,22 @@ public partial class WidgetViewModel
             return Task.CompletedTask;
         }
 
-        foreach (var path in normalizedPaths)
+        // The mirror of the import batch: an external drag-out of 2000 files
+        // used to pay the per-removal derived work 2000 times - most
+        // visibly one UpdateWidget/SaveDebounced reschedule per departing
+        // item through the AddedAt persistence (convicted by allocation
+        // tracing in the 2026-09-17 memory investigation). The mutation
+        // scope folds them into one end-of-batch finalization; each real
+        // departure still runs RemoveItemByPath itself.
+        using (EnterItemMutationScope())
         {
-            RemoveItemByPath(path);
-        }
+            foreach (var path in normalizedPaths)
+            {
+                RemoveItemByPath(path);
+            }
 
-        RemoveStackMemberOverridePaths(normalizedPaths);
+            RemoveStackMemberOverridePaths(normalizedPaths);
+        }
 
         return Task.CompletedTask;
     }
