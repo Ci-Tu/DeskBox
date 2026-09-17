@@ -96,7 +96,11 @@ public sealed partial class DesktopOrganizationTaskView
                 ? InfoBarSeverity.Warning
                 : InfoBarSeverity.Success;
             ResultInfo.Title = retainedCount > 0
-                ? Format("DesktopOrganization.Layout.PartialResult", result.CompletedItems.Count(item => !item.IsRestored), retainedCount)
+                // ItemCount reports the transaction's cumulative total
+                // (TotalItemCount survives summary compaction), not just
+                // this run's receipts — a retry after a compacted first
+                // run must still count the whole transaction.
+                ? Format("DesktopOrganization.Layout.PartialResult", result.History.ItemCount, retainedCount)
                 : T("DesktopOrganization.Result.SuccessTitle");
             ResultInfo.Message = string.Join("\n", new[]
             {

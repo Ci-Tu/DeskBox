@@ -217,13 +217,21 @@ public sealed partial class DesktopOrganizationTransaction
                 // on disk while the recovery journal still exists. Compacting
                 // before this save would let a crash between save and journal
                 // clear make RecoverPendingAsync treat committed moves as
-                // pending and restore them back to the desktop.
-                await _settingsService.SaveAsync(notifySubscribers: false);
+                // pending and restore them back to the desktop. SaveChecked
+                // is load-bearing here: a silent save failure would clear the
+                // journal with no durable commit anywhere.
+                if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+                {
+                    throw new IOException(
+                        "Persisting the desktop organization commit failed; the recovery journal is kept for the next launch.");
+                }
+
                 _recoveryStore.Clear();
 
                 // With the journal gone the receipts are pure history and may
                 // be compacted; a crash anywhere below only leaves a larger
-                // settings file for the next compaction pass.
+                // settings file for the next compaction pass. This save is
+                // best effort by design.
                 if (OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory))
                 {
                     await _settingsService.SaveAsync(notifySubscribers: false);

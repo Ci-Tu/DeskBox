@@ -46,7 +46,14 @@ public sealed partial class DesktopOrganizationTransaction
             await _recoveryStore.SaveAsync(journal);
             await RestoreItemsAsync(journal, ownerWindowHandle);
             ApplyUndoReceipts(history, journal);
-            await _settingsService.SaveAsync(notifySubscribers: false);
+            // Checked persistence: clearing the journal below must only
+            // happen once the reconciled receipts are durable in settings.
+            if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+            {
+                throw new IOException(
+                    "Persisting the undo receipts failed; the recovery journal is kept for the next launch.");
+            }
+
             _recoveryStore.Clear();
             int remaining = history.Items.Count(item => !item.IsRestored);
             if (remaining > 0)
@@ -85,7 +92,16 @@ public sealed partial class DesktopOrganizationTransaction
                     return 0;
                 }
                 ApplyUndoReceipts(history, journal);
-                await _settingsService.SaveAsync(notifySubscribers: false);
+                // Checked persistence: the journal clear below must only
+                // happen once the reconciled receipts are durable. On
+                // failure the journal survives and the next startup retries
+                // the reconcile, which is idempotent.
+                if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+                {
+                    App.Log("[DesktopOrganization] Undo reconcile could not persist settings; the journal is kept.");
+                    return journal.Items.Count(item => item.Completed);
+                }
+
                 _recoveryStore.Clear();
                 // An interrupted undo keeps its receipts (IsUndoLifecycleActive
                 // guards them); only unrelated bloated entries compact here.
@@ -124,7 +140,14 @@ public sealed partial class DesktopOrganizationTransaction
             if (history is { Items.Count: 0 })
                 _settingsService.Settings.RecentOrganizationHistory.Remove(history);
             RemoveUncommittedWidgets(journal, history);
-            await _settingsService.SaveAsync(notifySubscribers: false);
+            // Checked persistence: same rule as everywhere the journal is
+            // cleared — no durable settings, no journal removal.
+            if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+            {
+                App.Log("[DesktopOrganization] Recovery could not persist settings; the journal is kept.");
+                return restored;
+            }
+
             _recoveryStore.Clear();
             await CompactHistoryAfterJournalResolutionAsync();
             return restored;
@@ -165,8 +188,16 @@ public sealed partial class DesktopOrganizationTransaction
                 .FirstOrDefault(entry => string.Equals(entry.Id, historyId, StringComparison.Ordinal));
             if (history is { CanUndo: true, IsUndone: false })
             {
+                // Abandon is a lifecycle endpoint: the entry can neither
+                // resume undo nor stay protected from retention compaction.
                 history.CanUndo = false;
-                await _settingsService.SaveAsync(notifySubscribers: false);
+                history.UndoStarted = false;
+                // Checked persistence: the durable state change must land
+                // before the journal is discarded below.
+                if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+                {
+                    throw new IOException("Persisting the abandon state failed; the recovery journal is kept.");
+                }
             }
 
             var journal = await _recoveryStore.LoadAsync();
@@ -176,6 +207,7 @@ public sealed partial class DesktopOrganizationTransaction
                 // A forward journal belongs to a different recovery flow and
                 // must survive this abandon.
                 _recoveryStore.Clear();
+                await CompactHistoryAfterJournalResolutionAsync();
             }
 
             return history;
@@ -201,7 +233,9 @@ public sealed partial class DesktopOrganizationTransaction
             {
                 if (history is { CanUndo: true, IsUndone: false })
                 {
+                    // Abandon is a lifecycle endpoint, same as AbandonUndo.
                     history.CanUndo = false;
+                    history.UndoStarted = false;
                 }
             }
             else
@@ -209,8 +243,13 @@ public sealed partial class DesktopOrganizationTransaction
                 RemoveUncommittedWidgets(journal, history);
             }
 
-            await _settingsService.SaveAsync(notifySubscribers: false);
+            if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+            {
+                throw new IOException("Persisting the abandoned recovery failed; the journal is kept.");
+            }
+
             _recoveryStore.Clear();
+            await CompactHistoryAfterJournalResolutionAsync();
         }
         finally { OperationGate.Release(); }
     }

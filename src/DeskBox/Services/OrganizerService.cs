@@ -6,6 +6,10 @@ public sealed class OrganizerService
 {
     private readonly SettingsService _settingsService;
     private readonly FileService _fileService;
+
+    // Read-only view of the default-path desktop organization journal used
+    // to protect a pending transaction's receipts from retention.
+    private readonly DesktopOrganizationRecoveryStore _sharedRecoveryStore = new();
     private readonly Func<string> _desktopPathProvider;
     private readonly DesktopAutoOrganizationSuppressionRegistry _autoOrganizationSuppressions;
     private sealed record DropPreparation(
@@ -55,7 +59,7 @@ public sealed class OrganizerService
             .FirstOrDefault();
     }
 
-    public async Task<OrganizationHistoryEntry> OrganizeDropAsync(
+    public async Task<OrganizerOperationResult> OrganizeDropAsync(
         WidgetConfig widget,
         string widgetName,
         IEnumerable<string> sourcePaths,
@@ -96,13 +100,16 @@ public sealed class OrganizerService
 
             if (plans.Count == 0)
             {
-                return CreateHistoryEntry(
-                    widget.Id,
-                    widgetName,
-                    OrganizationActionType.ManagedDrop,
-                    move,
-                    [],
-                    canUndo: false);
+                return new OrganizerOperationResult
+                {
+                    History = CreateHistoryEntry(
+                        widget.Id,
+                        widgetName,
+                        OrganizationActionType.ManagedDrop,
+                        move,
+                        [],
+                        canUndo: false)
+                };
             }
 
             var results = await _fileService.ExecuteTransferPlanAsync(
@@ -138,8 +145,15 @@ public sealed class OrganizerService
                 }).ToList(),
                 canUndo: move);
 
+            // Snapshot before the retention policy may compact the same
+            // entry: callers render per-run results from this list.
+            var completedItems = historyEntry.Items.ToList();
             await AddHistoryEntryAsync(historyEntry);
-            return historyEntry;
+            return new OrganizerOperationResult
+            {
+                History = historyEntry,
+                CompletedItems = completedItems
+            };
         }
         catch (Exception ex) when (
             ex is FileService.IFileTransferWithCompletedResults partial)
@@ -243,7 +257,7 @@ public sealed class OrganizerService
             .ToArray();
     }
 
-    public async Task<OrganizationHistoryEntry> MoveItemBackToDesktopAsync(
+    public async Task<OrganizerOperationResult> MoveItemBackToDesktopAsync(
         WidgetConfig widget,
         string widgetName,
         WidgetItem item,
@@ -258,7 +272,7 @@ public sealed class OrganizerService
             ownerWindowHandle);
     }
 
-    public async Task<OrganizationHistoryEntry> MoveItemsBackToDesktopAsync(
+    public async Task<OrganizerOperationResult> MoveItemsBackToDesktopAsync(
         WidgetConfig widget,
         string widgetName,
         IEnumerable<string> sourcePaths,
@@ -319,8 +333,15 @@ public sealed class OrganizerService
                 }).ToList(),
                 canUndo: true);
 
+            // Snapshot before the retention policy may compact the same
+            // entry: callers render per-run results from this list.
+            var completedItems = historyEntry.Items.ToList();
             await AddHistoryEntryAsync(historyEntry);
-            return historyEntry;
+            return new OrganizerOperationResult
+            {
+                History = historyEntry,
+                CompletedItems = completedItems
+            };
         }
         catch (Exception ex)
         {
@@ -505,20 +526,21 @@ public sealed class OrganizerService
 
     private async Task AddHistoryEntryAsync(OrganizationHistoryEntry entry)
     {
-        // Only the new entry is capped here. The global budget would touch
-        // older entries whose receipts may still back a pending desktop
-        // organization undo journal; it is enforced by the post-recovery
-        // compaction instead.
-        if (entry.Items.Count > OrganizationHistoryPolicy.MaxUndoReceiptItemsPerEntry)
+        var history = _settingsService.Settings.RecentOrganizationHistory;
+        history.Insert(0, entry);
+
+        // The global budget and entry cap run here too, so a long session of
+        // ordinary imports cannot grow the history without bound between
+        // compaction passes. The entry a pending desktop organization
+        // journal still references is protected: its receipts are recovery
+        // evidence, not historical data.
+        string? protectedTransactionId = null;
+        if (_sharedRecoveryStore.HasPendingJournal)
         {
-            OrganizationHistoryPolicy.DowngradeToSummary(entry);
-        }
-        else if (entry.TotalItemCount < entry.Items.Count)
-        {
-            entry.TotalItemCount = entry.Items.Count;
+            protectedTransactionId = (await _sharedRecoveryStore.LoadAsync())?.TransactionId;
         }
 
-        _settingsService.Settings.RecentOrganizationHistory.Insert(0, entry);
+        OrganizationHistoryPolicy.ApplyRetentionPolicy(history, protectedTransactionId);
         await _settingsService.SaveAsync(notifySubscribers: false);
     }
 

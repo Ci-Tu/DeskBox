@@ -280,44 +280,6 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     }
 
     [Fact]
-    public async Task RecoverPendingAsync_CommittedMovesStayPutWithFullReceiptsOnDisk()
-    {
-        // Simulates the crash window between the commit save (full receipts
-        // persisted) and the journal clear: recovery must recognize every
-        // journal item as committed and must not move files back.
-        string destinationRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "dst")).FullName;
-        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
-        var entry = CreateEntry(600, canUndo: true, destinationRoot: destinationRoot);
-        settings.Settings.RecentOrganizationHistory.Add(entry);
-        foreach (var item in entry.Items)
-        {
-            File.WriteAllText(item.DestinationPath, "moved");
-        }
-
-        var journal = new DesktopOrganizationRecoveryJournal
-        {
-            IsUndo = false,
-            TransactionId = entry.Id,
-            Items = entry.Items.Select(item => new DesktopOrganizationRecoveryItem
-            {
-                SourcePath = item.SourcePath,
-                DestinationPath = item.DestinationPath,
-                TargetWidgetId = item.TargetWidgetId,
-                Completed = true
-            }).ToList()
-        };
-        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
-        await recovery.SaveAsync(journal);
-
-        int restored = await new DesktopOrganizationTransaction(
-            settings, new FileService(), recovery).RecoverPendingAsync();
-
-        Assert.Equal(0, restored);
-        Assert.All(entry.Items, item => Assert.True(File.Exists(item.DestinationPath)));
-        Assert.False(recovery.HasPendingJournal);
-    }
-
-    [Fact]
     public async Task RecoverPendingAsync_PendingUndoJournalKeepsActiveUndoReceipts()
     {
         // An interrupted desktop organization undo: the startup reconcile
@@ -455,6 +417,253 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
             Assert.Equal(20, entry.Items.Count);
         });
     }
+
+    [Fact]
+    public async Task OrganizeDropAsync_LargeBatchReturnsFullCompletedItemsAndSummarizesEntry()
+    {
+        string sourceDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "source")).FullName;
+        string targetDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "widget")).FullName;
+        var sourcePaths = new List<string>();
+        for (int i = 0; i < 501; i++)
+        {
+            string path = Path.Combine(sourceDirectory, $"file-{i:D4}.txt");
+            File.WriteAllText(path, "x");
+            sourcePaths.Add(path);
+        }
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var organizer = new OrganizerService(
+            settings,
+            new FileService(),
+            () => Path.Combine(_tempRoot, "desktop"));
+
+        OrganizerOperationResult operation = await organizer.OrganizeDropAsync(
+            CreateWidget(targetDirectory), "Widget", sourcePaths, move: true);
+
+        // The caller's per-run result is complete even though the persisted
+        // entry was compacted to a summary before returning.
+        Assert.Equal(501, operation.CompletedItems.Count);
+        Assert.All(operation.CompletedItems, item => Assert.True(File.Exists(item.DestinationPath)));
+        var persisted = Assert.Single(settings.Settings.RecentOrganizationHistory);
+        Assert.Empty(persisted.Items);
+        Assert.False(persisted.CanUndo);
+        Assert.Equal(501, persisted.TotalItemCount);
+        Assert.True(persisted.UndoReceiptsDiscarded);
+    }
+
+    [Fact]
+    public async Task MoveItemsBackToDesktopAsync_LargeBatchReturnsFullCompletedItems()
+    {
+        string widgetDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "widget")).FullName;
+        string desktopDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "desktop")).FullName;
+        var sourcePaths = new List<string>();
+        for (int i = 0; i < 501; i++)
+        {
+            string path = Path.Combine(widgetDirectory, $"file-{i:D4}.txt");
+            File.WriteAllText(path, "x");
+            sourcePaths.Add(path);
+        }
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var organizer = new OrganizerService(
+            settings,
+            new FileService(),
+            () => desktopDirectory);
+
+        OrganizerOperationResult operation = await organizer.MoveItemsBackToDesktopAsync(
+            CreateWidget(widgetDirectory), "Widget", sourcePaths);
+
+        Assert.Equal(501, operation.CompletedItems.Count);
+        Assert.All(operation.CompletedItems, item => Assert.True(File.Exists(item.DestinationPath)));
+        var persisted = Assert.Single(settings.Settings.RecentOrganizationHistory);
+        Assert.Empty(persisted.Items);
+        Assert.Equal(501, persisted.TotalItemCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SettingsSaveFailureThrowsAndKeepsRecoveryJournal()
+    {
+        string desktop = Directory.CreateDirectory(Path.Combine(_tempRoot, "desktop")).FullName;
+        string storage = Directory.CreateDirectory(Path.Combine(_tempRoot, "storage")).FullName;
+        string sourceOne = Path.Combine(desktop, "one.pdf");
+        string sourceTwo = Path.Combine(desktop, "two.pdf");
+        File.WriteAllText(sourceOne, "one");
+        File.WriteAllText(sourceTwo, "two");
+
+        var classifier = new DesktopOrganizationClassifier();
+        var scanner = new DesktopOrganizationScanner(classifier, () => desktop, () => string.Empty);
+        DesktopOrganizationScanResult scan = await scanner.ScanAsync();
+        DesktopOrganizationPlan plan = new DesktopOrganizationPlanner(
+            new DesktopOrganizationRuleResolver()).CreatePlan(
+            scan, storage, [], [], _ => "Documents");
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        await settings.LoadAsync(); // creates settings.json on disk
+        string settingsPath = Path.Combine(_tempRoot, "settings", "settings.json");
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        var transaction = new DesktopOrganizationTransaction(settings, new FileService(), recovery);
+
+        File.SetAttributes(settingsPath, FileAttributes.ReadOnly);
+        try
+        {
+            // The commit save is checked: a silent failure would clear the
+            // journal with no durable commit anywhere.
+            await Assert.ThrowsAsync<IOException>(() => transaction.ExecuteAsync(plan));
+            Assert.True(recovery.HasPendingJournal);
+        }
+        finally
+        {
+            File.SetAttributes(settingsPath, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_CommittedMovesStayPutWithFullReceiptsOnDisk()
+    {
+        // Simulates the crash window between the commit save (full receipts
+        // persisted) and the journal clear, with a real settings reload as
+        // the "restart": recovery must recognize every journal item as
+        // committed and must not move files back.
+        string destinationRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "dst")).FullName;
+        string dataDir = Path.Combine(_tempRoot, "settings");
+        Directory.CreateDirectory(dataDir);
+        var profile = new AppSettings();
+        var entry = CreateEntry(600, canUndo: true, destinationRoot: destinationRoot);
+        profile.RecentOrganizationHistory.Add(entry);
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "settings.json"),
+            JsonSerializer.Serialize(profile, SettingsJsonContext.Default.AppSettings));
+        foreach (var item in entry.Items)
+        {
+            File.WriteAllText(item.DestinationPath, "moved");
+        }
+
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = false,
+            TransactionId = entry.Id,
+            Items = entry.Items.Select(item => new DesktopOrganizationRecoveryItem
+            {
+                SourcePath = item.SourcePath,
+                DestinationPath = item.DestinationPath,
+                TargetWidgetId = item.TargetWidgetId,
+                Completed = true
+            }).ToList()
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        // "Restart": load settings from disk, not from the in-memory graph.
+        var service = new SettingsService(dataDir);
+        await service.LoadAsync();
+        var reloaded = Assert.Single(service.Settings.RecentOrganizationHistory);
+        Assert.Equal(600, reloaded.Items.Count); // receipts survived the load
+
+        int restored = await new DesktopOrganizationTransaction(
+            service, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.Equal(0, restored);
+        Assert.All(reloaded.Items, item => Assert.True(File.Exists(item.DestinationPath)));
+        Assert.False(recovery.HasPendingJournal);
+        // With the journal resolved the entry may finally compact.
+        Assert.Empty(reloaded.Items);
+        Assert.Equal(600, reloaded.TotalItemCount);
+    }
+
+    [Fact]
+    public async Task AbandonUndoAsync_CompactsAbandonedEntryReceipts()
+    {
+        // Abandon is an undo lifecycle endpoint: after it the entry must not
+        // stay protected from retention forever.
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(600);
+        entry.UndoStarted = true;
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+
+        var abandoned = await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).AbandonUndoAsync(entry.Id);
+
+        Assert.NotNull(abandoned);
+        Assert.False(abandoned.CanUndo);
+        Assert.False(abandoned.UndoStarted);
+        Assert.Empty(abandoned.Items);
+        Assert.Equal(600, abandoned.TotalItemCount);
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public void ApplyRetentionPolicy_ProtectsJournalReferencedEntry()
+    {
+        // 7 entries x 500 receipts = 3500, the journal still references the
+        // oldest one: it keeps its receipts, the next-oldest compact instead.
+        var history = Enumerable.Range(0, 7)
+            .Select(i => CreateEntry(500, timestampUtc: DateTime.UtcNow.AddMinutes(-i)))
+            .ToList();
+        string protectedId = history[^1].Id;
+
+        OrganizationHistoryPolicy.ApplyRetentionPolicy(history, protectedId);
+
+        var protectedEntry = history.Single(entry => entry.Id == protectedId);
+        Assert.True(protectedEntry.CanUndo);
+        Assert.Equal(500, protectedEntry.Items.Count);
+        // Newest five stay full (2500 budget met), the sixth-from-newest
+        // compacted, the protected oldest survived the budget.
+        Assert.True(history[0].CanUndo);
+        Assert.True(history[4].CanUndo);
+        Assert.Empty(history[5].Items);
+        Assert.Single(history, entry => entry.Id == protectedId);
+    }
+
+    [Fact]
+    public void ApplyRetentionPolicy_EntryCapNeverTrimsProtectedEntry()
+    {
+        var history = Enumerable.Range(0, 30)
+            .Select(i => CreateEntry(10, timestampUtc: DateTime.UtcNow.AddMinutes(-i)))
+            .ToList();
+        string protectedId = history[^1].Id; // oldest, would normally be trimmed
+
+        OrganizationHistoryPolicy.ApplyRetentionPolicy(history, protectedId);
+
+        Assert.Equal(SettingsService.MaxRecentOrganizationHistoryCount, history.Count);
+        Assert.Contains(history, entry => entry.Id == protectedId);
+        Assert.True(history.Single(entry => entry.Id == protectedId).CanUndo);
+    }
+
+    [Fact]
+    public async Task OrganizeDropAsync_EnforcesGlobalBudgetDuringSession()
+    {
+        // A long-running session must not grow the history without bound
+        // between compaction passes: ordinary imports run the full policy.
+        string sourceDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "source")).FullName;
+        string targetDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "widget")).FullName;
+        string sourcePath = Path.Combine(sourceDirectory, "note.txt");
+        File.WriteAllText(sourcePath, "x");
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        settings.Settings.RecentOrganizationHistory.AddRange(Enumerable.Range(0, 6).Select(i =>
+            CreateEntry(500, timestampUtc: DateTime.UtcNow.AddMinutes(-i))));
+        var organizer = new OrganizerService(
+            settings,
+            new FileService(),
+            () => Path.Combine(_tempRoot, "desktop"));
+
+        OrganizerOperationResult operation = await organizer.OrganizeDropAsync(
+            CreateWidget(targetDirectory), "Widget", [sourcePath], move: true);
+
+        Assert.Single(operation.CompletedItems);
+        Assert.True(
+            settings.Settings.RecentOrganizationHistory.Sum(entry => entry.Items.Count) <=
+            OrganizationHistoryPolicy.MaxUndoReceiptItemBudget);
+    }
+
+    private static WidgetConfig CreateWidget(string folderPath) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Name = "Widget",
+        MappedFolderPath = folderPath,
+        ManagedFolderName = Path.GetFileName(folderPath)
+    };
 
     /// <summary>
     /// Local-only harness: runs the retention policy over a real

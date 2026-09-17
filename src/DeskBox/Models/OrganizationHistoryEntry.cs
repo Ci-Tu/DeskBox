@@ -202,3 +202,18 @@ public static class OrganizationActionType
     public const string MoveBackToDesktop = "MoveBackToDesktop";
     public const string DesktopOrganization = "DesktopOrganization";
 }
+
+/// <summary>
+/// Result of a managed organizer operation (drop import / move back to
+/// desktop). <see cref="CompletedItems"/> carries this run's receipts for
+/// the caller's post-processing; <see cref="History"/> is the persisted
+/// entry, which the retention policy may already have compacted to a
+/// receipt-less summary for oversized batches — callers must not read
+/// <c>History.Items</c> for per-run results.
+/// </summary>
+public sealed class OrganizerOperationResult
+{
+    public OrganizationHistoryEntry History { get; init; } = new();
+
+    public List<OrganizationHistoryItem> CompletedItems { get; init; } = [];
+}

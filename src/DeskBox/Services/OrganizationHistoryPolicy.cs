@@ -36,23 +36,28 @@ public static class OrganizationHistoryPolicy
     public const int MaxUndoReceiptItemBudget = 2500;
 
     /// <summary>
-    /// Enforces both bounds. The list is newest-first (index 0 is the most
-    /// recent entry), matching every append site and the load normalizer.
-    /// Entries whose undo lifecycle is still in progress are left untouched:
-    /// their receipts are the resume state of an interrupted undo, not
-    /// historical data. Returns true when anything changed.
+    /// Enforces the entry cap, the per-entry limit, and the global budget.
+    /// The list is newest-first (index 0 is the most recent entry),
+    /// matching every append site and the load normalizer. Entries whose
+    /// undo lifecycle is still in progress, and the entry a pending
+    /// recovery journal still references, are left untouched: their
+    /// receipts are resume or commit evidence, not historical data.
+    /// Returns true when anything changed.
     /// </summary>
-    public static bool ApplyRetentionPolicy(List<OrganizationHistoryEntry> history)
+    public static bool ApplyRetentionPolicy(
+        List<OrganizationHistoryEntry> history,
+        string? protectedTransactionId = null)
     {
         if (history.Count == 0)
         {
             return false;
         }
 
-        bool changed = false;
+        bool changed = EnforceEntryCap(history, protectedTransactionId);
+
         foreach (var entry in history)
         {
-            if (IsUndoLifecycleActive(entry))
+            if (IsProtected(entry, protectedTransactionId))
             {
                 continue;
             }
@@ -93,7 +98,7 @@ public static class OrganizationHistoryPolicy
         int totalItems = 0;
         foreach (var entry in history)
         {
-            if (!IsUndoLifecycleActive(entry) && !entry.UndoReceiptsDiscarded)
+            if (!IsProtected(entry, protectedTransactionId) && !entry.UndoReceiptsDiscarded)
             {
                 totalItems += entry.Items.Count;
             }
@@ -102,7 +107,7 @@ public static class OrganizationHistoryPolicy
         for (int i = history.Count - 1; i >= 0 && totalItems > MaxUndoReceiptItemBudget; i--)
         {
             var entry = history[i];
-            if (IsUndoLifecycleActive(entry) || entry.UndoReceiptsDiscarded || entry.Items.Count == 0)
+            if (IsProtected(entry, protectedTransactionId) || entry.UndoReceiptsDiscarded || entry.Items.Count == 0)
             {
                 continue;
             }
@@ -150,12 +155,56 @@ public static class OrganizationHistoryPolicy
     /// True while an undo is in progress or interrupted: the receipts are
     /// resume state, and an interrupted ManagedDrop undo has no recovery
     /// journal at all, so the check must rely on the persisted entry alone.
-    /// A fully undone entry (<see cref="OrganizationHistoryEntry.IsUndone"/>)
-    /// is no longer active — its receipts are dead weight.
+    /// Abandoned and fully undone entries are lifecycle endpoints —
+    /// <see cref="OrganizationHistoryEntry.CanUndo"/> is false there — and
+    /// their receipts may compact.
     /// </summary>
     public static bool IsUndoLifecycleActive(OrganizationHistoryEntry entry)
     {
-        return !entry.IsUndone &&
+        return entry.CanUndo &&
+            !entry.IsUndone &&
             (entry.UndoStarted || entry.Items.Any(item => item.IsRestored));
+    }
+
+    private static bool IsProtected(OrganizationHistoryEntry entry, string? protectedTransactionId)
+    {
+        return IsUndoLifecycleActive(entry) ||
+            (protectedTransactionId is not null &&
+             string.Equals(entry.Id, protectedTransactionId, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Trims the entry count to the retention cap, keeping the newest
+    /// entries. A journal-protected entry always survives the cap; it is
+    /// never the trim victim, otherwise a pending transaction could lose
+    /// its commit evidence to an unrelated import.
+    /// </summary>
+    private static bool EnforceEntryCap(List<OrganizationHistoryEntry> history, string? protectedTransactionId)
+    {
+        int cap = SettingsService.MaxRecentOrganizationHistoryCount;
+        if (history.Count <= cap)
+        {
+            return false;
+        }
+
+        var keep = new HashSet<OrganizationHistoryEntry>();
+        OrganizationHistoryEntry? protectedEntry = protectedTransactionId is null
+            ? null
+            : history.FirstOrDefault(entry => string.Equals(entry.Id, protectedTransactionId, StringComparison.Ordinal));
+        if (protectedEntry is not null)
+        {
+            keep.Add(protectedEntry);
+        }
+
+        foreach (var entry in history
+                     .Where(entry => !keep.Contains(entry))
+                     .OrderByDescending(entry => entry.TimestampUtc)
+                     .Take(cap - keep.Count))
+        {
+            keep.Add(entry);
+        }
+
+        int removed = history.RemoveAll(entry => !keep.Contains(entry));
+        return removed > 0;
     }
 }
