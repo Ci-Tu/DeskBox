@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DeskBox.Models;
 
 public static class DesktopOrganizationCategoryIds
@@ -232,6 +234,15 @@ public sealed class DesktopOrganizationRecoveryJournal
     public bool IsUndo { get; set; }
 
     public string TransactionId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Durable terminal marker written before an abandon touches settings.
+    /// A crash between marking and clearing must never let startup recovery
+    /// execute a transaction the user explicitly abandoned, so recovery
+    /// refuses to act on a journal carrying this flag.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsAbandoned { get; set; }
 
     public DateTimeOffset StartedAt { get; set; } = DateTimeOffset.UtcNow;
 

@@ -9,7 +9,7 @@ public sealed class OrganizerService
 
     // Read-only view of the default-path desktop organization journal used
     // to protect a pending transaction's receipts from retention.
-    private readonly DesktopOrganizationRecoveryStore _sharedRecoveryStore = new();
+    private readonly DesktopOrganizationRecoveryStore _sharedRecoveryStore;
     private readonly Func<string> _desktopPathProvider;
     private readonly DesktopAutoOrganizationSuppressionRegistry _autoOrganizationSuppressions;
     private sealed record DropPreparation(
@@ -32,12 +32,17 @@ public sealed class OrganizerService
         SettingsService settingsService,
         FileService fileService,
         Func<string>? desktopPathProvider,
-        DesktopAutoOrganizationSuppressionRegistry autoOrganizationSuppressions)
+        DesktopAutoOrganizationSuppressionRegistry autoOrganizationSuppressions,
+        string? recoveryJournalPath = null)
     {
         _settingsService = settingsService;
         _fileService = fileService;
         _desktopPathProvider = desktopPathProvider ?? GetDefaultDesktopPath;
         _autoOrganizationSuppressions = autoOrganizationSuppressions;
+        // Read-only view of the desktop organization journal used to protect
+        // a pending transaction's receipts from retention. The path is
+        // injectable so tests never touch the real data directory.
+        _sharedRecoveryStore = new DesktopOrganizationRecoveryStore(recoveryJournalPath);
     }
 
     internal DesktopAutoOrganizationSuppressionRegistry AutoOrganizationSuppressions =>
@@ -531,17 +536,57 @@ public sealed class OrganizerService
 
         // The global budget and entry cap run here too, so a long session of
         // ordinary imports cannot grow the history without bound between
-        // compaction passes. The entry a pending desktop organization
-        // journal still references is protected: its receipts are recovery
-        // evidence, not historical data.
-        string? protectedTransactionId = null;
-        if (_sharedRecoveryStore.HasPendingJournal)
+        // compaction passes — but never at the cost of the file operation
+        // that already physically completed. When the journal state cannot
+        // be established, only the brand-new entry is capped and older
+        // entries wait for the next safe compaction pass.
+        bool journalStateKnown = await TryRunRetentionPolicyAsync(history, entry);
+        if (!journalStateKnown)
         {
-            protectedTransactionId = (await _sharedRecoveryStore.LoadAsync())?.TransactionId;
+            OrganizationHistoryPolicy.CapEntryReceipts(entry);
         }
 
-        OrganizationHistoryPolicy.ApplyRetentionPolicy(history, protectedTransactionId);
         await _settingsService.SaveAsync(notifySubscribers: false);
+    }
+
+    /// <summary>
+    /// Runs the full retention policy when the recovery journal state is
+    /// reliably known (absent, or read with its protected transaction id).
+    /// Returns false when the journal exists but cannot be read right now —
+    /// a replace race or a corrupt file must not fail an ordinary import —
+    /// and the caller falls back to capping only the new entry.
+    /// </summary>
+    private async Task<bool> TryRunRetentionPolicyAsync(
+        List<OrganizationHistoryEntry> history,
+        OrganizationHistoryEntry newEntry)
+    {
+        try
+        {
+            if (!_sharedRecoveryStore.HasPendingJournal)
+            {
+                OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
+                return true;
+            }
+
+            var journal = await _sharedRecoveryStore.LoadAsync();
+            if (journal is null)
+            {
+                // The journal vanished between the check and the read; no
+                // transaction needs protection.
+                OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
+                return true;
+            }
+
+            OrganizationHistoryPolicy.ApplyRetentionPolicy(history, journal.TransactionId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[Organizer] Recovery journal could not be read for retention; " +
+                $"only the new entry is capped this round: {ex.Message}");
+            return false;
+        }
     }
 
     /// <summary>

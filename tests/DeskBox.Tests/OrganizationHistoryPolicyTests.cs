@@ -343,9 +343,10 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         var service = new SettingsService(dataDir);
         await service.LoadAsync();
 
-        // Entry count is still capped, but the receipts must survive the
-        // load: only the post-recovery compaction may drop them.
-        Assert.Equal(SettingsService.MaxRecentOrganizationHistoryCount, service.Settings.RecentOrganizationHistory.Count);
+        // The load never drops receipts AND never trims the entry count:
+        // the cap belongs to the retention policy's safe window, which knows
+        // about active undos and journal-protected entries.
+        Assert.Equal(30, service.Settings.RecentOrganizationHistory.Count);
         Assert.All(service.Settings.RecentOrganizationHistory, entry =>
         {
             Assert.Equal(2000, entry.Items.Count);
@@ -655,6 +656,123 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         Assert.True(
             settings.Settings.RecentOrganizationHistory.Sum(entry => entry.Items.Count) <=
             OrganizationHistoryPolicy.MaxUndoReceiptItemBudget);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_AbandonedUndoJournalIsNotRevived()
+    {
+        // Crash window: AbandonUndo persisted the terminal entry state but
+        // died before clearing the journal. Startup must not flip CanUndo
+        // back on through the reconcile.
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(600, canUndo: false);
+        entry.UndoStarted = false; // abandon already finalized the entry
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = true,
+            TransactionId = entry.Id,
+            Items = []
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.False(entry.CanUndo);
+        Assert.False(entry.UndoStarted);
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_AbandonedMarkerNeverRestoresFiles()
+    {
+        // Crash window in AbandonPendingRecoveryAsync: the durable
+        // IsAbandoned marker is on disk, settings still hold the old state.
+        // The user chose to keep the moved files; recovery must not undo
+        // that choice.
+        string destinationRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "dst")).FullName;
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(3, canUndo: true, destinationRoot: destinationRoot);
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        foreach (var item in entry.Items)
+        {
+            File.WriteAllText(item.DestinationPath, "moved");
+        }
+
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = false,
+            IsAbandoned = true,
+            TransactionId = entry.Id,
+            Items = entry.Items.Select(item => new DesktopOrganizationRecoveryItem
+            {
+                SourcePath = item.SourcePath,
+                DestinationPath = item.DestinationPath,
+                Completed = true
+            }).ToList()
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        int restored = await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.Equal(0, restored);
+        Assert.All(entry.Items, item => Assert.True(File.Exists(item.DestinationPath)));
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public void ApplyRetentionPolicy_EntryCapNeverTrimsActiveUndo()
+    {
+        // A partial ManagedDrop undo has no journal: its receipts are the
+        // only resume state, so the cap must never delete it even when it
+        // is the oldest entry and the list is over the cap.
+        var history = Enumerable.Range(0, SettingsService.MaxRecentOrganizationHistoryCount + 1)
+            .Select(i => CreateEntry(10, timestampUtc: DateTime.UtcNow.AddMinutes(-i)))
+            .ToList();
+        var active = history[^1];
+        active.Items[0].IsRestored = true;
+
+        OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
+
+        Assert.Contains(history, candidate => ReferenceEquals(candidate, active));
+        Assert.Equal(SettingsService.MaxRecentOrganizationHistoryCount, history.Count);
+        Assert.Equal(10, active.Items.Count);
+        Assert.True(active.CanUndo);
+    }
+
+    [Fact]
+    public async Task OrganizeDropAsync_CorruptJournalDoesNotFailTheImport()
+    {
+        // A transient journal read race or corrupt file must never fail an
+        // ordinary import whose files already moved: retention falls back to
+        // capping only the new entry.
+        string sourceDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "source")).FullName;
+        string targetDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "widget")).FullName;
+        string sourcePath = Path.Combine(sourceDirectory, "note.txt");
+        File.WriteAllText(sourcePath, "content");
+        string dataDir = Path.Combine(_tempRoot, "journaldata");
+        Directory.CreateDirectory(dataDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "desktop-organization-recovery.json"),
+            "{ not valid json");
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var organizer = new OrganizerService(
+            settings,
+            new FileService(),
+            () => Path.Combine(_tempRoot, "desktop"),
+            new DesktopAutoOrganizationSuppressionRegistry(),
+            Path.Combine(dataDir, "desktop-organization-recovery.json"));
+
+        OrganizerOperationResult operation = await organizer.OrganizeDropAsync(
+            CreateWidget(targetDirectory), "Widget", [sourcePath], move: true);
+
+        Assert.Single(operation.CompletedItems);
+        Assert.True(File.Exists(operation.CompletedItems.Single().DestinationPath));
     }
 
     private static WidgetConfig CreateWidget(string folderPath) => new()

@@ -175,9 +175,10 @@ public static class OrganizationHistoryPolicy
 
     /// <summary>
     /// Trims the entry count to the retention cap, keeping the newest
-    /// entries. A journal-protected entry always survives the cap; it is
-    /// never the trim victim, otherwise a pending transaction could lose
-    /// its commit evidence to an unrelated import.
+    /// entries. Transaction and recovery state outranks the cap: active
+    /// undos and a journal-referenced entry are never trim victims — if
+    /// they alone exceed the cap the list temporarily grows past it rather
+    /// than dropping resume or commit evidence.
     /// </summary>
     private static bool EnforceEntryCap(List<OrganizationHistoryEntry> history, string? protectedTransactionId)
     {
@@ -188,23 +189,47 @@ public static class OrganizationHistoryPolicy
         }
 
         var keep = new HashSet<OrganizationHistoryEntry>();
-        OrganizationHistoryEntry? protectedEntry = protectedTransactionId is null
-            ? null
-            : history.FirstOrDefault(entry => string.Equals(entry.Id, protectedTransactionId, StringComparison.Ordinal));
-        if (protectedEntry is not null)
+        foreach (var entry in history)
         {
-            keep.Add(protectedEntry);
+            if (IsProtected(entry, protectedTransactionId))
+            {
+                keep.Add(entry);
+            }
         }
 
         foreach (var entry in history
                      .Where(entry => !keep.Contains(entry))
                      .OrderByDescending(entry => entry.TimestampUtc)
-                     .Take(cap - keep.Count))
+                     .Take(Math.Max(0, cap - keep.Count)))
         {
             keep.Add(entry);
         }
 
         int removed = history.RemoveAll(entry => !keep.Contains(entry));
         return removed > 0;
+    }
+
+    /// <summary>
+    /// Caps a single freshly appended entry without touching the rest of
+    /// the history. Used when the recovery journal state is unknown and the
+    /// caller must not run destructive retention over older entries: a new
+    /// entry can never be journal-referenced, so capping it is always safe.
+    /// </summary>
+    public static void CapEntryReceipts(OrganizationHistoryEntry entry)
+    {
+        if (entry.Items.Count == 0)
+        {
+            return;
+        }
+
+        if (entry.TotalItemCount < entry.Items.Count)
+        {
+            entry.TotalItemCount = entry.Items.Count;
+        }
+
+        if (entry.Items.Count > MaxUndoReceiptItemsPerEntry)
+        {
+            DowngradeToSummary(entry);
+        }
     }
 }

@@ -197,12 +197,9 @@ public sealed partial class DesktopOrganizationTransaction
                         settings.RecentOrganizationHistory.Remove(previous);
                     }
                     settings.RecentOrganizationHistory.Insert(0, history);
-                    if (settings.RecentOrganizationHistory.Count > SettingsService.MaxRecentOrganizationHistoryCount)
-                    {
-                        settings.RecentOrganizationHistory.RemoveRange(
-                            SettingsService.MaxRecentOrganizationHistoryCount,
-                            settings.RecentOrganizationHistory.Count - SettingsService.MaxRecentOrganizationHistoryCount);
-                    }
+                    // The entry cap is enforced by the retention policy in
+                    // the compaction below (single source), which also knows
+                    // about active undos and journal-protected entries.
                 }
 
                 if (history.Items.Count == 0)

@@ -2497,16 +2497,14 @@ settings.FocusClickedWidgetOnRaise = false;
         }
 
         settings.RecentOrganizationHistory ??= [];
-        int originalHistoryCount = settings.RecentOrganizationHistory.Count;
+        // Order only: the entry cap belongs to OrganizationHistoryPolicy
+        // (single source), which also knows about active undos and journal
+        // protected entries. Capping here, before startup recovery, could
+        // trim an entry whose receipts are still transaction state.
         settings.RecentOrganizationHistory = settings.RecentOrganizationHistory
             .Where(entry => entry is not null)
             .OrderByDescending(entry => entry.TimestampUtc)
-            .Take(MaxRecentOrganizationHistoryCount)
             .ToList();
-        if (settings.RecentOrganizationHistory.Count != originalHistoryCount)
-        {
-            changed = true;
-        }
 
         foreach (var entry in settings.RecentOrganizationHistory)
         {

@@ -15,7 +15,7 @@ public sealed partial class DesktopOrganizationTransaction
             var pending = await _recoveryStore.LoadAsync();
             if (pending is not null)
             {
-                if (!pending.IsUndo || pending.TransactionId != historyId)
+                if (pending.IsAbandoned || !pending.IsUndo || pending.TransactionId != historyId)
                     throw new InvalidOperationException("Recover the pending desktop operation first.");
                 ApplyUndoReceipts(history, pending);
             }
@@ -76,6 +76,17 @@ public sealed partial class DesktopOrganizationTransaction
                 return 0;
             }
 
+            if (journal.IsAbandoned)
+            {
+                // The user abandoned this transaction and the marker is
+                // durable: recovery must never execute it, whatever the
+                // settings state says. Only the journal clear was left
+                // unfinished by the crash.
+                _recoveryStore.Clear();
+                await CompactHistoryAfterJournalResolutionAsync();
+                return 0;
+            }
+
             var history = _settingsService.Settings.RecentOrganizationHistory.FirstOrDefault(entry => entry.Id == journal.TransactionId);
             if (journal.IsUndo)
             {
@@ -91,6 +102,17 @@ public sealed partial class DesktopOrganizationTransaction
                     await CompactHistoryAfterJournalResolutionAsync();
                     return 0;
                 }
+
+                // Terminal entries — the user abandoned, or the undo finished
+                // but a crash preceded the journal clear — must not be revived
+                // by the reconcile below, which would flip CanUndo back on.
+                if (!history.CanUndo || history.IsUndone)
+                {
+                    _recoveryStore.Clear();
+                    await CompactHistoryAfterJournalResolutionAsync();
+                    return 0;
+                }
+
                 ApplyUndoReceipts(history, journal);
                 // Checked persistence: the journal clear below must only
                 // happen once the reconciled receipts are durable. On
@@ -186,6 +208,19 @@ public sealed partial class DesktopOrganizationTransaction
         {
             var history = _settingsService.Settings.RecentOrganizationHistory
                 .FirstOrDefault(entry => string.Equals(entry.Id, historyId, StringComparison.Ordinal));
+
+            var journal = await _recoveryStore.LoadAsync();
+            bool ownsJournal = journal is null ||
+                (journal.IsUndo && string.Equals(journal.TransactionId, historyId, StringComparison.Ordinal));
+            if (journal is not null && ownsJournal)
+            {
+                // Durable terminal marker first: a crash after this point can
+                // never let startup recovery execute the abandoned undo or
+                // revive the entry the user gave up on.
+                journal.IsAbandoned = true;
+                await _recoveryStore.SaveAsync(journal);
+            }
+
             if (history is { CanUndo: true, IsUndone: false })
             {
                 // Abandon is a lifecycle endpoint: the entry can neither
@@ -200,9 +235,7 @@ public sealed partial class DesktopOrganizationTransaction
                 }
             }
 
-            var journal = await _recoveryStore.LoadAsync();
-            if (journal is null ||
-                (journal.IsUndo && string.Equals(journal.TransactionId, historyId, StringComparison.Ordinal)))
+            if (ownsJournal)
             {
                 // A forward journal belongs to a different recovery flow and
                 // must survive this abandon.
@@ -227,6 +260,13 @@ public sealed partial class DesktopOrganizationTransaction
         {
             var journal = await _recoveryStore.LoadAsync();
             if (journal is null) return;
+
+            // Durable terminal marker first: a crash after this point must
+            // never let startup recovery restore files the user chose to keep
+            // where the abandoned transaction put them.
+            journal.IsAbandoned = true;
+            await _recoveryStore.SaveAsync(journal);
+
             var history = _settingsService.Settings.RecentOrganizationHistory
                 .FirstOrDefault(entry => string.Equals(entry.Id, journal.TransactionId, StringComparison.Ordinal));
             if (journal.IsUndo)
