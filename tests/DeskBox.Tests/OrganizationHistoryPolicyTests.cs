@@ -775,6 +775,119 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         Assert.True(File.Exists(operation.CompletedItems.Single().DestinationPath));
     }
 
+    [Fact]
+    public async Task RecoverPendingAsync_AbandonedUndoWALFinalizesTerminalState()
+    {
+        // Crash window: the IsAbandoned WAL marker is durable but the
+        // settings-side finalize (CanUndo/UndoStarted flip) never landed.
+        // Startup must complete the abandon, not just skip the journal.
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(600, canUndo: true);
+        entry.UndoStarted = true; // pre-abandon state on disk
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = true,
+            IsAbandoned = true,
+            TransactionId = entry.Id,
+            Items = []
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.False(entry.CanUndo);
+        Assert.False(entry.UndoStarted);
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_AbandonedForwardWALCompletesCleanup()
+    {
+        // Crash window in a forward abandon: the WAL is durable but
+        // RemoveUncommittedWidgets never ran. Startup must finish removing
+        // the empty created widget, its rule, and its directory.
+        string widgetDirectory = Directory.CreateDirectory(Path.Combine(_tempRoot, "created-widget")).FullName;
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(3, canUndo: false);
+        entry.Targets = []; // the widget is not part of a committed retry
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        settings.Settings.Widgets.Add(new WidgetConfig
+        {
+            Id = "created-widget",
+            Name = "Created",
+            MappedFolderPath = widgetDirectory,
+            ManagedFolderName = Path.GetFileName(widgetDirectory)
+        });
+        settings.Settings.DesktopOrganizationRules.Add(new DesktopOrganizationRule
+        {
+            TargetWidgetId = "created-widget"
+        });
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = false,
+            IsAbandoned = true,
+            TransactionId = entry.Id,
+            CreatedWidgetIds = ["created-widget"],
+            Items = []
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.DoesNotContain(settings.Settings.Widgets, widget => widget.Id == "created-widget");
+        Assert.DoesNotContain(
+            settings.Settings.DesktopOrganizationRules,
+            rule => rule.TargetWidgetId == "created-widget");
+        Assert.False(Directory.Exists(widgetDirectory));
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_AbandonedFinalizeRetriesAfterSaveFailure()
+    {
+        // WAL semantics: when the finalize save fails the journal must
+        // survive and a later recovery pass must be able to finish it.
+        string dataDir = Path.Combine(_tempRoot, "settings");
+        var settings = new SettingsService(dataDir);
+        await settings.LoadAsync(); // creates settings.json on disk
+        var entry = CreateEntry(600, canUndo: true);
+        entry.UndoStarted = true;
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = true,
+            IsAbandoned = true,
+            TransactionId = entry.Id,
+            Items = []
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+        var transaction = new DesktopOrganizationTransaction(settings, new FileService(), recovery);
+
+        string settingsPath = Path.Combine(dataDir, "settings.json");
+        File.SetAttributes(settingsPath, FileAttributes.ReadOnly);
+        try
+        {
+            await transaction.RecoverPendingAsync();
+            Assert.True(recovery.HasPendingJournal); // WAL survives the failure
+        }
+        finally
+        {
+            File.SetAttributes(settingsPath, FileAttributes.Normal);
+        }
+
+        await transaction.RecoverPendingAsync();
+
+        Assert.False(recovery.HasPendingJournal);
+        Assert.False(entry.CanUndo);
+        Assert.False(entry.UndoStarted);
+    }
+
     private static WidgetConfig CreateWidget(string folderPath) => new()
     {
         Id = Guid.NewGuid().ToString("N"),

@@ -78,12 +78,11 @@ public sealed partial class DesktopOrganizationTransaction
 
             if (journal.IsAbandoned)
             {
-                // The user abandoned this transaction and the marker is
-                // durable: recovery must never execute it, whatever the
-                // settings state says. Only the journal clear was left
-                // unfinished by the crash.
-                _recoveryStore.Clear();
-                await CompactHistoryAfterJournalResolutionAsync();
+                // The abandon's WAL marker is durable but its settings-side
+                // finalize may not have landed before the crash. Complete it
+                // now (or leave the WAL for the next startup if settings
+                // cannot be persisted); the journal is never executed.
+                await TryFinalizeAbandonedJournalAsync(journal);
                 return 0;
             }
 
@@ -196,6 +195,61 @@ public sealed partial class DesktopOrganizationTransaction
     }
 
     /// <summary>
+    /// Completes an abandoned transaction whose durable WAL marker
+    /// (<see cref="DesktopOrganizationRecoveryJournal.IsAbandoned"/>) is on
+    /// disk but whose settings-side finalize may not have landed before the
+    /// crash. Idempotent: applies the terminal state, persists it with a
+    /// checked save, and only then clears the journal. Returns false when
+    /// settings could not be persisted — the WAL stays and the next startup
+    /// retries. Shared by startup recovery and the interactive abandon so
+    /// the semantics cannot drift apart.
+    /// </summary>
+    private async Task<bool> TryFinalizeAbandonedJournalAsync(DesktopOrganizationRecoveryJournal journal)
+    {
+        var history = _settingsService.Settings.RecentOrganizationHistory
+            .FirstOrDefault(entry => string.Equals(entry.Id, journal.TransactionId, StringComparison.Ordinal));
+        ApplyAbandonedTerminalState(journal, history);
+
+        if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+        {
+            App.Log("[DesktopOrganization] Abandoned transaction finalize could not persist settings; the journal is kept.");
+            return false;
+        }
+
+        _recoveryStore.Clear();
+        await CompactHistoryAfterJournalResolutionAsync();
+        return true;
+    }
+
+    /// <summary>The settings-side half of an abandon.</summary>
+    private void ApplyAbandonedTerminalState(
+        DesktopOrganizationRecoveryJournal journal,
+        OrganizationHistoryEntry? history)
+    {
+        if (journal.IsUndo)
+        {
+            if (history is { CanUndo: true, IsUndone: false })
+            {
+                MarkUndoAbandoned(history);
+            }
+        }
+        else
+        {
+            RemoveUncommittedWidgets(journal, history);
+        }
+    }
+
+    /// <summary>
+    /// Abandon is an undo lifecycle endpoint: the entry can neither resume
+    /// undo nor stay protected from retention compaction.
+    /// </summary>
+    private static void MarkUndoAbandoned(OrganizationHistoryEntry history)
+    {
+        history.CanUndo = false;
+        history.UndoStarted = false;
+    }
+
+    /// <summary>
     /// Stops all further restore attempts for an interrupted undo. The
     /// history entry keeps its receipts but can no longer block new
     /// organization, and a stale undo journal for it is discarded. Returns
@@ -223,10 +277,7 @@ public sealed partial class DesktopOrganizationTransaction
 
             if (history is { CanUndo: true, IsUndone: false })
             {
-                // Abandon is a lifecycle endpoint: the entry can neither
-                // resume undo nor stay protected from retention compaction.
-                history.CanUndo = false;
-                history.UndoStarted = false;
+                MarkUndoAbandoned(history);
                 // Checked persistence: the durable state change must land
                 // before the journal is discarded below.
                 if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
@@ -261,35 +312,16 @@ public sealed partial class DesktopOrganizationTransaction
             var journal = await _recoveryStore.LoadAsync();
             if (journal is null) return;
 
-            // Durable terminal marker first: a crash after this point must
-            // never let startup recovery restore files the user chose to keep
-            // where the abandoned transaction put them.
+            // WAL first: a crash after this point must never let startup
+            // recovery execute the abandoned transaction, and startup will
+            // finish whatever half of the finalize did not land.
             journal.IsAbandoned = true;
             await _recoveryStore.SaveAsync(journal);
 
-            var history = _settingsService.Settings.RecentOrganizationHistory
-                .FirstOrDefault(entry => string.Equals(entry.Id, journal.TransactionId, StringComparison.Ordinal));
-            if (journal.IsUndo)
-            {
-                if (history is { CanUndo: true, IsUndone: false })
-                {
-                    // Abandon is a lifecycle endpoint, same as AbandonUndo.
-                    history.CanUndo = false;
-                    history.UndoStarted = false;
-                }
-            }
-            else
-            {
-                RemoveUncommittedWidgets(journal, history);
-            }
-
-            if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+            if (!await TryFinalizeAbandonedJournalAsync(journal))
             {
                 throw new IOException("Persisting the abandoned recovery failed; the journal is kept.");
             }
-
-            _recoveryStore.Clear();
-            await CompactHistoryAfterJournalResolutionAsync();
         }
         finally { OperationGate.Release(); }
     }
