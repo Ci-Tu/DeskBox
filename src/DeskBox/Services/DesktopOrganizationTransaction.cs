@@ -56,6 +56,11 @@ public sealed partial class DesktopOrganizationTransaction
             var retainedItems = new List<DesktopOrganizationRetainedItem>();
             var createdWidgets = CreateCandidateWidgets(plan, settings);
             var journal = BuildJournal(plan);
+            // Flips exactly once the durable commit lands and the journal is
+            // cleared; past that point the catch below must never roll the
+            // in-memory settings back — the physical moves are committed and
+            // no journal remains to reconcile them.
+            bool committed = false;
 
             try
             {
@@ -224,11 +229,13 @@ public sealed partial class DesktopOrganizationTransaction
                 }
 
                 _recoveryStore.Clear();
+                committed = true;
 
-                // With the journal gone the receipts are pure history and may
-                // be compacted; a crash anywhere below only leaves a larger
-                // settings file for the next compaction pass. This save is
-                // best effort by design.
+                // Post-commit maintenance: compaction and directory cleanup
+                // are best effort. A failure here must surface to the caller
+                // but never rolls back — the transaction is durable and the
+                // journal is gone; at worst a larger settings file survives
+                // for the next compaction pass.
                 if (OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory))
                 {
                     await _settingsService.SaveAsync(notifySubscribers: false);
@@ -246,6 +253,15 @@ public sealed partial class DesktopOrganizationTransaction
             }
             catch
             {
+                if (committed)
+                {
+                    // The durable commit (settings save + journal clear) is
+                    // done. Restoring the original in-memory graphs here
+                    // would desynchronize settings from the already-moved
+                    // files with no journal left to reconcile them.
+                    throw;
+                }
+
                 settings.Widgets = originalWidgets;
                 settings.DesktopOrganizationRules = originalRules;
                 settings.RecentOrganizationHistory = originalHistory;

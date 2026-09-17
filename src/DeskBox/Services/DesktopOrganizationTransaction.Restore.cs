@@ -105,11 +105,21 @@ public sealed partial class DesktopOrganizationTransaction
                 // Terminal entries — the user abandoned, or the undo finished
                 // but a crash preceded the journal clear — must not be revived
                 // by the reconcile below, which would flip CanUndo back on.
+                // The terminal state may exist only in memory (an undo whose
+                // checked save failed earlier in this process), so confirm it
+                // durably before the journal may be cleared; re-saving the
+                // already-durable case is an idempotent no-op.
                 if (!history.CanUndo || history.IsUndone)
                 {
+                    if (!await _settingsService.SaveCheckedAsync(notifySubscribers: false))
+                    {
+                        App.Log("[DesktopOrganization] Terminal undo state could not be persisted; journal kept.");
+                        return journal.Items.Count(item => item.Completed);
+                    }
+
                     _recoveryStore.Clear();
                     await CompactHistoryAfterJournalResolutionAsync();
-                    return 0;
+                    return journal.Items.Count(item => item.Completed);
                 }
 
                 ApplyUndoReceipts(history, journal);

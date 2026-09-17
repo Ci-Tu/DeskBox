@@ -888,6 +888,68 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         Assert.False(entry.UndoStarted);
     }
 
+    [Fact]
+    public async Task UndoSaveFailure_ThenSameProcessRecoverKeepsDiskTerminalStateDurable()
+    {
+        // Full durability matrix for the undo checked-save boundary: the
+        // undo's terminal state exists only in memory after the save fails,
+        // and a same-process RecoverPendingAsync must persist it before it
+        // may clear the journal — proven by a fresh settings reload.
+        string desktop = Directory.CreateDirectory(Path.Combine(_tempRoot, "desktop")).FullName;
+        string storage = Directory.CreateDirectory(Path.Combine(_tempRoot, "storage")).FullName;
+        string sourceOne = Path.Combine(desktop, "one.pdf");
+        string sourceTwo = Path.Combine(desktop, "two.pdf");
+        File.WriteAllText(sourceOne, "one");
+        File.WriteAllText(sourceTwo, "two");
+
+        var classifier = new DesktopOrganizationClassifier();
+        var scanner = new DesktopOrganizationScanner(classifier, () => desktop, () => string.Empty);
+        DesktopOrganizationScanResult scan = await scanner.ScanAsync();
+        DesktopOrganizationPlan plan = new DesktopOrganizationPlanner(
+            new DesktopOrganizationRuleResolver()).CreatePlan(
+            scan, storage, [], [], _ => "Documents");
+
+        string dataDir = Path.Combine(_tempRoot, "settings");
+        var settings = new SettingsService(dataDir);
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        var transaction = new DesktopOrganizationTransaction(settings, new FileService(), recovery);
+        string historyId = (await transaction.ExecuteAsync(plan)).History.Id;
+
+        string settingsPath = Path.Combine(dataDir, "settings.json");
+        File.SetAttributes(settingsPath, FileAttributes.ReadOnly);
+        OrganizationHistoryEntry entry = settings.Settings.RecentOrganizationHistory
+            .Single(candidate => candidate.Id == historyId);
+        try
+        {
+            // All files physically restore; the receipts reconcile in
+            // memory; the checked save fails and the journal must survive.
+            await Assert.ThrowsAsync<IOException>(() => transaction.UndoAsync(historyId));
+            Assert.True(recovery.HasPendingJournal);
+            Assert.True(entry.IsUndone);   // in-memory terminal state only
+            Assert.False(entry.CanUndo);
+        }
+        finally
+        {
+            File.SetAttributes(settingsPath, FileAttributes.Normal);
+        }
+
+        // Same process, same SettingsService instance: recovery sees the
+        // in-memory terminal state and must confirm it durably before
+        // clearing the journal.
+        await transaction.RecoverPendingAsync();
+
+        Assert.False(recovery.HasPendingJournal);
+
+        // Fresh reload from disk: the terminal state is durable, not merely
+        // an in-memory leftover.
+        var reloadedService = new SettingsService(dataDir);
+        await reloadedService.LoadAsync();
+        var diskEntry = reloadedService.Settings.RecentOrganizationHistory
+            .Single(candidate => candidate.Id == historyId);
+        Assert.True(diskEntry.IsUndone);
+        Assert.False(diskEntry.CanUndo);
+    }
+
     private static WidgetConfig CreateWidget(string folderPath) => new()
     {
         Id = Guid.NewGuid().ToString("N"),
