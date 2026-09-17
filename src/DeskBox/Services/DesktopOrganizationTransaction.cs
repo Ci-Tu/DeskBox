@@ -203,6 +203,10 @@ public sealed partial class DesktopOrganizationTransaction
                             SettingsService.MaxRecentOrganizationHistoryCount,
                             settings.RecentOrganizationHistory.Count - SettingsService.MaxRecentOrganizationHistoryCount);
                     }
+
+                    // A retry merge (previous.Items at line above) can push an
+                    // entry past the receipt caps; enforce them before saving.
+                    OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory);
                 }
 
                 if (history.Items.Count == 0)

@@ -24,6 +24,15 @@ public class OrganizationHistoryEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UndoStarted { get; set; }
 
+    /// <summary>
+    /// The operation's original item count, recorded when receipts were
+    /// captured. Entries downgraded to a summary (oversized batch or over
+    /// the retention budget) keep this count after their undo receipts are
+    /// dropped; legacy entries without it fall back to <see cref="Items"/>.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int TotalItemCount { get; set; }
+
     public string? ErrorMessage { get; set; }
 
     public List<OrganizationHistoryItem> Items { get; set; } = [];
@@ -35,7 +44,7 @@ public class OrganizationHistoryEntry
     public bool IsFailed => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     [JsonIgnore]
-    public int ItemCount => Items.Count;
+    public int ItemCount => TotalItemCount > 0 ? TotalItemCount : Items.Count;
 
     [JsonIgnore]
     public string DisplayTitle => ActionType switch
@@ -84,7 +93,11 @@ public class OrganizationHistoryEntry
 
             if (Items.Count == 0)
             {
-                return Localize("History.NoItems");
+                // A downgraded summary entry keeps the real count even
+                // though its receipts are gone.
+                return TotalItemCount > 0
+                    ? LocalizeFormat("FileInfo.FolderItems", ItemCount)
+                    : Localize("History.NoItems");
             }
 
             var firstItem = Items[0];

@@ -506,6 +506,7 @@ public sealed class OrganizerService
     private async Task AddHistoryEntryAsync(OrganizationHistoryEntry entry)
     {
         _settingsService.Settings.RecentOrganizationHistory.Insert(0, entry);
+        OrganizationHistoryPolicy.ApplyRetentionPolicy(_settingsService.Settings.RecentOrganizationHistory);
         await _settingsService.SaveAsync(notifySubscribers: false);
     }
 
