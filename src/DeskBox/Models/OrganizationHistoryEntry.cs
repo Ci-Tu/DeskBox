@@ -33,6 +33,14 @@ public class OrganizationHistoryEntry
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int TotalItemCount { get; set; }
 
+    /// <summary>
+    /// Durable marker that this transaction's undo receipts were dropped by
+    /// the retention policy. A retry merging into the same entry inherits
+    /// the marker and can never regain undo capability.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UndoReceiptsDiscarded { get; set; }
+
     public string? ErrorMessage { get; set; }
 
     public List<OrganizationHistoryItem> Items { get; set; } = [];

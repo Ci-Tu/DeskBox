@@ -27,7 +27,8 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         bool canUndo = true,
         int pathLength = 40,
         DateTime? timestampUtc = null,
-        string? errorMessage = null)
+        string? errorMessage = null,
+        string destinationRoot = "E:\\dst")
     {
         string filler = new('a', Math.Max(0, pathLength - 20));
         return new OrganizationHistoryEntry
@@ -42,7 +43,7 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
             {
                 Name = $"{filler}-{i}.txt",
                 SourcePath = $"C:\\src\\{filler}-{i}.txt",
-                DestinationPath = $"E:\\dst\\{filler}-{i}.txt",
+                DestinationPath = $"{destinationRoot}\\{filler}-{i}.txt",
                 TargetWidgetId = "widget",
                 TargetWidgetName = "Widget"
             }).ToList()
@@ -64,6 +65,7 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
             Assert.Equal(count, entry.Items.Count);
             Assert.Equal(count, entry.TotalItemCount);
             Assert.Equal(count, entry.ItemCount);
+            Assert.False(entry.UndoReceiptsDiscarded);
         }
     }
 
@@ -71,7 +73,6 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     public void PerEntryCap_DowngradesAboveLimit()
     {
         var entry = CreateEntry(501, canUndo: true);
-        entry.UndoStarted = true;
         var history = new List<OrganizationHistoryEntry> { entry };
 
         bool changed = OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
@@ -81,7 +82,7 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         Assert.True(changed);
         Assert.False(changedAgain); // Idempotent.
         Assert.False(result.CanUndo);
-        Assert.False(result.UndoStarted);
+        Assert.True(result.UndoReceiptsDiscarded);
         Assert.Empty(result.Items);
         Assert.Equal(501, result.TotalItemCount);
         Assert.Equal(501, result.ItemCount);
@@ -90,11 +91,11 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     [Fact]
     public void GlobalBudget_DowngradesOldestFirst()
     {
-        // 6 entries x 500 receipts = 3000 > 2500 budget. The list is
-        // newest-first, so the oldest entry (last index) loses its receipts
-        // first and the five newest stay fully undoable (= 2500 exactly).
+        // Newest-first list: index 0 is now, index 5 is five minutes ago.
+        // 6 entries x 500 receipts = 3000 > 2500 budget, so the oldest entry
+        // loses its receipts and the five newest stay undoable (= 2500).
         var history = Enumerable.Range(0, 6)
-            .Select(i => CreateEntry(500, timestampUtc: DateTime.UtcNow.AddMinutes(i)))
+            .Select(i => CreateEntry(500, timestampUtc: DateTime.UtcNow.AddMinutes(-i)))
             .ToList();
 
         OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
@@ -106,6 +107,7 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
             Assert.Equal(500, entry.Items.Count);
         });
         var downgraded = history[^1];
+        Assert.Equal(history.Min(entry => entry.TimestampUtc), downgraded.TimestampUtc);
         Assert.False(downgraded.CanUndo);
         Assert.Empty(downgraded.Items);
         Assert.Equal(500, downgraded.TotalItemCount);
@@ -116,7 +118,7 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     public void GlobalBudget_KeepsNormalSizedHistory()
     {
         var history = Enumerable.Range(0, SettingsService.MaxRecentOrganizationHistoryCount)
-            .Select(i => CreateEntry(20, timestampUtc: DateTime.UtcNow.AddMinutes(i)))
+            .Select(i => CreateEntry(20, timestampUtc: DateTime.UtcNow.AddMinutes(-i)))
             .ToList();
 
         OrganizationHistoryPolicy.ApplyRetentionPolicy(history);
@@ -127,6 +129,69 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
             Assert.True(entry.CanUndo);
             Assert.Equal(20, entry.Items.Count);
         });
+    }
+
+    [Fact]
+    public void RetentionPolicy_SkipsEntriesWithInterruptedUndo()
+    {
+        // An interrupted ManagedDrop undo has no recovery journal at all;
+        // the partially restored receipts are its only resume state.
+        var entry = CreateEntry(600);
+        entry.Items[0].IsRestored = true;
+
+        bool changed = OrganizationHistoryPolicy.ApplyRetentionPolicy([entry]);
+
+        Assert.False(changed);
+        Assert.Equal(600, entry.Items.Count);
+        Assert.True(entry.CanUndo);
+
+        // A fully undone entry is no longer active; its receipts compact.
+        foreach (var item in entry.Items) item.IsRestored = true;
+        entry.IsUndone = true;
+        changed = OrganizationHistoryPolicy.ApplyRetentionPolicy([entry]);
+        Assert.True(changed);
+        Assert.Empty(entry.Items);
+    }
+
+    [Fact]
+    public void MergeRetryHistory_DiscardedTransactionNeverRegainsUndo()
+    {
+        var previous = new OrganizationHistoryEntry
+        {
+            TotalItemCount = 600,
+            UndoReceiptsDiscarded = true,
+            CanUndo = false
+        };
+        var retry = CreateEntry(10, canUndo: true);
+
+        OrganizationHistoryPolicy.MergeRetryHistory(retry, previous);
+
+        Assert.True(retry.UndoReceiptsDiscarded);
+        Assert.False(retry.CanUndo);
+        Assert.Equal(610, retry.TotalItemCount);
+        // This run's receipts survive the merge (they are the current
+        // result page data) and are cleared by the post-journal compaction.
+        Assert.Equal(10, retry.Items.Count);
+
+        OrganizationHistoryPolicy.ApplyRetentionPolicy([retry]);
+
+        Assert.Empty(retry.Items);
+        Assert.False(retry.CanUndo);
+        Assert.Equal(610, retry.TotalItemCount);
+        Assert.Equal(610, retry.ItemCount);
+    }
+
+    [Fact]
+    public void MergeRetryHistory_NormalRetryKeepsUndoableMergedReceipts()
+    {
+        var previous = CreateEntry(20);
+        var retry = CreateEntry(10, canUndo: true);
+
+        OrganizationHistoryPolicy.MergeRetryHistory(retry, previous);
+
+        Assert.False(retry.UndoReceiptsDiscarded);
+        Assert.True(retry.CanUndo);
+        Assert.Equal(30, retry.Items.Count);
     }
 
     [Fact]
@@ -173,13 +238,140 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadAsync_MigratesBloatShrinksFileAndKeepsEntryCap()
+    public async Task ExecuteAsync_LargeBatchCompactsAfterJournalClearAndReportsFullResult()
+    {
+        string desktop = Directory.CreateDirectory(Path.Combine(_tempRoot, "desktop")).FullName;
+        string storage = Directory.CreateDirectory(Path.Combine(_tempRoot, "storage")).FullName;
+        for (int i = 0; i < 601; i++)
+        {
+            File.WriteAllText(Path.Combine(desktop, $"file-{i:D4}.pdf"), "x");
+        }
+
+        var classifier = new DesktopOrganizationClassifier();
+        var scanner = new DesktopOrganizationScanner(classifier, () => desktop, () => string.Empty);
+        DesktopOrganizationScanResult scan = await scanner.ScanAsync(includeSlowItems: true);
+        DesktopOrganizationPlan plan = new DesktopOrganizationPlanner(
+            new DesktopOrganizationRuleResolver()).CreatePlan(
+            scan,
+            storage,
+            [],
+            [],
+            _ => "Documents");
+
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        var transaction = new DesktopOrganizationTransaction(settings, new FileService(), recovery);
+
+        DesktopOrganizationExecutionResult result = await transaction.ExecuteAsync(plan);
+
+        // The result page keeps the real per-run receipts (D)...
+        Assert.Equal(601, result.CompletedItems.Count);
+        Assert.All(result.CompletedItems, item => Assert.True(File.Exists(item.DestinationPath)));
+        Assert.All(result.CompletedItems, item => Assert.False(File.Exists(item.SourcePath)));
+        // ...while the persisted entry was compacted strictly after the
+        // journal was cleared (A), so no crash window can lose the commit
+        // evidence.
+        var entry = Assert.Single(settings.Settings.RecentOrganizationHistory);
+        Assert.False(result.History.CanUndo);
+        Assert.Empty(entry.Items);
+        Assert.Equal(601, entry.TotalItemCount);
+        Assert.True(entry.UndoReceiptsDiscarded);
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_CommittedMovesStayPutWithFullReceiptsOnDisk()
+    {
+        // Simulates the crash window between the commit save (full receipts
+        // persisted) and the journal clear: recovery must recognize every
+        // journal item as committed and must not move files back.
+        string destinationRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "dst")).FullName;
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(600, canUndo: true, destinationRoot: destinationRoot);
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        foreach (var item in entry.Items)
+        {
+            File.WriteAllText(item.DestinationPath, "moved");
+        }
+
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = false,
+            TransactionId = entry.Id,
+            Items = entry.Items.Select(item => new DesktopOrganizationRecoveryItem
+            {
+                SourcePath = item.SourcePath,
+                DestinationPath = item.DestinationPath,
+                TargetWidgetId = item.TargetWidgetId,
+                Completed = true
+            }).ToList()
+        };
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        int restored = await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.Equal(0, restored);
+        Assert.All(entry.Items, item => Assert.True(File.Exists(item.DestinationPath)));
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_PendingUndoJournalKeepsActiveUndoReceipts()
+    {
+        // An interrupted desktop organization undo: the startup reconcile
+        // clears the journal, but the entry keeps its receipts so the user
+        // can finish or abandon the undo (B).
+        string destinationRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "dst")).FullName;
+        string restoreRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "restore")).FullName;
+        var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        var entry = CreateEntry(600, canUndo: true, destinationRoot: destinationRoot);
+        entry.UndoStarted = true;
+        foreach (var item in entry.Items)
+        {
+            File.WriteAllText(item.DestinationPath, "moved");
+        }
+
+        settings.Settings.RecentOrganizationHistory.Add(entry);
+        var journal = new DesktopOrganizationRecoveryJournal
+        {
+            IsUndo = true,
+            TransactionId = entry.Id,
+            Items =
+            [
+                new DesktopOrganizationRecoveryItem
+                {
+                    SourcePath = entry.Items[0].SourcePath,
+                    DestinationPath = entry.Items[0].DestinationPath,
+                    RestorePath = Path.Combine(restoreRoot, "restored-0.txt"),
+                    Completed = true
+                }
+            ]
+        };
+        File.WriteAllText(journal.Items[0].RestorePath!, "restored");
+        var recovery = new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json"));
+        await recovery.SaveAsync(journal);
+
+        await new DesktopOrganizationTransaction(
+            settings, new FileService(), recovery).RecoverPendingAsync();
+
+        Assert.Equal(600, entry.Items.Count);
+        Assert.True(entry.UndoStarted);
+        Assert.True(entry.CanUndo);
+        Assert.False(entry.IsUndone);
+        Assert.True(entry.Items[0].IsRestored);
+        Assert.False(recovery.HasPendingJournal);
+    }
+
+    [Fact]
+    public async Task LoadAsync_DoesNotDowngradeBloatWithoutRecoveryPass()
     {
         string dataDir = Path.Combine(_tempRoot, "settings");
         Directory.CreateDirectory(dataDir);
         var bloated = new AppSettings();
         bloated.RecentOrganizationHistory.AddRange(Enumerable.Range(0, 30).Select(i =>
-            CreateEntry(2000, timestampUtc: DateTime.UtcNow.AddMinutes(i))));
+            CreateEntry(2000, timestampUtc: DateTime.UtcNow.AddMinutes(-i))));
         string settingsPath = Path.Combine(dataDir, "settings.json");
         await File.WriteAllTextAsync(
             settingsPath,
@@ -189,10 +381,45 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         var service = new SettingsService(dataDir);
         await service.LoadAsync();
 
-        long migratedLength = new FileInfo(settingsPath).Length;
-        _output.WriteLine($"settings.json: {originalLength} -> {migratedLength} bytes");
+        // Entry count is still capped, but the receipts must survive the
+        // load: only the post-recovery compaction may drop them.
         Assert.Equal(SettingsService.MaxRecentOrganizationHistoryCount, service.Settings.RecentOrganizationHistory.Count);
-        Assert.True(migratedLength < originalLength / 10, $"expected a >10x shrink, got {originalLength} -> {migratedLength}");
+        Assert.All(service.Settings.RecentOrganizationHistory, entry =>
+        {
+            Assert.Equal(2000, entry.Items.Count);
+            Assert.True(entry.CanUndo);
+        });
+        Assert.True(new FileInfo(settingsPath).Length > originalLength / 2);
+    }
+
+    [Fact]
+    public async Task RecoverPendingAsync_CompactsBloatWhenNoJournalOutstanding()
+    {
+        string dataDir = Path.Combine(_tempRoot, "settings");
+        Directory.CreateDirectory(dataDir);
+        var bloated = new AppSettings();
+        bloated.RecentOrganizationHistory.AddRange(Enumerable.Range(0, 30).Select(i =>
+            CreateEntry(2000, timestampUtc: DateTime.UtcNow.AddMinutes(-i))));
+        string settingsPath = Path.Combine(dataDir, "settings.json");
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(bloated, SettingsJsonContext.Default.AppSettings));
+        long originalLength = new FileInfo(settingsPath).Length;
+
+        var service = new SettingsService(dataDir);
+        await service.LoadAsync();
+        var transaction = new DesktopOrganizationTransaction(
+            service,
+            new FileService(),
+            new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json")));
+
+        await transaction.RecoverPendingAsync(); // no journal exists -> compaction runs
+
+        long compactedLength = new FileInfo(settingsPath).Length;
+        _output.WriteLine($"settings.json: {originalLength} -> {compactedLength} bytes");
+        Assert.True(compactedLength < originalLength / 10,
+            $"expected a >10x shrink, got {originalLength} -> {compactedLength}");
+        Assert.Equal(SettingsService.MaxRecentOrganizationHistoryCount, service.Settings.RecentOrganizationHistory.Count);
         Assert.All(service.Settings.RecentOrganizationHistory, entry =>
         {
             Assert.False(entry.CanUndo);
@@ -208,13 +435,18 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
         Directory.CreateDirectory(dataDir);
         var profile = new AppSettings();
         profile.RecentOrganizationHistory.AddRange(Enumerable.Range(0, 3).Select(i =>
-            CreateEntry(20, timestampUtc: DateTime.UtcNow.AddMinutes(i))));
+            CreateEntry(20, timestampUtc: DateTime.UtcNow.AddMinutes(-i))));
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, "settings.json"),
             JsonSerializer.Serialize(profile, SettingsJsonContext.Default.AppSettings));
 
         var service = new SettingsService(dataDir);
         await service.LoadAsync();
+        var transaction = new DesktopOrganizationTransaction(
+            service,
+            new FileService(),
+            new DesktopOrganizationRecoveryStore(Path.Combine(_tempRoot, "recovery.json")));
+        await transaction.RecoverPendingAsync();
 
         Assert.Equal(3, service.Settings.RecentOrganizationHistory.Count);
         Assert.All(service.Settings.RecentOrganizationHistory, entry =>
@@ -225,9 +457,10 @@ public sealed class OrganizationHistoryPolicyTests : IDisposable
     }
 
     /// <summary>
-    /// Local-only harness: runs the load migration over a real (uncommitted)
-    /// settings.json copy pointed to by DESKBOX_HISTORY_MIGRATION_FIXTURE.
-    /// Skips silently when the variable is unset, e.g. in CI.
+    /// Local-only harness: runs the retention policy over a real
+    /// (uncommitted) settings.json copy pointed to by
+    /// DESKBOX_HISTORY_MIGRATION_FIXTURE. Skips silently when the variable
+    /// is unset, e.g. in CI.
     /// </summary>
     [Fact]
     public async Task RealSettingsCopy_MigrationShrinksBloat()

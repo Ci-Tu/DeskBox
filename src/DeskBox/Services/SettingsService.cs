@@ -2533,14 +2533,6 @@ settings.FocusClickedWidgetOnRaise = false;
             }
         }
 
-        // Legacy profiles can carry multi-thousand-receipt entries that
-        // bloated settings.json past recovery; the policy downgrades them
-        // to summaries so the first save after upgrade shrinks the file.
-        if (OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory))
-        {
-            changed = true;
-        }
-
         settings.DesktopOrganizationRules ??= [];
         var validFileWidgetIds = settings.Widgets
             .Where(widget =>

@@ -280,6 +280,14 @@ public sealed class DesktopOrganizationExecutionResult
 {
     public OrganizationHistoryEntry History { get; init; } = new();
 
+    /// <summary>
+    /// This run's completed receipts, captured before the persisted history
+    /// entry may be compacted to a summary by the retention policy. The
+    /// result page renders these; <see cref="History"/> remains the durable
+    /// record (possibly a receipt-less summary for oversized batches).
+    /// </summary>
+    public List<OrganizationHistoryItem> CompletedItems { get; init; } = [];
+
     public List<WidgetConfig> CreatedWidgets { get; init; } = [];
 
     public List<DesktopOrganizationRetainedItem> RetainedItems { get; init; } = [];

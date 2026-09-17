@@ -188,7 +188,7 @@ public sealed partial class DesktopOrganizationTransaction
                     var previous = settings.RecentOrganizationHistory.FirstOrDefault(entry => entry.Id == history.Id);
                     if (previous is not null)
                     {
-                        history.Items.InsertRange(0, previous.Items);
+                        OrganizationHistoryPolicy.MergeRetryHistory(history, previous);
                         foreach (var target in previous.Targets)
                         {
                             history.Targets.RemoveAll(candidate => candidate.WidgetId == target.WidgetId);
@@ -203,21 +203,38 @@ public sealed partial class DesktopOrganizationTransaction
                             SettingsService.MaxRecentOrganizationHistoryCount,
                             settings.RecentOrganizationHistory.Count - SettingsService.MaxRecentOrganizationHistoryCount);
                     }
-
-                    // A retry merge (previous.Items at line above) can push an
-                    // entry past the receipt caps; enforce them before saving.
-                    OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory);
                 }
 
                 if (history.Items.Count == 0)
                     history = settings.RecentOrganizationHistory.FirstOrDefault(entry => entry.Id == plan.Id) ?? history;
+
+                // The result page renders this run's completed receipts; the
+                // persisted entry may be compacted to a summary right after
+                // the journal is cleared below.
+                var completedItems = history.Items.ToList();
+
+                // Saving settings is the commit point: full receipts must be
+                // on disk while the recovery journal still exists. Compacting
+                // before this save would let a crash between save and journal
+                // clear make RecoverPendingAsync treat committed moves as
+                // pending and restore them back to the desktop.
                 await _settingsService.SaveAsync(notifySubscribers: false);
                 _recoveryStore.Clear();
+
+                // With the journal gone the receipts are pure history and may
+                // be compacted; a crash anywhere below only leaves a larger
+                // settings file for the next compaction pass.
+                if (OrganizationHistoryPolicy.ApplyRetentionPolicy(settings.RecentOrganizationHistory))
+                {
+                    await _settingsService.SaveAsync(notifySubscribers: false);
+                }
+
                 RemoveEmptyCreatedDirectories(createdDirectories);
 
                 return new DesktopOrganizationExecutionResult
                 {
                     History = history,
+                    CompletedItems = completedItems,
                     CreatedWidgets = createdWidgets,
                     RetainedItems = retainedItems
                 };

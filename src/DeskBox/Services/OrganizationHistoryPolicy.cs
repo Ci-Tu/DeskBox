@@ -10,6 +10,14 @@ namespace DeskBox.Services;
 /// startup. Oversized batches keep their history entry as a summary — real
 /// item count, no receipts, never partially undoable.
 /// </summary>
+/// <remarks>
+/// Compaction is only safe once no recovery journal can still reference the
+/// receipts: in the desktop organization flow <c>OrganizationHistory.Items</c>
+/// doubles as the durable commit evidence that tells
+/// <c>RecoverPendingAsync</c> which moves already committed, so receipts are
+/// dropped strictly after the journal is cleared, never before the commit
+/// save.
+/// </remarks>
 public static class OrganizationHistoryPolicy
 {
     /// <summary>
@@ -30,7 +38,9 @@ public static class OrganizationHistoryPolicy
     /// <summary>
     /// Enforces both bounds. The list is newest-first (index 0 is the most
     /// recent entry), matching every append site and the load normalizer.
-    /// Returns true when anything changed.
+    /// Entries whose undo lifecycle is still in progress are left untouched:
+    /// their receipts are the resume state of an interrupted undo, not
+    /// historical data. Returns true when anything changed.
     /// </summary>
     public static bool ApplyRetentionPolicy(List<OrganizationHistoryEntry> history)
     {
@@ -42,6 +52,26 @@ public static class OrganizationHistoryPolicy
         bool changed = false;
         foreach (var entry in history)
         {
+            if (IsUndoLifecycleActive(entry))
+            {
+                continue;
+            }
+
+            if (entry.UndoReceiptsDiscarded)
+            {
+                // A retry may have re-added this run's receipts after the
+                // transaction already lost older ones; the entry stays a
+                // non-undoable summary.
+                entry.CanUndo = false;
+                if (entry.Items.Count > 0)
+                {
+                    DowngradeToSummary(entry);
+                    changed = true;
+                }
+
+                continue;
+            }
+
             if (entry.Items.Count == 0)
             {
                 continue;
@@ -63,22 +93,44 @@ public static class OrganizationHistoryPolicy
         int totalItems = 0;
         foreach (var entry in history)
         {
-            totalItems += entry.Items.Count;
+            if (!IsUndoLifecycleActive(entry) && !entry.UndoReceiptsDiscarded)
+            {
+                totalItems += entry.Items.Count;
+            }
         }
 
         for (int i = history.Count - 1; i >= 0 && totalItems > MaxUndoReceiptItemBudget; i--)
         {
-            if (history[i].Items.Count == 0)
+            var entry = history[i];
+            if (IsUndoLifecycleActive(entry) || entry.UndoReceiptsDiscarded || entry.Items.Count == 0)
             {
                 continue;
             }
 
-            totalItems -= history[i].Items.Count;
-            DowngradeToSummary(history[i]);
+            totalItems -= entry.Items.Count;
+            DowngradeToSummary(entry);
             changed = true;
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// Merges a retry run into its own previous history entry (same
+    /// transaction id). A transaction whose receipts were already discarded
+    /// can never regain undo: the merge inherits the discarded marker, keeps
+    /// this run's receipts only until the post-journal compaction clears
+    /// them, and carries the real total forward.
+    /// </summary>
+    public static void MergeRetryHistory(OrganizationHistoryEntry history, OrganizationHistoryEntry previous)
+    {
+        history.Items.InsertRange(0, previous.Items);
+        if (previous.UndoReceiptsDiscarded)
+        {
+            history.UndoReceiptsDiscarded = true;
+            history.CanUndo = false;
+            history.TotalItemCount = previous.TotalItemCount + history.Items.Count;
+        }
     }
 
     /// <summary>
@@ -91,5 +143,19 @@ public static class OrganizationHistoryPolicy
         entry.Items.Clear();
         entry.CanUndo = false;
         entry.UndoStarted = false;
+        entry.UndoReceiptsDiscarded = true;
+    }
+
+    /// <summary>
+    /// True while an undo is in progress or interrupted: the receipts are
+    /// resume state, and an interrupted ManagedDrop undo has no recovery
+    /// journal at all, so the check must rely on the persisted entry alone.
+    /// A fully undone entry (<see cref="OrganizationHistoryEntry.IsUndone"/>)
+    /// is no longer active — its receipts are dead weight.
+    /// </summary>
+    public static bool IsUndoLifecycleActive(OrganizationHistoryEntry entry)
+    {
+        return !entry.IsUndone &&
+            (entry.UndoStarted || entry.Items.Any(item => item.IsRestored));
     }
 }

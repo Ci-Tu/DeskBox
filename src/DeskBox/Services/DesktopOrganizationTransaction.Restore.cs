@@ -61,7 +61,14 @@ public sealed partial class DesktopOrganizationTransaction
         try
         {
             var journal = await _recoveryStore.LoadAsync();
-            if (journal is null) return 0;
+            if (journal is null)
+            {
+                // Startup always lands here: with no journal outstanding this
+                // is the safe window to shrink bloated history profiles.
+                await CompactHistoryAfterJournalResolutionAsync();
+                return 0;
+            }
+
             var history = _settingsService.Settings.RecentOrganizationHistory.FirstOrDefault(entry => entry.Id == journal.TransactionId);
             if (journal.IsUndo)
             {
@@ -74,11 +81,15 @@ public sealed partial class DesktopOrganizationTransaction
                     // block organization forever.
                     _recoveryStore.Clear();
                     App.Log("[DesktopOrganization] Discarded an undo journal whose history entry no longer exists.");
+                    await CompactHistoryAfterJournalResolutionAsync();
                     return 0;
                 }
                 ApplyUndoReceipts(history, journal);
                 await _settingsService.SaveAsync(notifySubscribers: false);
                 _recoveryStore.Clear();
+                // An interrupted undo keeps its receipts (IsUndoLifecycleActive
+                // guards them); only unrelated bloated entries compact here.
+                await CompactHistoryAfterJournalResolutionAsync();
                 return journal.Items.Count(item => item.Completed);
             }
 
@@ -115,9 +126,28 @@ public sealed partial class DesktopOrganizationTransaction
             RemoveUncommittedWidgets(journal, history);
             await _settingsService.SaveAsync(notifySubscribers: false);
             _recoveryStore.Clear();
+            await CompactHistoryAfterJournalResolutionAsync();
             return restored;
         }
         finally { OperationGate.Release(); }
+    }
+
+    /// <summary>
+    /// Compacts history receipts once no recovery journal can reference
+    /// them. Call only right after the journal was cleared (or confirmed
+    /// absent): the receipts double as durable commit evidence for
+    /// <see cref="RecoverPendingAsync"/>, so they must survive every crash
+    /// window in which that evidence is still needed. Entries with an
+    /// undo still in progress keep their receipts (see
+    /// <see cref="OrganizationHistoryPolicy.IsUndoLifecycleActive"/>).
+    /// </summary>
+    private async Task CompactHistoryAfterJournalResolutionAsync()
+    {
+        if (_recoveryStore.HasPendingJournal) return;
+        if (OrganizationHistoryPolicy.ApplyRetentionPolicy(_settingsService.Settings.RecentOrganizationHistory))
+        {
+            await _settingsService.SaveAsync(notifySubscribers: false);
+        }
     }
 
     /// <summary>

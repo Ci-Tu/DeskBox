@@ -505,8 +505,20 @@ public sealed class OrganizerService
 
     private async Task AddHistoryEntryAsync(OrganizationHistoryEntry entry)
     {
+        // Only the new entry is capped here. The global budget would touch
+        // older entries whose receipts may still back a pending desktop
+        // organization undo journal; it is enforced by the post-recovery
+        // compaction instead.
+        if (entry.Items.Count > OrganizationHistoryPolicy.MaxUndoReceiptItemsPerEntry)
+        {
+            OrganizationHistoryPolicy.DowngradeToSummary(entry);
+        }
+        else if (entry.TotalItemCount < entry.Items.Count)
+        {
+            entry.TotalItemCount = entry.Items.Count;
+        }
+
         _settingsService.Settings.RecentOrganizationHistory.Insert(0, entry);
-        OrganizationHistoryPolicy.ApplyRetentionPolicy(_settingsService.Settings.RecentOrganizationHistory);
         await _settingsService.SaveAsync(notifySubscribers: false);
     }
 
