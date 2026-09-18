@@ -26,15 +26,12 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/App.xaml.cs"] = 10,
         ["src/DeskBox/Controls/NativeShellFileDragProvider.cs"] = 4,
         ["src/DeskBox/Helpers/BoundedStaOperationRunner.cs"] = 2,
-        ["src/DeskBox/Helpers/ChineseTextConverter.cs"] = 1,
         ["src/DeskBox/Helpers/ElevatedFileLauncher.cs"] = 7,
         ["src/DeskBox/Helpers/ExplorerShellLaunchService.cs"] = 1,
-        ["src/DeskBox/Helpers/IconHelper.cs"] = 6,
         ["src/DeskBox/Helpers/NativeDropDescriptionWriter.cs"] = 7,
         ["src/DeskBox/Helpers/NativeDropImageManager.cs"] = 1,
         ["src/DeskBox/Helpers/NativeDropTarget.cs"] = 12,
         ["src/DeskBox/Helpers/NativeDropTargetComInterop.cs"] = 2,
-        ["src/DeskBox/Helpers/NaturalStringComparer.cs"] = 1,
         ["src/DeskBox/Helpers/ShellClipboardHelper.cs"] = 12,
         ["src/DeskBox/Helpers/ShellContextMenuHelper.cs"] = 1,
         ["src/DeskBox/Helpers/ShellContextMenuProxy.cs"] = 1,
@@ -43,9 +40,6 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Helpers/ShellDropDelegator.cs"] = 1,
         ["src/DeskBox/Helpers/ShortcutHelper.cs"] = 1,
         ["src/DeskBox/Helpers/ShortcutNativeBackend.cs"] = 1,
-        ["src/DeskBox/Helpers/StorageBusTypeHelper.cs"] = 3,
-        ["src/DeskBox/Helpers/Win32Helper.DisplayTiming.cs"] = 3,
-        ["src/DeskBox/Helpers/Win32Helper.cs"] = 90,
         ["src/DeskBox/Services/AppDistributionService.cs"] = 1,
         ["src/DeskBox/Services/AppLifecycleRecoveryWatcher.cs"] = 2,
         ["src/DeskBox/Services/DesktopAutoOrganizationWatcher.cs"] = 1,
@@ -54,8 +48,6 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Services/DirectStartupTaskXmlReader.cs"] = 3,
         ["src/DeskBox/Services/DragDropPermissionService.cs"] = 13,
         ["src/DeskBox/Services/EverythingInstallationDetector.cs"] = 4,
-        ["src/DeskBox/Services/EverythingNativeMethods.cs"] = 25,
-        ["src/DeskBox/Services/FileMetaService.cs"] = 2,
         ["src/DeskBox/Services/FileService.ShellTransfer.cs"] = 5,
         ["src/DeskBox/Services/FileService.TransferProgress.cs"] = 1,
         ["src/DeskBox/Services/FileService.cs"] = 6,
@@ -304,6 +296,34 @@ public sealed class ModuleBoundaryContractTests
         Assert.True(
             violations.Count == 0,
             "DeskBox.Sync must reach other domains only through Contracts:\n" +
+            string.Join('\n', violations.Select(violation => $"  {violation}")));
+    }
+
+    [Fact]
+    public void DomainNamespaces_AreNotGloballyImported()
+    {
+        // Boundary checks above are source-string laws: they only see a
+        // forbidden reference when the source text names the namespace. A
+        // `global using` makes the same reference invisible (bare type names
+        // resolve without spelling the domain), silently defeating every
+        // ratchet that relies on the string. Domain namespaces must be
+        // imported explicitly, per file, where the dependency is visible.
+        Regex globalDomainUsing = new(
+            @"global\s+using\s+(?:static\s+)?(?:[\w.]+\s*=\s*)?DeskBox\.(FileSafety|Features|Platform|Sync)\b",
+            RegexOptions.Compiled);
+
+        List<string> violations = new();
+        foreach ((string path, string source) in ProductionSource())
+        {
+            foreach (Match match in globalDomainUsing.Matches(source))
+            {
+                violations.Add($"{path} globally imports DeskBox.{match.Groups[1].Value}");
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            "Domain namespaces must be imported explicitly per file, not via global using:\n" +
             string.Join('\n', violations.Select(violation => $"  {violation}")));
     }
 
