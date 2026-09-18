@@ -89,7 +89,11 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Services/AotShellMoveFixture.cs"] = 1,
         ["src/DeskBox/Services/AppUpdateService.cs"] = 5,
         ["src/DeskBox/Services/AttachmentStorageService.cs"] = 1,
-        ["src/DeskBox/Services/DeskBoxDataBackupService.cs"] = 9,
+        // +2: scoped cloud restore deletes+copies domain files inside the
+        // data directory it already owns (ApplyScopedRestoreCoreAsync).
+        // +1: Directory.Move inside the scoped-restore staging dir remaps an
+        // orphaned todo store onto a live widget id — confined to staging.
+        ["src/DeskBox/Services/DeskBoxDataBackupService.cs"] = 12,
         ["src/DeskBox/Services/DeskBoxDiagnosticsBundleService.cs"] = 2,
         ["src/DeskBox/Services/DeskBoxDragData.cs"] = 3,
         ["src/DeskBox/Services/DesktopOrganizationCoordinator.cs"] = 1,
