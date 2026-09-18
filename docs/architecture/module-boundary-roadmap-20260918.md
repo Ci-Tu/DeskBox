@@ -274,6 +274,8 @@ AOT 内存曲线四轮批次峰值 171→399→480→491MB，批间增量 +228�
          剩余: 设备层迁移[Widgets/WidgetGroups/拓扑→设备域 store]——触面最大（~330 处），
          与 sync 立项绑定执行：其唯一立项理由是同步前置，提前做即"假设驱动"）
 云同步立项时：第 2C 刀 Sync projection + revision 协议契约
+         （协议契约已定稿：sync-protocol-contract-20260918.md——envelope/
+         revision/cursor/epoch/三接口 + 验收契约；后端选型是其填空项）
 新格子立项时：第 3 刀 contribution descriptor（新 kind 自己当验收）
 持续进行：Platform P/Invoke 随触碰迁移（ratchet，不设专刀）
 触发才做：图像出模型（边际斜率实测超预算或用户内存反馈）
