@@ -287,6 +287,52 @@ public sealed class CloudBackupTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task RunScheduledIfDue_SkipsWhileRestoreIsPending()
+    {
+        SeedTodoData();
+        var transport = new FakeCloudBackupTransport();
+        (CloudBackupService service, _) = CreateService(transport);
+        service.UpdateOptions(ConfiguredOptions(lastSuccess: DateTimeOffset.MinValue));
+
+        // A pending restore replaces the staged domains on the next
+        // restart — uploading the about-to-be-replaced state must not run.
+        var markerProbe = new DeskBoxDataBackupService(_appDataRoot);
+        File.WriteAllText(markerProbe.PendingRestoreMarkerPath, "{}");
+
+        await service.RunScheduledIfDueAsync();
+        Assert.Empty(transport.Files);
+    }
+
+    [Fact]
+    public async Task RunScheduledIfDue_SkipsWhenCredentialMissing()
+    {
+        SeedTodoData();
+        var transport = new FakeCloudBackupTransport();
+        (CloudBackupService service, _) = CreateService(transport, seedCredential: false);
+        service.UpdateOptions(ConfiguredOptions(lastSuccess: DateTimeOffset.MinValue));
+
+        // Configured but no stored credential must not turn every timer
+        // tick into an anonymous 401 loop.
+        await service.RunScheduledIfDueAsync();
+        Assert.Empty(transport.Files);
+    }
+
+    [Fact]
+    public async Task RunBackupNow_MissingCredential_ReturnsNamedResult()
+    {
+        SeedTodoData();
+        var transport = new FakeCloudBackupTransport();
+        (CloudBackupService service, _) = CreateService(transport, seedCredential: false);
+        service.UpdateOptions(ConfiguredOptions());
+
+        CloudBackupRunResult result = await service.RunBackupNowAsync();
+
+        Assert.False(result.Uploaded);
+        Assert.True(result.NoCredential);
+        Assert.Empty(transport.Files);
+    }
+
+    [Fact]
     public async Task RunBackupNow_NeverDeletesUnsafeListedNames()
     {
         SeedTodoData();
@@ -632,11 +678,21 @@ public sealed class CloudBackupTransportTests : IDisposable
             LastSuccessUtc: lastSuccess ?? DateTimeOffset.MinValue);
 
     private (CloudBackupService Service, SettingsService Settings) CreateService(
-        FakeCloudBackupTransport transport)
+        FakeCloudBackupTransport transport,
+        bool seedCredential = true)
     {
         var backup = new DeskBoxDataBackupService(_appDataRoot);
         var settings = new SettingsService(Path.Combine(_tempRoot, "settings"));
         var credentials = new InMemoryCredentialStore();
+        if (seedCredential)
+        {
+            // A configured service normally has a stored secret — missing-
+            // credential runs are tested explicitly with seedCredential:false.
+            credentials.SetSecretAsync(
+                CloudBackupSettingsPolicy.CredentialKey(ConfiguredOptions()),
+                "s3cret").GetAwaiter().GetResult();
+        }
+
         var service = new CloudBackupService(
             backup, settings, credentials,
             (options, secret) => transport);

@@ -2770,6 +2770,7 @@
     "Settings.CloudBackup.RestoreConfirm.Title": "Ausgewählte Bereiche ersetzen?",
     "Settings.CloudBackup.RestoreConfirm.Body": "Sicherung vom {0} (DeskBox {1}). {2} Dateien, {3}. Wiederherzustellende Bereiche: {4}. Die App startet neu, um die Wiederherstellung anzuwenden — vorher wird eine vollständige lokale Sicherung erstellt.",
     "Settings.CloudBackup.RestoreConfirm.Button": "Wiederherstellen & neu starten",
+    "Settings.CloudBackup.RestoreConfirm.DomainItems": "{0} ({1})",
     "Settings.CloudBackup.RestoreFailed.Title": "Wiederherstellung fehlgeschlagen",
     "Settings.CloudBackup.RestoreFailed.Body": "Die Remote-Momentaufnahme konnte nicht wiederhergestellt werden: {0}",
     "Settings.CloudBackup.HttpWarning": "http://-Endpunkte übertragen das Passwort Base64-kodiert über einen Klartextkanal. Nur für vertrauenswürdige lokale Server verwenden.",

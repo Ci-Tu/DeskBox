@@ -601,6 +601,8 @@ public sealed partial class DeskBoxDataBackupService
                 todoWidgetIdRemaps,
                 cancellationToken);
             ValidateScopedRestoreData(stagedDataDirectory, appliedScope);
+            IReadOnlyList<DeskBoxDomainItemCount> domainItemCounts =
+                CountStagedDomainItems(stagedDataDirectory, appliedScope);
 
             var marker = new PendingRestoreMarker(
                 stagingRoot,
@@ -624,7 +626,8 @@ public sealed partial class DeskBoxDataBackupService
                 CloudBackupDomains.ToManifestNames(appliedScope),
                 archiveInfo.Manifest.SourceDeviceId,
                 remaps,
-                unmapped);
+                unmapped,
+                domainItemCounts);
         }
         catch
         {
@@ -683,6 +686,79 @@ public sealed partial class DeskBoxDataBackupService
                     todoPath,
                     s_todoDataJsonContext.StoreData);
             }
+        }
+    }
+
+    /// <summary>
+    /// Live-item count per applied item domain, for the restore confirm
+    /// dialog: a manifest domain can legally hold zero records (the backup
+    /// was taken before any data existed), and restoring it still wipes the
+    /// local domain — the preview must say so. Tombstoned items do not
+    /// count. A store that fails to parse contributes zero rather than
+    /// failing the restore the validation step already accepted.
+    /// </summary>
+    private static IReadOnlyList<DeskBoxDomainItemCount> CountStagedDomainItems(
+        string stagedDataDirectory,
+        CloudBackupDomain appliedScope)
+    {
+        var counts = new List<DeskBoxDomainItemCount>(2);
+
+        if (appliedScope.HasFlag(CloudBackupDomain.TodoData))
+        {
+            int items = 0;
+            string widgetsDirectory = Path.Combine(stagedDataDirectory, "widgets");
+            if (Directory.Exists(widgetsDirectory))
+            {
+                foreach (string todoPath in Directory.EnumerateFiles(
+                             widgetsDirectory,
+                             "todo.json",
+                             SearchOption.AllDirectories))
+                {
+                    items += CountLiveItems<TodoWidgetData>(
+                        todoPath,
+                        s_todoDataJsonContext.StoreData,
+                        data => data.Items?.Count(item => !item.IsDeleted) ?? 0);
+                }
+            }
+
+            counts.Add(new DeskBoxDomainItemCount(
+                CloudBackupDomains.ToManifestName(CloudBackupDomain.TodoData), items));
+        }
+
+        if (appliedScope.HasFlag(CloudBackupDomain.QuickCaptureData))
+        {
+            int items = CountLiveItems<QuickCaptureStoreData>(
+                Path.Combine(stagedDataDirectory, "quick-capture", "quick-capture.json"),
+                s_quickCaptureDataJsonContext.StoreData,
+                data =>
+                    (data.Items?.Count(item => !item.IsDeleted) ?? 0) +
+                    (data.RecentItems?.Count(item => !item.IsDeleted) ?? 0));
+            counts.Add(new DeskBoxDomainItemCount(
+                CloudBackupDomains.ToManifestName(CloudBackupDomain.QuickCaptureData), items));
+        }
+
+        return counts;
+    }
+
+    private static int CountLiveItems<TData>(
+        string storePath,
+        JsonTypeInfo<TData> typeInfo,
+        Func<TData, int> countItems)
+    {
+        try
+        {
+            if (!File.Exists(storePath))
+            {
+                return 0;
+            }
+
+            TData? data = JsonSerializer.Deserialize(File.ReadAllText(storePath), typeInfo);
+            return data is null ? 0 : countItems(data);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        {
+            App.Log($"[DataBackup] Item count skipped for '{storePath}': {ex.Message}");
+            return 0;
         }
     }
 
@@ -2456,10 +2532,24 @@ public sealed record DeskBoxRestorePreparation(
     // Source widget ids that could not be remapped (no free todo widget on
     // this device). Their files are still restored under the source id —
     // preserved on disk even though no widget currently reads them.
-    IReadOnlyList<string>? UnmappedTodoWidgetIds = null);
+    IReadOnlyList<string>? UnmappedTodoWidgetIds = null,
+    // Scoped cloud restores only: live-item count per applied item domain
+    // (todo-data, quick-capture-data), so the confirm dialog can say "this
+    // domain holds 0 items" instead of letting an empty domain silently
+    // wipe local data. WidgetStyle is a settings projection, not item
+    // data, and never appears here.
+    IReadOnlyList<DeskBoxDomainItemCount>? DomainItemCounts = null);
 
 /// <summary>One todo-store directory remapped from source to target widget id.</summary>
 public sealed record DeskBoxTodoWidgetRemap(string SourceWidgetId, string TargetWidgetId);
+
+/// <summary>
+/// Live-item count for one applied item domain in a scoped restore —
+/// <paramref name="Domain"/> is the manifest name
+/// (<see cref="CloudBackupDomains.ToManifestName"/>), <paramref name="Items"/>
+/// the non-deleted entries the domain will actually restore.
+/// </summary>
+public sealed record DeskBoxDomainItemCount(string Domain, int Items);
 
 internal sealed record DeskBoxRestoreApplyResult(
     bool HadPendingRestore,

@@ -2770,6 +2770,7 @@
     "Settings.CloudBackup.RestoreConfirm.Title": "استبدال النطاقات المحددة؟",
     "Settings.CloudBackup.RestoreConfirm.Body": "نسخة من {0} (DeskBox {1}). عدد الملفات: {2}، {3}. النطاقات المراد استعادتها: {4}. سيعاد تشغيل التطبيق لتطبيق الاستعادة — يتم أولاً إنشاء نسخة محلية كاملة.",
     "Settings.CloudBackup.RestoreConfirm.Button": "استعادة وإعادة تشغيل",
+    "Settings.CloudBackup.RestoreConfirm.DomainItems": "{0} ({1})",
     "Settings.CloudBackup.RestoreFailed.Title": "فشلت الاستعادة",
     "Settings.CloudBackup.RestoreFailed.Body": "تعذرت استعادة اللقطة البعيدة: {0}",
     "Settings.CloudBackup.HttpWarning": "نقاط النهاية http:// ترسل كلمة المرور مشفرة بـ Base64 عبر قناة نصية مكشوفة. استخدمها فقط لخوادم الشبكة المحلية الموثوقة.",

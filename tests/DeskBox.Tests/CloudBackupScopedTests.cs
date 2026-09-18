@@ -224,6 +224,70 @@ public sealed class CloudBackupScopedTests : IDisposable
     }
 
     [Fact]
+    public async Task ScopedRestore_Preview_ReportsDomainItemCounts()
+    {
+        string dataDir = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
+
+        // Snapshot: 2 live + 1 tombstoned todo items, 1 live + 1 deleted
+        // quick-capture record — tombstones must not inflate the preview.
+        string sourceRoot = Path.Combine(_tempRoot, "source-app-data");
+        string sourceData = Directory.CreateDirectory(Path.Combine(sourceRoot, "data")).FullName;
+        var sourceTodo = new TodoWidgetStore(Path.Combine(sourceData, "widgets"), "todo-widget");
+        await sourceTodo.SaveAsync(new TodoWidgetData
+        {
+            Items =
+            [
+                new TodoItem { Id = "t1", Text = "task one" },
+                new TodoItem { Id = "t2", Text = "task two" },
+                new TodoItem { Id = "t3", Text = "deleted task", IsDeleted = true }
+            ]
+        });
+        var sourceQc = new QuickCaptureStore(Path.Combine(sourceData, "quick-capture"));
+        await sourceQc.SaveAsync(new QuickCaptureStoreData
+        {
+            Items = [new QuickCaptureItem { Id = "n1", Body = "note one" }],
+            RecentItems = [new QuickCaptureItem { Id = "r1", Body = "old recent", IsDeleted = true }]
+        });
+        string backupPath = await new DeskBoxDataBackupService(sourceRoot)
+            .ExportScopedBackupAsync(
+                _exportRoot,
+                CloudBackupDomain.TodoData | CloudBackupDomain.QuickCaptureData);
+
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+        DeskBoxRestorePreparation prep = await service.PrepareScopedRestoreAsync(
+            backupPath, CloudBackupDomain.TodoData | CloudBackupDomain.QuickCaptureData);
+
+        Assert.Equal(
+            [("todo-data", 2), ("quick-capture-data", 1)],
+            prep.DomainItemCounts!.Select(c => (c.Domain, c.Items)).ToArray());
+        await service.CancelPendingRestoreAsync();
+    }
+
+    [Fact]
+    public async Task ScopedRestore_Preview_ZeroItemDomainIsCounted()
+    {
+        string dataDir = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
+
+        // A manifest domain with zero records still wipes the local domain —
+        // the preview must report 0, not omit the count.
+        string sourceRoot = Path.Combine(_tempRoot, "source-app-data");
+        string sourceData = Directory.CreateDirectory(Path.Combine(sourceRoot, "data")).FullName;
+        var sourceQc = new QuickCaptureStore(Path.Combine(sourceData, "quick-capture"));
+        await sourceQc.SaveAsync(new QuickCaptureStoreData { Items = [] });
+        string backupPath = await new DeskBoxDataBackupService(sourceRoot)
+            .ExportScopedBackupAsync(_exportRoot, CloudBackupDomain.QuickCaptureData);
+
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+        DeskBoxRestorePreparation prep = await service.PrepareScopedRestoreAsync(
+            backupPath, CloudBackupDomain.QuickCaptureData);
+
+        DeskBoxDomainItemCount count = Assert.Single(prep.DomainItemCounts!);
+        Assert.Equal("quick-capture-data", count.Domain);
+        Assert.Equal(0, count.Items);
+        await service.CancelPendingRestoreAsync();
+    }
+
+    [Fact]
     public async Task ScopedRestore_DeletesLiveDomainFilesAbsentFromSnapshot()
     {
         string dataDir = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;

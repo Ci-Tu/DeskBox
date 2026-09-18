@@ -164,7 +164,7 @@ public sealed class AotStage5B4C3B2B1ContractTests
 
         Assert.Contains("ThirtyOneFilesAndSeventyTwoCalls", baseline, StringComparison.Ordinal);
         Assert.Contains("Assert.Equal(32, actual.Count)", baseline, StringComparison.Ordinal);
-        Assert.Contains("Assert.Equal(73, actual.Values.Sum())", baseline, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal(74, actual.Values.Sum())", baseline, StringComparison.Ordinal);
         Assert.Contains("Assert.Equal(28, actualContextOwners.Length)", baseline, StringComparison.Ordinal);
         Assert.Contains(
             "App.AotTodoNotificationForwardingSmoke.cs\"] = 1",

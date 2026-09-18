@@ -32,7 +32,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             ["src/DeskBox/Services/AppUpdateService.cs"] = 2,
             ["src/DeskBox/Services/CitySearchService.cs"] = 1,
             ["src/DeskBox/Services/DeskBoxAttachmentHealthService.cs"] = 1,
-            ["src/DeskBox/Services/DeskBoxDataBackupService.cs"] = 11,
+            ["src/DeskBox/Services/DeskBoxDataBackupService.cs"] = 12,
             ["src/DeskBox/Services/DeskBoxDiagnosticsBundleService.cs"] = 1,
             ["src/DeskBox/Services/DesktopOrganizationHistoryStore.cs"] = 2,
             ["src/DeskBox/Services/DesktopOrganizationRecoveryStore.cs"] = 2,
@@ -69,7 +69,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         }
 
         Assert.Equal(32, actual.Count);
-        Assert.Equal(73, actual.Values.Sum());
+        Assert.Equal(74, actual.Values.Sum());
 
         string[] expectedContextOwners =
         [
@@ -316,10 +316,11 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         var expectedBackupTypeInfoReferences = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["s_settingsDataJsonContext.AppSettings"] = 1,
-            // +1 each: ValidateScopedRestoreData validates the same store
-            // types for cloud-backup domain archives.
-            ["s_quickCaptureDataJsonContext.StoreData"] = 4,
-            ["s_todoDataJsonContext.StoreData"] = 4
+            // +2 each: ValidateScopedRestoreData validates the same store
+            // types for cloud-backup domain archives, and
+            // CountStagedDomainItems reuses them for the restore preview.
+            ["s_quickCaptureDataJsonContext.StoreData"] = 5,
+            ["s_todoDataJsonContext.StoreData"] = 5
         };
         foreach ((string reference, int expectedCount) in expectedAttachmentTypeInfoReferences)
         {
@@ -336,7 +337,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         }
 
         Assert.Equal(
-            11,
+            13,
             expectedAttachmentTypeInfoReferences.Values.Sum() +
             expectedBackupTypeInfoReferences.Values.Sum());
         foreach (string source in new[] { attachmentHealth, backup })

@@ -96,6 +96,25 @@ internal sealed class CloudBackupService
                 return;
             }
 
+            // A pending restore replaces the staged domains on the next
+            // restart — uploading the about-to-be-replaced state would push
+            // a stale snapshot and could race the staged restore files.
+            if (File.Exists(_backupService.PendingRestoreMarkerPath))
+            {
+                App.Log("[CloudBackup] Scheduled upload skipped: a restore is pending.");
+                return;
+            }
+
+            // Configured but never saved (or lost) a credential would send
+            // every scheduled run into an anonymous 401 — skip quietly.
+            if (await _credentialStore.GetSecretAsync(
+                    CloudBackupSettingsPolicy.CredentialKey(options),
+                    cancellationToken) is null)
+            {
+                App.Log("[CloudBackup] Scheduled upload skipped: no credential for the configured endpoint.");
+                return;
+            }
+
             if (DateTimeOffset.UtcNow - options.LastSuccessUtc < TimeSpan.FromMinutes(options.IntervalMinutes))
             {
                 return;
@@ -126,6 +145,15 @@ internal sealed class CloudBackupService
             if (!options.IsConfigured)
             {
                 return CloudBackupRunResult.NotConfigured;
+            }
+
+            // A missing credential would turn "backup now" into an opaque
+            // 401 — name it so the UI can point at the password field.
+            if (await _credentialStore.GetSecretAsync(
+                    CloudBackupSettingsPolicy.CredentialKey(options),
+                    cancellationToken) is null)
+            {
+                return CloudBackupRunResult.MissingCredential;
             }
 
             return await RunBackupCoreAsync(options, cancellationToken);
@@ -463,7 +491,12 @@ internal sealed class CloudBackupService
 }
 
 /// <summary>Outcome of <see cref="CloudBackupService.RunBackupNowAsync"/>.</summary>
-internal sealed record CloudBackupRunResult(bool Uploaded, string? RemoteFilePath, int PrunedCount)
+internal sealed record CloudBackupRunResult(
+    bool Uploaded,
+    string? RemoteFilePath,
+    int PrunedCount,
+    bool NoCredential = false)
 {
     internal static readonly CloudBackupRunResult NotConfigured = new(false, null, 0);
+    internal static readonly CloudBackupRunResult MissingCredential = new(false, null, 0, NoCredential: true);
 }

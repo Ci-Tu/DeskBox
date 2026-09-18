@@ -139,7 +139,9 @@ public sealed partial class SettingsWindow
                     ? _localizationService.Format(
                         "Settings.CloudBackup.BackupNow.Success",
                         result.RemoteFilePath ?? string.Empty)
-                    : _localizationService.T("Settings.CloudBackup.NotConfigured");
+                    : result.NoCredential
+                        ? _localizationService.T("Settings.CloudBackup.Password.NotSaved")
+                        : _localizationService.T("Settings.CloudBackup.NotConfigured");
             }
 
             ViewModel.RefreshCloudBackupStatus();
@@ -229,6 +231,35 @@ public sealed partial class SettingsWindow
         }
 
         return new CloudBackupRemoteSnapshotItem(entry.Name, title, details);
+    }
+
+    /// <summary>
+    /// Localized label for one restored domain in the confirm dialog —
+    /// "Todo data (12)". A manifest domain can legitimately hold zero live
+    /// items (backup taken before data existed); the count makes that
+    /// explicit instead of letting an empty domain silently wipe local data.
+    /// WidgetStyle is a settings projection and shows no count.
+    /// </summary>
+    private string FormatRestoreDomainLabel(
+        string manifestName,
+        IReadOnlyList<DeskBoxDomainItemCount>? itemCounts)
+    {
+        string titleKey = manifestName switch
+        {
+            "todo-data" => "Settings.CloudBackup.TodoData.Title",
+            "quick-capture-data" => "Settings.CloudBackup.QuickCaptureData.Title",
+            "widget-style" => "Settings.CloudBackup.WidgetStyle.Title",
+            _ => manifestName
+        };
+        string title = titleKey.StartsWith("Settings.", StringComparison.Ordinal)
+            ? _localizationService.T(titleKey)
+            : titleKey;
+        int? items = itemCounts?
+            .FirstOrDefault(c => string.Equals(c.Domain, manifestName, StringComparison.Ordinal))
+            ?.Items;
+        return items is { } count
+            ? _localizationService.Format("Settings.CloudBackup.RestoreConfirm.DomainItems", title, count)
+            : title;
     }
 
     private async void CloudBackupRestoreSnapshotButton_Click(object sender, RoutedEventArgs e)
@@ -330,7 +361,8 @@ public sealed partial class SettingsWindow
                 await App.Current.DataBackupService.PrepareScopedRestoreAsync(archivePath, scope);
 
             string domainList = preparation.Domains is { Count: > 0 } domains
-                ? string.Join(", ", domains)
+                ? string.Join(", ", domains.Select(domain =>
+                    FormatRestoreDomainLabel(domain, preparation.DomainItemCounts)))
                 : _localizationService.T("Settings.CloudBackup.RestoreDomains.None");
             var bodyText = new System.Text.StringBuilder(_localizationService.Format(
                 "Settings.CloudBackup.RestoreConfirm.Body",

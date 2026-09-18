@@ -2770,6 +2770,7 @@
     "Settings.CloudBackup.RestoreConfirm.Title": "Replace selected domains?",
     "Settings.CloudBackup.RestoreConfirm.Body": "Backup from {0} (DeskBox {1}). {2} files, {3}. Domains to restore: {4}. The app restarts to apply the restore - a full local backup is made first.",
     "Settings.CloudBackup.RestoreConfirm.Button": "Restore & restart",
+    "Settings.CloudBackup.RestoreConfirm.DomainItems": "{0} ({1})",
     "Settings.CloudBackup.RestoreFailed.Title": "Restore failed",
     "Settings.CloudBackup.RestoreFailed.Body": "The remote snapshot could not be restored: {0}",
     "Settings.CloudBackup.HttpWarning": "http:// endpoints send the password base64-encoded over a cleartext channel. Use this only for trusted local-network servers.",
