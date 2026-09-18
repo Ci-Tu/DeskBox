@@ -2771,6 +2771,7 @@
     "Settings.CloudBackup.RestoreConfirm.Body": "Backup de {0} (DeskBox {1}). {2} arquivos, {3}. Domínios a restaurar: {4}. O aplicativo reinicia para aplicar a restauração — um backup local completo é feito primeiro.",
     "Settings.CloudBackup.RestoreConfirm.Button": "Restaurar e reiniciar",
     "Settings.CloudBackup.RestoreConfirm.DomainItems": "{0} ({1})",
+    "Settings.CloudBackup.RestorePending": "Uma restauração está agendada para a próxima inicialização. Reinicie o DeskBox antes de fazer backup novamente.",
     "Settings.CloudBackup.RestoreFailed.Title": "Falha na restauração",
     "Settings.CloudBackup.RestoreFailed.Body": "Não foi possível restaurar o instantâneo remoto: {0}",
     "Settings.CloudBackup.HttpWarning": "Endpoints http:// enviam a senha codificada em Base64 por um canal em texto claro. Use apenas para servidores locais confiáveis.",

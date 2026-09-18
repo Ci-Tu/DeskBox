@@ -2771,6 +2771,7 @@
     "Settings.CloudBackup.RestoreConfirm.Body": "{0} 的备份（DeskBox {1}）。{2} 个文件，{3}。将还原的数据域：{4}。应用会重启以完成还原——还原前会先做一次完整本地备份。",
     "Settings.CloudBackup.RestoreConfirm.Button": "还原并重启",
     "Settings.CloudBackup.RestoreConfirm.DomainItems": "{0}（{1}）",
+    "Settings.CloudBackup.RestorePending": "恢复已暂存，将在下次启动时应用。请先重启 DeskBox 再执行备份。",
     "Settings.CloudBackup.RestoreFailed.Title": "还原失败",
     "Settings.CloudBackup.RestoreFailed.Body": "远端快照还原失败：{0}",
     "Settings.CloudBackup.HttpWarning": "http:// 地址会把密码以 Base64 形式在明文信道上传输，请仅用于可信的内网服务器。",

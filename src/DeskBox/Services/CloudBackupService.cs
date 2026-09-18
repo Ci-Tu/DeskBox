@@ -147,6 +147,13 @@ internal sealed class CloudBackupService
                 return CloudBackupRunResult.NotConfigured;
             }
 
+            // Same gate as the scheduled path: uploading now would push a
+            // snapshot of state a staged restore is about to replace.
+            if (File.Exists(_backupService.PendingRestoreMarkerPath))
+            {
+                return CloudBackupRunResult.PendingRestore;
+            }
+
             // A missing credential would turn "backup now" into an opaque
             // 401 — name it so the UI can point at the password field.
             if (await _credentialStore.GetSecretAsync(
@@ -495,8 +502,10 @@ internal sealed record CloudBackupRunResult(
     bool Uploaded,
     string? RemoteFilePath,
     int PrunedCount,
-    bool NoCredential = false)
+    bool NoCredential = false,
+    bool RestorePending = false)
 {
     internal static readonly CloudBackupRunResult NotConfigured = new(false, null, 0);
     internal static readonly CloudBackupRunResult MissingCredential = new(false, null, 0, NoCredential: true);
+    internal static readonly CloudBackupRunResult PendingRestore = new(false, null, 0, RestorePending: true);
 }

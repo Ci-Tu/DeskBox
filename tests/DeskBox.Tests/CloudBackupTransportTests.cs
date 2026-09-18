@@ -333,6 +333,26 @@ public sealed class CloudBackupTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task RunBackupNow_SkipsWhileRestoreIsPending()
+    {
+        SeedTodoData();
+        var transport = new FakeCloudBackupTransport();
+        (CloudBackupService service, _) = CreateService(transport);
+        service.UpdateOptions(ConfiguredOptions());
+
+        // The manual path gets the same gate as the scheduled one — a
+        // user click must not push state a staged restore will replace.
+        var markerProbe = new DeskBoxDataBackupService(_appDataRoot);
+        File.WriteAllText(markerProbe.PendingRestoreMarkerPath, "{}");
+
+        CloudBackupRunResult result = await service.RunBackupNowAsync();
+
+        Assert.False(result.Uploaded);
+        Assert.True(result.RestorePending);
+        Assert.Empty(transport.Files);
+    }
+
+    [Fact]
     public async Task RunBackupNow_NeverDeletesUnsafeListedNames()
     {
         SeedTodoData();

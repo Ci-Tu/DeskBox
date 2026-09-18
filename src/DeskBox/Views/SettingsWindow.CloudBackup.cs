@@ -139,9 +139,11 @@ public sealed partial class SettingsWindow
                     ? _localizationService.Format(
                         "Settings.CloudBackup.BackupNow.Success",
                         result.RemoteFilePath ?? string.Empty)
-                    : result.NoCredential
-                        ? _localizationService.T("Settings.CloudBackup.Password.NotSaved")
-                        : _localizationService.T("Settings.CloudBackup.NotConfigured");
+                    : result.RestorePending
+                        ? _localizationService.T("Settings.CloudBackup.RestorePending")
+                        : result.NoCredential
+                            ? _localizationService.T("Settings.CloudBackup.Password.NotSaved")
+                            : _localizationService.T("Settings.CloudBackup.NotConfigured");
             }
 
             ViewModel.RefreshCloudBackupStatus();
@@ -174,6 +176,16 @@ public sealed partial class SettingsWindow
         try
         {
             await _settingsService.SaveAsync();
+            // Configured but no saved credential — an anonymous PROPFIND
+            // would just 401. Point at the password field instead.
+            if (App.Current.CloudBackupService.Options.IsConfigured &&
+                !await App.Current.CloudBackupService.HasCredentialAsync())
+            {
+                ViewModel.CloudBackupConnectionStatusText =
+                    _localizationService.T("Settings.CloudBackup.Password.NotSaved");
+                return;
+            }
+
             IReadOnlyList<CloudBackupRemoteEntry> snapshots =
                 await App.Current.CloudBackupService.ListRemoteSnapshotsAsync();
 
