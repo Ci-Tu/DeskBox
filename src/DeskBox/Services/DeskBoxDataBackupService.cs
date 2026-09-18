@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using DeskBox.FileSafety;
 using DeskBox.Models;
 
 namespace DeskBox.Services;
@@ -635,6 +636,9 @@ public sealed partial class DeskBoxDataBackupService
         ValidateJsonFileIfPresent<QuickCaptureStoreData>(
             Path.Combine(dataDirectory, "quick-capture", "quick-capture.json"),
             s_quickCaptureDataJsonContext.StoreData);
+        ValidateJsonFileIfPresent<DesktopOrganizationHistoryData>(
+            Path.Combine(dataDirectory, "desktop-organization-history.json"),
+            DesktopOrganizationHistoryJsonContext.Default.DesktopOrganizationHistoryData);
 
         string widgetsDirectory = Path.Combine(dataDirectory, "widgets");
         if (Directory.Exists(widgetsDirectory))
@@ -1193,8 +1197,43 @@ public sealed partial class DeskBoxDataBackupService
             .ToArray();
 
         Directory.CreateDirectory(snapshotDataDirectory);
+
+        // FileSafety metadata must come from a single transaction epoch:
+        // settings, the organization-history store and the recovery journal
+        // are committed as a unit under OperationGate. The file SET is
+        // resolved inside the gate — a journal created while we waited for
+        // the gate must land in the snapshot, or the backup would hold
+        // settings@T1 with history@T0 and no WAL to converge them. Hold the
+        // gate only for these few small files; the rest still copies one by
+        // one from the pre-enumerated list.
+        string[] fileSafetyMetadata =
+        [
+            "settings.json",
+            "desktop-organization-history.json",
+            "desktop-organization-recovery.json"
+        ];
+        var metadataSet = new HashSet<string>(fileSafetyMetadata, StringComparer.OrdinalIgnoreCase);
+        await DesktopOrganizationTransaction.OperationGate.WaitAsync(cancellationToken);
+        try
+        {
+            foreach (string relativePath in fileSafetyMetadata)
+            {
+                string sourcePath = Path.Combine(DataDirectory, relativePath);
+                if (!File.Exists(sourcePath)) continue;
+                await CopyStableSnapshotFileAsync(
+                    sourcePath,
+                    Path.Combine(snapshotDataDirectory, relativePath),
+                    cancellationToken);
+            }
+        }
+        finally
+        {
+            DesktopOrganizationTransaction.OperationGate.Release();
+        }
+
         foreach ((string sourcePath, string relativePath) in sourceFiles)
         {
+            if (metadataSet.Contains(relativePath)) continue;
             // A multi-gigabyte snapshot legitimately runs longer than the
             // startup watchdog's stall window; each file proves progress.
             App.MarkStartupProgress();
@@ -1450,21 +1489,75 @@ public sealed partial class DeskBoxDataBackupService
         }
     }
 
+    /// <summary>
+    /// ResilientJsonStore sidecars only ever sit next to a DeskBox *.json
+    /// store: "&lt;store&gt;.json.bak" and
+    /// "&lt;store&gt;.json.corrupt-&lt;timestamp&gt;-&lt;guid&gt;". Scoped to
+    /// that exact namespace so user files under attachments/ (which keep
+    /// their original names) are never filtered out.
+    /// </summary>
+    private static bool IsInternalStoreRecoveryArtifact(string relativePath) =>
+        relativePath.EndsWith(".json.bak", StringComparison.OrdinalIgnoreCase) ||
+        relativePath.Contains(".json.corrupt-", StringComparison.OrdinalIgnoreCase);
+
     private static bool ShouldIncludeInBackup(string relativePath)
     {
-        if (relativePath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
+        // DeskBox-managed disposable subtrees first: nothing under them is
+        // user data, and they can never contain a managed-attachments dir.
+        // cache/ (widget image caches) and weather-cache.json regenerate on
+        // next use; quick-capture exports/thumbnails are derived artifacts.
+        //
+        // device.id is excluded deliberately: it is installation-local
+        // identity, not user data. Carrying it into a backup would clone the
+        // device identity onto every machine that restores it — silently
+        // misattributing sync-layer provenance. DeviceIdentity.GetOrCreate
+        // regenerates a fresh ID on first use after a restore.
+        if (relativePath.StartsWith("quick-capture/thumbnails/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("quick-capture/exports/", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.StartsWith("cache/", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(relativePath, "weather-cache.json", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(relativePath, "device.id", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
-        // cache/ (widget image caches) and weather-cache.json are disposable:
-        // they regenerate on next use, so backups skip them. Restoring a
-        // backup without them only means the first weather render falls back
-        // to the location flow and glance images redownload.
-        return !relativePath.StartsWith("quick-capture/thumbnails/", StringComparison.OrdinalIgnoreCase) &&
-               !relativePath.StartsWith("quick-capture/exports/", StringComparison.OrdinalIgnoreCase) &&
-               !relativePath.StartsWith("cache/", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(relativePath, "weather-cache.json", StringComparison.OrdinalIgnoreCase);
+        // Managed attachments are user data with their ORIGINAL filenames —
+        // no extension or sidecar heuristic may ever drop them (a user file
+        // literally named "config.json.bak" or "file.tmp" must still be
+        // backed up, or restore leaves dangling attachment metadata).
+        if (IsAttachmentPath(relativePath))
+        {
+            return true;
+        }
+
+        // .tmp files and ResilientJsonStore sidecars are machine-local
+        // recovery artifacts, not user data: a stale recovery .bak inside a
+        // backup would resurrect a ghost pending journal on the restore
+        // machine, and .corrupt-* quarantines are dead forensics. The store
+        // regenerates its .bak on the next save anyway. The artifact check
+        // is scoped to the ResilientJsonStore naming convention itself
+        // ("<store>.json.bak" / "<store>.json.corrupt-*").
+        if (relativePath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+            IsInternalStoreRecoveryArtifact(relativePath))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Managed attachment directories hold user files under their original
+    /// names — "attachments/" as a path segment anywhere under the data
+    /// root marks user content (widgets/&lt;id&gt;/attachments/,
+    /// quick-capture/attachments/, ...), which must never be filtered by
+    /// extension or store-sidecar heuristics.
+    /// </summary>
+    private static bool IsAttachmentPath(string relativePath)
+    {
+        string normalized = relativePath.Replace('\\', '/');
+        return normalized.StartsWith("attachments/", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Contains("/attachments/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<(long Length, string Sha256)> CopyAndHashAsync(
