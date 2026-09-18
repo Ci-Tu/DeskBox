@@ -27,7 +27,9 @@ internal static class WidgetStyleBackupProjection
     /// widgetCapsuleFreePlacements (coordinates), widgetCompactSettingsVersion
     /// (internal schema counter), and every WidgetLayoutSettingsSlice key.
     /// </summary>
-    private static readonly HashSet<string> ShellKeys = new(StringComparer.Ordinal)
+    // internal (not private) so the drift ratchet in
+    // WidgetStyleProjectionContractTests can enumerate the whitelist.
+    internal static readonly HashSet<string> ShellKeys = new(StringComparer.Ordinal)
     {
         "defaultWidgetWidth", "defaultWidgetHeight",
         "widgetOpacity", "widgetMaterialType", "widgetMaterialIntensity",
@@ -65,7 +67,7 @@ internal static class WidgetStyleBackupProjection
     /// fileAddedAt*), state (isVisible, isDisabled, *Locked) and metadata
     /// never leave the device.
     /// </summary>
-    private static readonly HashSet<string> WidgetKeys = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> WidgetKeys = new(StringComparer.Ordinal)
     {
         "name", "isDefaultTitle", "viewMode", "iconSizeOverride",
         "isCollapsed", "compactWidth", "sortMode", "sortDescending"
