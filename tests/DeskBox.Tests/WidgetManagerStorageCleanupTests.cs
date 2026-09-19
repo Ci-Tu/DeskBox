@@ -438,6 +438,34 @@ public sealed class WidgetManagerStorageCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task RenameWidgetAsync_RejectsAdoptionWhenFolderClaimedByLiveWidget()
+    {
+        // A mapped widget's folder under the managed root must never be
+        // adopted — two widgets sharing one directory means the first
+        // "close and delete files" wipes the other's contents.
+        string claimedFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "AI")).FullName;
+        File.WriteAllText(Path.Combine(claimedFolder, "theirs.txt"), "mapped content");
+        _settingsService.Settings.Widgets.Add(new WidgetConfig
+        {
+            Name = "Mapped",
+            WidgetKind = WidgetKind.File,
+            MappedFolderPath = claimedFolder,
+            FollowsDefaultStoragePath = false
+        });
+        string emptyFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "Work")).FullName;
+        var widget = CreateManagedWidget("Work", emptyFolder);
+        _settingsService.Settings.Widgets.Add(widget);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _widgetManager.RenameWidgetAsync(widget.Id, "AI"));
+
+        Assert.Equal("Work", widget.ManagedFolderName);
+        Assert.Equal(emptyFolder, widget.MappedFolderPath, ignoreCase: true);
+        Assert.True(Directory.Exists(emptyFolder));
+        Assert.True(File.Exists(Path.Combine(claimedFolder, "theirs.txt")));
+    }
+
+    [Fact]
     public async Task RenameWidgetAsync_RejectsNameWhenBothFoldersHoldFiles()
     {
         string residueFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "AI")).FullName;

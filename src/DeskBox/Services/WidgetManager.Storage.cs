@@ -541,8 +541,6 @@ public sealed partial class WidgetManager
                             failure.DestinationFolder,
                             failure.SourceFolder);
                     }
-
-                    await RefreshFileWidgetAsync(failure.WidgetId);
                 }
                 catch (Exception ex)
                 {
@@ -550,6 +548,22 @@ public sealed partial class WidgetManager
                         $"[ManagedStorageMigration] Rollback retry failed for " +
                         $"'{failure.DestinationFolder}' -> '{failure.SourceFolder}': {ex.Message}");
                     remaining.Add(failure);
+                    continue;
+                }
+
+                // The folder is physically back — a UI refresh failure must
+                // not requeue it, or the next retry would try to move a
+                // destination folder that no longer exists and wedge the
+                // folder on the failure list forever.
+                try
+                {
+                    await RefreshFileWidgetAsync(failure.WidgetId);
+                }
+                catch (Exception ex)
+                {
+                    App.Log(
+                        $"[ManagedStorageMigration] Post-rollback refresh failed " +
+                        $"for '{failure.WidgetId}': {ex.Message}");
                 }
             }
         }
@@ -641,9 +655,33 @@ public sealed partial class WidgetManager
                 throw new InvalidOperationException(_localizationService.T("Widget.Error.ManagedFolderNameUnavailable"));
             }
 
+            // Never adopt a folder a live widget already claims (a mapped
+            // widget's folder can sit under the managed root when the root
+            // moved around it): two widgets sharing one directory means the
+            // first "close and delete files" wipes the other's contents.
+            // Whether the destination is genuinely a closed widget's kept
+            // folder is unprovable — RemoveWidgetImmediate drops the config
+            // and only the id tombstone survives — so live-claim exclusion
+            // is the only enforceable guard.
+            string normalizedDestination = Path.TrimEndingDirectorySeparator(
+                Path.GetFullPath(destinationFolderPath));
+            bool destinationClaimedByLiveWidget = _settingsService.Settings.WidgetLayout.Widgets.Any(widget =>
+                widget.WidgetKind == WidgetKind.File &&
+                !IsDeleted(widget.Id) &&
+                !string.Equals(widget.Id, config.Id, StringComparison.Ordinal) &&
+                !string.IsNullOrWhiteSpace(widget.MappedFolderPath) &&
+                string.Equals(
+                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(widget.MappedFolderPath)),
+                    normalizedDestination,
+                    StringComparison.OrdinalIgnoreCase));
+            if (destinationClaimedByLiveWidget)
+            {
+                throw new InvalidOperationException(_localizationService.T("Widget.Error.ManagedFolderNameUnavailable"));
+            }
+
             // The empty current folder is the default folder a fresh widget
-            // got; the existing destination is usually the managed folder a
-            // closed widget kept behind on purpose. Adopt it as the storage
+            // got; the existing destination is the managed folder a closed
+            // widget kept behind on purpose. Adopt it as the storage
             // location instead of dead-ending the name (feedback #113):
             // nothing inside either folder is moved, merged, or deleted, and
             // the kept contents show up in the widget again.

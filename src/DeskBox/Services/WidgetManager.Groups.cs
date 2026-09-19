@@ -1348,6 +1348,9 @@ public sealed partial class WidgetManager
                 StringComparison.Ordinal);
             List<string> previousMembers = group.MemberIds.ToList();
             group.MemberIds.Remove(widgetId);
+            // No longer an inactive group member — drop its residency
+            // timestamp so a never-reactivated id cannot linger in the map.
+            _widgetGroupMemberInactiveSince.Remove(widgetId);
 
             PlaceDetachedMember(
                 removedConfig,
@@ -1360,6 +1363,11 @@ public sealed partial class WidgetManager
             if (survivingGroup is null)
             {
                 _settingsService.Settings.WidgetGroups.Remove(group);
+                foreach (string exMemberId in group.MemberIds)
+                {
+                    _widgetGroupMemberInactiveSince.Remove(exMemberId);
+                }
+
                 if (group.MemberIds.FirstOrDefault() is { } remainingId &&
                     FindConfig(remainingId) is { } remainingConfig)
                 {
@@ -2482,6 +2490,7 @@ public sealed partial class WidgetManager
     private void ClearWidgetGroupTransientState(string widgetId)
     {
         _widgetGroupTransientStates.Remove(widgetId);
+        _widgetGroupMemberInactiveSince.Remove(widgetId);
     }
 
     private bool NormalizeCapsuleIdentityForGroup(WidgetGroupConfig group)

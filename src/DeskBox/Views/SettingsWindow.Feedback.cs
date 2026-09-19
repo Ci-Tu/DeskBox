@@ -265,7 +265,10 @@ public sealed partial class SettingsWindow
             // diagnostics checkbox through its Checked handler.
             suggestionRadio.IsChecked = true;
             kind = DeskBoxFeedbackKind.Suggestion;
-            RefreshValidation();
+            // Success collapsed the primary button (empty text) and left the
+            // inputs disabled — RestoreFormControls undoes both, otherwise
+            // the "submit another" form comes back dead.
+            RestoreFormControls();
         };
 
         dialog.PrimaryButtonClick += async (_, args) =>
