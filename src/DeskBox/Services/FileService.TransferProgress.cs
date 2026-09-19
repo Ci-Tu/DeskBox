@@ -716,7 +716,7 @@ public sealed partial class FileService
             !candidatePath.StartsWith(@"\\", StringComparison.Ordinal))
         {
             var volumePath = new StringBuilder(512);
-            if (GetVolumePathName(
+            if (Kernel32NativeMethods.GetVolumePathName(
                     candidatePath,
                     volumePath,
                     (uint)volumePath.Capacity))
@@ -727,17 +727,6 @@ public sealed partial class FileService
 
         return Path.GetPathRoot(fullPath);
     }
-
-    [DllImport(
-        "kernel32.dll",
-        EntryPoint = "GetVolumePathNameW",
-        CharSet = CharSet.Unicode,
-        SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetVolumePathName(
-        string fileName,
-        StringBuilder volumePathName,
-        uint bufferLength);
 
     private static Task CopyDirectoryWithProgressAsync(
         string sourceDirectory,
