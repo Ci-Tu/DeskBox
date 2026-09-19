@@ -915,7 +915,7 @@ public static partial class Win32Helper
         ref uint cchOut);
 
     /// <summary>
-    /// Whether the shell has a registered command for opening this path.
+    /// Whether the shell resolves a default open handler for this path.
     /// URIs dispatch by protocol and directories through Explorer itself, so
     /// both count as associated. Unassociated files must not go through any
     /// Shell dispatch: every dispatch path answers its own Open With picker
@@ -951,12 +951,45 @@ public static partial class Win32Helper
             return false;
         }
 
+        // The classic command query resolves the effective association —
+        // UserChoice included — but only reports handlers expressed as a
+        // literal shell\open\command line.
+        if (TryQueryOpenCommand(extension))
+        {
+            return true;
+        }
+
+        // Packaged (AppX) defaults register shell\open\command with only a
+        // DelegateExecute CLSID and no command line, and their ProgIds are
+        // virtualized — invisible to plain registry and AssocQueryString
+        // lookups. The shell's recommended-handler enumeration resolves the
+        // full association chain (UserChoice, class default, AppX handlers)
+        // and stays empty for unknown or orphaned extensions.
+        if (HasRecommendedAssocHandler(extension))
+        {
+            return true;
+        }
+
+        // A UserChoice whose hash no longer validates poisons both queries
+        // above, while Explorer still opens the file through the extension's
+        // class-default ProgId.
+        return ClassDefaultHasOpenVerb(extension);
+    }
+
+    /// <summary>
+    /// Whether the association string (extension or ProgId) resolves a real
+    /// shell\open\command line. Windows answers S_OK with the generic
+    /// OpenWith.exe launcher for unknown extensions; that fallback IS the
+    /// picker, not an association.
+    /// </summary>
+    private static bool TryQueryOpenCommand(string assoc)
+    {
         var buffer = new char[1024];
         uint length = (uint)buffer.Length;
         uint queryResult = AssocQueryString(
             AssocfNone,
             AssocstrCommand,
-            extension,
+            assoc,
             "open",
             buffer,
             ref length);
@@ -966,7 +999,7 @@ public static partial class Win32Helper
             queryResult = AssocQueryString(
                 AssocfNone,
                 AssocstrCommand,
-                extension,
+                assoc,
                 "open",
                 buffer,
                 ref length);
@@ -982,13 +1015,140 @@ public static partial class Win32Helper
                 0,
                 (int)Math.Min(length, (uint)buffer.Length))
             .TrimEnd('\0');
-        // Windows resolves every unknown extension to the generic OpenWith
-        // launcher with S_OK; that fallback IS the picker, not an
-        // association.
         return !string.IsNullOrWhiteSpace(command) &&
                command.IndexOf(
                    "OpenWith.exe",
                    StringComparison.OrdinalIgnoreCase) < 0;
+    }
+
+    private const int AssocFilterRecommended = 0x1; // ASSOC_FILTER_RECOMMENDED
+
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int SHAssocEnumHandlers(
+        string extra,
+        int filter,
+        out nint enumHandler);
+
+    /// <summary>
+    /// Whether the shell resolves at least one recommended handler for the
+    /// extension — the same resolution Explorer performs before deciding a
+    /// file can be opened versus shown a picker.
+    /// </summary>
+    private static unsafe bool HasRecommendedAssocHandler(string extension)
+    {
+        nint enumHandler = 0;
+        nint handler = 0;
+        try
+        {
+            if (SHAssocEnumHandlers(
+                    extension,
+                    AssocFilterRecommended,
+                    out enumHandler) != 0 ||
+                enumHandler == 0)
+            {
+                return false;
+            }
+
+            // IEnumAssocHandlers::Next — the first interface method after
+            // IUnknown, vtable slot 3.
+            uint fetched = 0;
+            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, uint*, int>)
+                (*(nint**)enumHandler)[3])(
+                    enumHandler,
+                    1,
+                    &handler,
+                    &fetched);
+            return fetched > 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        finally
+        {
+            if (handler != 0)
+            {
+                Marshal.Release(handler);
+            }
+
+            if (enumHandler != 0)
+            {
+                Marshal.Release(enumHandler);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the extension's class-default ProgId carries a verb the Shell
+    /// can execute. Resolving the ProgId by name skips the extension's
+    /// UserChoice layer, so a stale or unverifiable UserChoice cannot hide a
+    /// working default.
+    /// </summary>
+    private static bool ClassDefaultHasOpenVerb(string extension)
+    {
+        try
+        {
+            using Microsoft.Win32.RegistryKey? extensionKey =
+                Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(extension);
+            return extensionKey?.GetValue(null) is string progId &&
+                   !string.IsNullOrWhiteSpace(progId) &&
+                   ProgIdHasOpenVerb(progId);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether a ProgId registration carries a verb the Shell can execute —
+    /// a classic command line or a packaged DelegateExecute command.
+    /// </summary>
+    private static bool ProgIdHasOpenVerb(string progId)
+    {
+        if (TryQueryOpenCommand(progId))
+        {
+            return true;
+        }
+
+        try
+        {
+            using Microsoft.Win32.RegistryKey? shellKey =
+                Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(
+                    progId + "\\shell");
+            if (shellKey is null)
+            {
+                return false;
+            }
+
+            foreach (string verb in shellKey.GetSubKeyNames())
+            {
+                using Microsoft.Win32.RegistryKey? commandKey =
+                    shellKey.OpenSubKey(verb + "\\command");
+                if (commandKey is null)
+                {
+                    continue;
+                }
+
+                if (commandKey.GetValue(null) is string command &&
+                    !string.IsNullOrWhiteSpace(command))
+                {
+                    return true;
+                }
+
+                if (commandKey.GetValue("DelegateExecute") is string delegateExecute &&
+                    !string.IsNullOrWhiteSpace(delegateExecute))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private const int ShcneRenameItem = 0x00000001;
