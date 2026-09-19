@@ -592,6 +592,23 @@ public sealed partial class WidgetManager
                     {
                         await _fileService.RelocateDirectoryAsync(move.DestinationFolder, move.SourceFolder);
                     }
+
+                    // The preserving restore keeps same-named copies on both
+                    // sides instead of overwriting: anything still left at
+                    // the destination means the folder is still split and
+                    // must stay on the rollback-failure list.
+                    if (Directory.Exists(move.DestinationFolder) &&
+                        Directory.EnumerateFileSystemEntries(move.DestinationFolder).Any())
+                    {
+                        rollbackFailures.Add(new ManagedStorageRollbackFailure(
+                            move.WidgetId,
+                            move.WidgetName,
+                            move.DestinationFolder,
+                            move.SourceFolder,
+                            residueWidgetIds.Contains(move.WidgetId),
+                            "Items remain at the destination after the restore."));
+                        continue;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1010,6 +1027,21 @@ public sealed partial class WidgetManager
                         await _fileService.RelocateDirectoryAsync(
                             failure.DestinationFolder,
                             failure.SourceFolder);
+                    }
+
+                    // A preserving restore deliberately keeps same-named
+                    // copies on both sides (and per-child failures are
+                    // logged, not thrown): anything still left at the
+                    // destination means the folder is still split — the
+                    // receipt must survive so the user can resolve it.
+                    if (Directory.Exists(failure.DestinationFolder) &&
+                        Directory.EnumerateFileSystemEntries(failure.DestinationFolder).Any())
+                    {
+                        App.Log(
+                            $"[ManagedStorageMigration] Rollback retry left " +
+                            $"items at '{failure.DestinationFolder}' (conflicting copies kept).");
+                        remaining.Add(failure);
+                        continue;
                     }
                 }
                 catch (Exception ex)

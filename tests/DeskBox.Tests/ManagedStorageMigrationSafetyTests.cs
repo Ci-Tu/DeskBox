@@ -700,6 +700,83 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
         Assert.True(Directory.Exists(movedFolderA), "The blocked copy must survive the failed retry.");
     }
 
+    [Fact]
+    public async Task RetryMigrationRollbackAsync_KeepsReceiptWhenConflictingCopyRemains()
+    {
+        var widgetA = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widgetA.MappedFolderPath!).FullName;
+        File.WriteAllText(Path.Combine(folderA, "a.txt"), "original");
+        _settingsService.Settings.Widgets.Add(widgetA);
+
+        // The preserving restore keeps both copies on a name conflict and
+        // returns normally — without a residual check the receipt would be
+        // reported as resolved while a.txt still sits in the new root.
+        string movedFolderA = Path.Combine(_newStorageRoot, "A");
+        Directory.CreateDirectory(movedFolderA);
+        File.WriteAllText(Path.Combine(movedFolderA, "a.txt"), "copy");
+
+        var failureList = new List<ManagedStorageRollbackFailure>
+        {
+            new(widgetA.Id, "A", movedFolderA, folderA, PreserveExisting: true, Reason: "split copy"),
+        };
+
+        IReadOnlyList<ManagedStorageRollbackFailure> remaining =
+            await _widgetManager.RetryMigrationRollbackAsync(failureList);
+
+        ManagedStorageRollbackFailure stillStranded = Assert.Single(remaining);
+        Assert.Equal(widgetA.Id, stillStranded.WidgetId);
+        Assert.Equal(movedFolderA, stillStranded.DestinationFolder, ignoreCase: true);
+        Assert.True(File.Exists(Path.Combine(folderA, "a.txt")),
+            "The original must stay untouched.");
+        Assert.True(File.Exists(Path.Combine(movedFolderA, "a.txt")),
+            "The conflicting copy stays until the user resolves it.");
+    }
+
+    [Fact]
+    public async Task UpdateDefaultManagedStorageRootAsync_ReportsCopiesLeftByPreservingRollback()
+    {
+        var widgetA = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        var widgetB = CreateManagedWidget("B", Path.Combine(_storageRoot, "B"));
+        string folderA = Directory.CreateDirectory(widgetA.MappedFolderPath!).FullName;
+        string folderB = Directory.CreateDirectory(widgetB.MappedFolderPath!).FullName;
+        File.WriteAllText(Path.Combine(folderA, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(folderB, "b.txt"), "b");
+        _settingsService.Settings.Widgets.Add(widgetA);
+        _settingsService.Settings.Widgets.Add(widgetB);
+
+        // A completes its copy but reports a source-cleanup failure: the
+        // original a.txt stays at the old root next to the new copy. When B
+        // then fails hard, the rollback's preserving restore keeps both
+        // copies — the residue must still surface as a rollback failure.
+        _widgetManager.RelocateDirectoryForMigrationOverride = (source, destination) =>
+        {
+            if (source == folderB)
+            {
+                throw new IOException("simulated hard failure");
+            }
+
+            Directory.CreateDirectory(destination);
+            File.Copy(
+                Path.Combine(folderA, "a.txt"),
+                Path.Combine(destination, "a.txt"));
+            throw new FileService.FileTransferSourceCleanupException(
+                source,
+                destination,
+                new IOException("simulated cleanup failure"));
+        };
+
+        ManagedStorageRollbackFailureException failure =
+            await Assert.ThrowsAsync<ManagedStorageRollbackFailureException>(
+                () => _widgetManager.UpdateDefaultManagedStorageRootAsync(_newStorageRoot));
+
+        ManagedStorageRollbackFailure receipt = Assert.Single(failure.Failures);
+        Assert.Equal(widgetA.Id, receipt.WidgetId);
+        Assert.True(receipt.PreserveExisting);
+        Assert.True(File.Exists(Path.Combine(folderA, "a.txt")),
+            "The original stays at the source.");
+        Assert.True(File.Exists(Path.Combine(_newStorageRoot, "A", "a.txt")),
+            "The duplicate copy must not be silently dropped from the receipt.");
+    }
 
     [Fact]
     public async Task UpdateDefaultManagedStorageRootAsync_SkipsLockedItemAndMigratesTheRest()
