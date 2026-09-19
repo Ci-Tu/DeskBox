@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "تم الرفع: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "فشل النسخ: {0}",
     "Settings.CloudBackup.NotConfigured": "النسخ الاحتياطي السحابي غير مُعد بعد.",
+    "Settings.CloudBackup.NoScope": "حدد نوع بيانات واحدًا على الأقل للنسخ الاحتياطي.",
     "Settings.CloudBackup.LastSuccess": "آخر نسخة ناجحة: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "لا توجد نسخة ناجحة بعد.",
     "Settings.CloudBackup.RefreshSnapshots": "تحديث",

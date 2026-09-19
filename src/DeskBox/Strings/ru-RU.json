@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "Отправлено: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "Ошибка копирования: {0}",
     "Settings.CloudBackup.NotConfigured": "Облачное копирование ещё не настроено.",
+    "Settings.CloudBackup.NoScope": "Выберите хотя бы один тип данных для резервного копирования.",
     "Settings.CloudBackup.LastSuccess": "Последняя успешная копия: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "Успешных копий ещё не было.",
     "Settings.CloudBackup.RefreshSnapshots": "Обновить",

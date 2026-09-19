@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "Envoyé : {0}",
     "Settings.CloudBackup.BackupNow.Failed": "Échec de la sauvegarde : {0}",
     "Settings.CloudBackup.NotConfigured": "La sauvegarde cloud n’est pas encore configurée.",
+    "Settings.CloudBackup.NoScope": "Sélectionnez au moins un type de données à sauvegarder.",
     "Settings.CloudBackup.LastSuccess": "Dernière sauvegarde réussie : {0}",
     "Settings.CloudBackup.LastSuccess.Never": "Aucune sauvegarde réussie pour le moment.",
     "Settings.CloudBackup.RefreshSnapshots": "Actualiser",

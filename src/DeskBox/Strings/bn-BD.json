@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "আপলোড হয়েছে: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "ব্যাকআপ ব্যর্থ: {0}",
     "Settings.CloudBackup.NotConfigured": "ক্লাউড ব্যাকআপ এখনও কনফিগার করা হয়নি।",
+    "Settings.CloudBackup.NoScope": "ব্যাক আপের জন্য অন্তত একটি ডেটা ধরন নির্বাচন করুন।",
     "Settings.CloudBackup.LastSuccess": "সর্বশেষ সফল ব্যাকআপ: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "এখনও কোনো সফল ব্যাকআপ নেই।",
     "Settings.CloudBackup.RefreshSnapshots": "রিফ্রেশ",

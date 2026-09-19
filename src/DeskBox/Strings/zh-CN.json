@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "已上传：{0}",
     "Settings.CloudBackup.BackupNow.Failed": "备份失败：{0}",
     "Settings.CloudBackup.NotConfigured": "云备份尚未配置。",
+    "Settings.CloudBackup.NoScope": "请先开启至少一项要备份的内容。",
     "Settings.CloudBackup.LastSuccess": "上次成功备份：{0}",
     "Settings.CloudBackup.LastSuccess.Never": "还没有成功备份过。",
     "Settings.CloudBackup.RefreshSnapshots": "刷新",

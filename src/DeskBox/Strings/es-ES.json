@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "Subido: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "Error en la copia: {0}",
     "Settings.CloudBackup.NotConfigured": "La copia en la nube aún no está configurada.",
+    "Settings.CloudBackup.NoScope": "Selecciona al menos un tipo de datos para la copia de seguridad.",
     "Settings.CloudBackup.LastSuccess": "Última copia correcta: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "Aún no hay ninguna copia correcta.",
     "Settings.CloudBackup.RefreshSnapshots": "Actualizar",

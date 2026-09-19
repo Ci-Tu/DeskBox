@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "अपलोड किया गया: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "बैकअप विफल: {0}",
     "Settings.CloudBackup.NotConfigured": "क्लाउड बैकअप अभी कॉन्फ़िगर नहीं है।",
+    "Settings.CloudBackup.NoScope": "बैकअप के लिए कम से कम एक डेटा प्रकार चुनें।",
     "Settings.CloudBackup.LastSuccess": "अंतिम सफल बैकअप: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "अभी कोई सफल बैकअप नहीं।",
     "Settings.CloudBackup.RefreshSnapshots": "ताज़ा करें",

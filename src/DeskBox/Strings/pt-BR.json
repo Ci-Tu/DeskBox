@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "Enviado: {0}",
     "Settings.CloudBackup.BackupNow.Failed": "Falha no backup: {0}",
     "Settings.CloudBackup.NotConfigured": "O backup na nuvem ainda não está configurado.",
+    "Settings.CloudBackup.NoScope": "Selecione pelo menos um tipo de dados para backup.",
     "Settings.CloudBackup.LastSuccess": "Último backup bem-sucedido: {0}",
     "Settings.CloudBackup.LastSuccess.Never": "Ainda não houve backup bem-sucedido.",
     "Settings.CloudBackup.RefreshSnapshots": "Atualizar",

@@ -2769,6 +2769,7 @@
     "Settings.CloudBackup.BackupNow.Success": "アップロードしました：{0}",
     "Settings.CloudBackup.BackupNow.Failed": "バックアップに失敗しました：{0}",
     "Settings.CloudBackup.NotConfigured": "クラウドバックアップはまだ設定されていません。",
+    "Settings.CloudBackup.NoScope": "バックアップするデータの種類を 1 つ以上選択してください。",
     "Settings.CloudBackup.LastSuccess": "前回の成功したバックアップ：{0}",
     "Settings.CloudBackup.LastSuccess.Never": "成功したバックアップはまだありません。",
     "Settings.CloudBackup.RefreshSnapshots": "更新",
