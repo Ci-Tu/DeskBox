@@ -107,6 +107,17 @@ public sealed partial class SettingsWindow
                     allowStaleCleanupRetry: false);
                 return;
             }
+            catch (ManagedStorageRollbackFailureException ex)
+            {
+                // The rollback left folders in both roots: list them and offer
+                // a conservative retry instead of a bare failure message (#112).
+                await ManagedStorageMigrationResidueDialog.ShowRollbackFailureAsync(
+                    SettingsRoot.XamlRoot,
+                    _localizationService,
+                    failures => App.Current.WidgetManager.RetryMigrationRollbackAsync(failures),
+                    ex);
+                return;
+            }
             catch (Exception ex)
             {
                 var errorDialog = new ContentDialog

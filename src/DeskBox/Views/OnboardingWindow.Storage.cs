@@ -176,6 +176,20 @@ public sealed partial class OnboardingWindow
                 }
                 return false;
             }
+            catch (ManagedStorageRollbackFailureException ex)
+            {
+                // The rollback left folders in both roots: list them and offer
+                // a conservative retry instead of a bare failure message (#112).
+                if (RootGrid.XamlRoot is not null)
+                {
+                    await ManagedStorageMigrationResidueDialog.ShowRollbackFailureAsync(
+                        RootGrid.XamlRoot,
+                        _localizationService,
+                        failures => App.Current.WidgetManager.RetryMigrationRollbackAsync(failures),
+                        ex);
+                }
+                return false;
+            }
             catch (Exception ex)
             {
                 if (RootGrid.XamlRoot is not null)

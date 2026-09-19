@@ -368,6 +368,110 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
             ignoreCase: true);
     }
 
+    [Fact]
+    public async Task UpdateDefaultManagedStorageRootAsync_ReportsFoldersLeftBehindWhenRollbackFails()
+    {
+        var widgetA = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        var widgetB = CreateManagedWidget("B", Path.Combine(_storageRoot, "B"));
+        string folderA = Directory.CreateDirectory(widgetA.MappedFolderPath!).FullName;
+        string folderB = widgetB.MappedFolderPath!;
+        File.WriteAllText(Path.Combine(folderA, "a.txt"), "a");
+        _settingsService.Settings.Widgets.Add(widgetA);
+        _settingsService.Settings.Widgets.Add(widgetB);
+
+        string movedFolderA = Path.Combine(_newStorageRoot, "A");
+        // The lock keeps A's already-moved file pinned so the rollback of the
+        // completed move fails exactly the way a sharing violation does. It can
+        // only open after the forward move lands, so the override arms it.
+        FileStream? lockStream = null;
+        _widgetManager.RelocateDirectoryForMigrationOverride = async (source, destination) =>
+        {
+            if (source == folderB)
+            {
+                throw new IOException("simulated hard failure");
+            }
+
+            await _fileService.RelocateDirectoryAsync(source, destination);
+            if (source == folderA)
+            {
+                lockStream = new FileStream(
+                    Path.Combine(destination, "a.txt"),
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.None);
+            }
+        };
+
+        ManagedStorageRollbackFailureException failure;
+        try
+        {
+            failure = await Assert.ThrowsAsync<ManagedStorageRollbackFailureException>(
+                () => _widgetManager.UpdateDefaultManagedStorageRootAsync(_newStorageRoot));
+        }
+        finally
+        {
+            lockStream?.Dispose();
+        }
+
+        ManagedStorageRollbackFailure rollbackFailure = Assert.Single(failure.Failures);
+        Assert.Equal(widgetA.Id, rollbackFailure.WidgetId);
+        Assert.Equal("A", rollbackFailure.WidgetName);
+        Assert.Equal(movedFolderA, rollbackFailure.DestinationFolder, ignoreCase: true);
+        Assert.Equal(folderA, rollbackFailure.SourceFolder, ignoreCase: true);
+        Assert.False(rollbackFailure.PreserveExisting);
+        Assert.IsType<IOException>(failure.OriginalFailure);
+
+        // Settings and widget configs still rolled back to the old root.
+        Assert.Equal(_storageRoot, _settingsService.Settings.DefaultManagedStorageRootPath, ignoreCase: true);
+        Assert.Equal(folderA, widgetA.MappedFolderPath, ignoreCase: true);
+        // The pinned copy stayed in the new root: this is the split the user
+        // must be told about, instead of a bare "migration failed".
+        Assert.True(File.Exists(Path.Combine(movedFolderA, "a.txt")));
+        Assert.True(Directory.Exists(movedFolderA));
+
+        IReadOnlyList<ManagedStorageRollbackFailure> remaining =
+            await _widgetManager.RetryMigrationRollbackAsync(failure.Failures);
+
+        Assert.Empty(remaining);
+        Assert.True(File.Exists(Path.Combine(folderA, "a.txt")),
+            "The retry must return the folder to its original location.");
+        Assert.False(Directory.Exists(movedFolderA),
+            "The retry must not leave the split copy behind.");
+    }
+
+    [Fact]
+    public async Task RetryMigrationRollbackAsync_KeepsFailureWhenRetryStillBlocked()
+    {
+        var widgetA = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widgetA.MappedFolderPath!).FullName;
+        File.WriteAllText(Path.Combine(folderA, "a.txt"), "a");
+        _settingsService.Settings.Widgets.Add(widgetA);
+
+        string movedFolderA = Path.Combine(_newStorageRoot, "A");
+        Directory.CreateDirectory(movedFolderA);
+        File.WriteAllText(Path.Combine(movedFolderA, "a.txt"), "a");
+
+        var failureList = new List<ManagedStorageRollbackFailure>
+        {
+            new(widgetA.Id, "A", movedFolderA, folderA, PreserveExisting: false, Reason: "blocked"),
+        };
+
+        IReadOnlyList<ManagedStorageRollbackFailure> remaining;
+        using (var lockStream = new FileStream(
+                   Path.Combine(movedFolderA, "a.txt"),
+                   FileMode.Open,
+                   FileAccess.Read,
+                   FileShare.None))
+        {
+            remaining = await _widgetManager.RetryMigrationRollbackAsync(failureList);
+        }
+
+        ManagedStorageRollbackFailure stillBlocked = Assert.Single(remaining);
+        Assert.Equal(widgetA.Id, stillBlocked.WidgetId);
+        Assert.True(Directory.Exists(movedFolderA), "The blocked copy must survive the failed retry.");
+    }
+
+
     private string _newStoragePath()
     {
         return SettingsService.NormalizeManagedStorageRootPath(_newStorageRoot);
