@@ -6373,7 +6373,7 @@ $stage5B4C1B2BSourceFiles = @(
     "src/DeskBox/Controls/FileItemMenuBuilder.cs",
     "src/DeskBox/Controls/WidgetContents/FileSurfaceContent.SelectionAndMenus.cs",
     "src/DeskBox/Helpers/ShellContextMenuHelper.cs",
-    "src/DeskBox/Helpers/Win32Helper.cs",
+    "src/DeskBox/Platform/Win32Helper.cs",
     "scripts/run-aot-managed-ui-smoke.ps1",
     "scripts/run-aot-file-properties-smoke.ps1",
     "native/deskbox-native/src/lib.rs"
@@ -7108,7 +7108,7 @@ $stage5B4C1C2AActualWmc1510Count = @(
 ).Count
 $stage5B4C2ASourceFiles = @(
     "src/DeskBox/App.AotHotkeySmoke.cs",
-    "src/DeskBox/Helpers/Win32Helper.AotHotkeySmoke.cs",
+    "src/DeskBox/Platform/Win32Helper.AotHotkeySmoke.cs",
     "src/DeskBox/Services/GlobalHotkeyService.cs",
     "src/DeskBox/Services/SearchHotkeyService.cs",
     "src/DeskBox/Services/ReservedHotkeyHookService.cs",

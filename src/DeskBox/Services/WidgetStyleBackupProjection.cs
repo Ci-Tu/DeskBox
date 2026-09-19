@@ -146,7 +146,11 @@ internal static class WidgetStyleBackupProjection
             ["shell"] = shell,
             ["widgets"] = widgets
         };
-        return JsonSerializer.SerializeToUtf8Bytes(document);
+        // JsonNode.ToJsonString stays on STJ's non-generic DOM path — the
+        // generic SerializeToUtf8Bytes<JsonObject> overload carries
+        // RequiresUnreferencedCode/RequiresDynamicCode and trips the AOT
+        // audit's unexpected-warning gate.
+        return System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
     }
 
     /// <summary>
