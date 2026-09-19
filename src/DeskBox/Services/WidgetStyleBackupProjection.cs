@@ -323,7 +323,7 @@ internal static class WidgetStyleBackupProjection
             throw;
         }
 
-        await DeleteJournalArtifactsAsync(settingsPath, layoutPath);
+        await CleanupJournalAsync(settingsPath, layoutPath);
         return new ApplyResult(true, shellPatched, widgetsPatched, null);
     }
 
@@ -352,34 +352,34 @@ internal static class WidgetStyleBackupProjection
             return;
         }
 
-        try
+        if (committed)
         {
-            if (committed)
-            {
-                return;
-            }
+            await CleanupJournalAsync(settingsPath, layoutPath);
+            return;
+        }
 
-            await RestoreJournalSnapshotAsync(
-                JournalOrigPath(settingsPath), settingsPath, cancellationToken);
-            string layoutOrigPath = JournalOrigPath(layoutPath);
-            if (File.Exists(layoutOrigPath))
-            {
-                await RestoreJournalSnapshotAsync(
-                    layoutOrigPath, layoutPath, cancellationToken);
-            }
-            else
-            {
-                // The layout file did not exist before the transaction —
-                // remove whatever the partial commit created.
-                await TryDeleteFileAsync(layoutPath);
-                await TryDeleteFileAsync(
-                    ResilientJsonStore.GetBackupPath(layoutPath));
-            }
-        }
-        finally
+        // Uncommitted transaction. The pending marker is written only after
+        // BOTH snapshots are complete, and this path only exists when the
+        // layout file existed at journal time — so a missing snapshot means
+        // the journal itself is corrupt. Fail closed: keep every artifact
+        // and never touch the live files on a guess.
+        string settingsOrig = JournalOrigPath(settingsPath);
+        string layoutOrig = JournalOrigPath(layoutPath);
+        if (!File.Exists(settingsOrig) || !File.Exists(layoutOrig))
         {
-            await DeleteJournalArtifactsAsync(settingsPath, layoutPath);
+            throw new InvalidDataException(
+                "Widget-style restore journal is incomplete: pending marker " +
+                "without both original snapshots; live files left untouched.");
         }
+
+        // The journal is deleted ONLY after a complete restore — a partial
+        // restore keeps it so the next apply retries to convergence
+        // (re-restoring the same snapshots is idempotent).
+        await RestoreJournalSnapshotAsync(
+            settingsOrig, settingsPath, cancellationToken);
+        await RestoreJournalSnapshotAsync(
+            layoutOrig, layoutPath, cancellationToken);
+        await CleanupJournalAsync(settingsPath, layoutPath);
     }
 
     private static async Task RestoreJournalSnapshotAsync(
@@ -387,14 +387,6 @@ internal static class WidgetStyleBackupProjection
         string livePath,
         CancellationToken cancellationToken)
     {
-        if (!File.Exists(origPath))
-        {
-            App.Log(
-                $"[WidgetStyleRestore] Journal snapshot missing: {origPath}; " +
-                "that file cannot be restored.");
-            return;
-        }
-
         string original = await File.ReadAllTextAsync(origPath, cancellationToken);
         await File.WriteAllTextAsync(livePath, original, cancellationToken);
         await File.WriteAllTextAsync(
@@ -422,13 +414,24 @@ internal static class WidgetStyleBackupProjection
         }
     }
 
-    private static async Task DeleteJournalArtifactsAsync(
-        string settingsPath, string layoutPath)
+    /// <summary>
+    /// Ordered journal cleanup. Pending goes first and the committed flag
+    /// LAST, stopping at the first artifact that survives — a "pending-only"
+    /// remnant would read as an uncommitted transaction and could roll back
+    /// (or delete live files over) finished work.
+    /// </summary>
+    private static async Task CleanupJournalAsync(string settingsPath, string layoutPath)
     {
-        await TryDeleteFileAsync(JournalPendingPath(settingsPath));
-        await TryDeleteFileAsync(JournalCommittedPath(settingsPath));
+        string pending = JournalPendingPath(settingsPath);
+        await TryDeleteFileAsync(pending);
+        if (File.Exists(pending))
+        {
+            return;
+        }
+
         await TryDeleteFileAsync(JournalOrigPath(settingsPath));
         await TryDeleteFileAsync(JournalOrigPath(layoutPath));
+        await TryDeleteFileAsync(JournalCommittedPath(settingsPath));
     }
 
     /// <summary>

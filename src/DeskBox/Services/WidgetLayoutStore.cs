@@ -215,7 +215,9 @@ public sealed class WidgetLayoutStore
                 $"[WidgetLayout] Refusing to overwrite a schema " +
                 $"{_loadedSchemaVersion} file (this build understands " +
                 $"{CurrentSchemaVersion}); leaving it pristine.");
-            return true;
+            // Honest answer: nothing was committed, so the caller must not
+            // treat the in-memory slice as durable.
+            return false;
         }
 
         try
