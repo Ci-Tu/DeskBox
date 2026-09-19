@@ -619,7 +619,8 @@ $stage4D3AUnexpectedDropTargetWarningMessages = @(
 )
 $stage4D3BSourceFiles = @(
     "src\DeskBox\Helpers\NativeDropTarget.cs",
-    "src\DeskBox\Helpers\NativeDropTargetComInterop.cs"
+    "src\DeskBox\Helpers\NativeDropTargetComInterop.cs",
+    "src\DeskBox\Platform\Ole32NativeMethods.cs"
 )
 $stage4D3BLegacyRegistrationPatterns = @(
     "[ComImport",
@@ -659,15 +660,21 @@ $stage4D3BRequiredGeneratedComPatterns = @(
     "ComInterfaceMarshaller<INativeDropTarget>.ConvertToUnmanaged",
     "ComInterfaceMarshaller<INativeDropTarget>.Free"
 )
-$stage4D3BInteropSourcePath = Join-Path $repoRoot (
-    "src\DeskBox\Helpers\NativeDropTargetComInterop.cs")
-$stage4D3BInteropSource = if (
-    Test-Path -LiteralPath $stage4D3BInteropSourcePath -PathType Leaf) {
-    Get-Content -LiteralPath $stage4D3BInteropSourcePath -Raw
-}
-else {
-    ""
-}
+$stage4D3BInteropSourcePaths = @(
+    "src\DeskBox\Helpers\NativeDropTargetComInterop.cs",
+    # The ole32 RegisterDragDrop/RevokeDragDrop LibraryImport pair moved to the
+    # Platform surface during the P/Invoke consolidation; the contract is about
+    # the generated-COM surface as a whole, not a single file.
+    "src\DeskBox\Platform\Ole32NativeMethods.cs"
+)
+$stage4D3BInteropSource = (
+    $stage4D3BInteropSourcePaths | ForEach-Object {
+        $fullPath = Join-Path $repoRoot $_
+        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            Get-Content -LiteralPath $fullPath -Raw
+        }
+    }
+) -join "`n"
 $stage4D3BMissingGeneratedComPatterns = @(
     $stage4D3BRequiredGeneratedComPatterns |
         Where-Object {
@@ -1457,7 +1464,10 @@ $stage4E4SourceFiles = @(
     "src\DeskBox\ViewModels\SettingsViewModel.FileStackOptions.cs",
     "src\DeskBox\ViewModels\SettingsViewModel.FeatureOptions.cs",
     "src\DeskBox\ViewModels\SettingsViewModel.SelectionOptions.cs",
-    "src\DeskBox\Controls\SettingsComboBox.cs"
+    "src\DeskBox\Controls\SettingsComboBox.cs",
+    # Deferred-section host: AppearanceDetail is materialized lazily, so its
+    # typed ViewModel bridge lives here instead of SettingsWindow.xaml.cs.
+    "src\DeskBox\Views\SettingsWindow.DeferredSections.cs"
 )
 $stage4E4Sources = [ordered]@{}
 foreach ($sourceFile in $stage4E4SourceFiles) {
@@ -1564,8 +1574,8 @@ $stage4E4RequiredViewModelBridgePatterns = @(
         pattern = "SettingsRoot.DataContext = ViewModel;"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[2]
-        pattern = "AppearanceDetailSection.ViewModel = ViewModel;"
+        sourceFile = $stage4E4SourceFiles[7]
+        pattern = "fileSettings.ViewModel = ViewModel;"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[2]
@@ -1589,8 +1599,12 @@ $stage4E4SettingsWindowSource = $stage4E4Sources[$stage4E4SourceFiles[2]]
 $stage4E4RootDataContextIndex = $stage4E4SettingsWindowSource.IndexOf(
     "SettingsRoot.DataContext = ViewModel;",
     [StringComparison]::Ordinal)
-$stage4E4BridgeAssignmentIndex = $stage4E4SettingsWindowSource.IndexOf(
-    "AppearanceDetailSection.ViewModel = ViewModel;",
+$stage4E4DeferredSectionsSource = $stage4E4Sources[$stage4E4SourceFiles[7]]
+$stage4E4DeferredDataContextIndex = $stage4E4DeferredSectionsSource.IndexOf(
+    "section.DataContext = ViewModel;",
+    [StringComparison]::Ordinal)
+$stage4E4BridgeAssignmentIndex = $stage4E4DeferredSectionsSource.IndexOf(
+    "fileSettings.ViewModel = ViewModel;",
     [StringComparison]::Ordinal)
 $stage4E4BridgeClearIndex = $stage4E4SettingsWindowSource.IndexOf(
     "AppearanceDetailSection.ViewModel = null;",
@@ -1600,7 +1614,8 @@ $stage4E4ViewModelDisposeIndex = $stage4E4SettingsWindowSource.IndexOf(
     [StringComparison]::Ordinal)
 $stage4E4ViewModelBridgeOrderValid =
     $stage4E4RootDataContextIndex -ge 0 -and
-    $stage4E4BridgeAssignmentIndex -gt $stage4E4RootDataContextIndex -and
+    $stage4E4DeferredDataContextIndex -ge 0 -and
+    $stage4E4BridgeAssignmentIndex -gt $stage4E4DeferredDataContextIndex -and
     $stage4E4BridgeClearIndex -ge 0 -and
     $stage4E4BridgeClearIndex -lt $stage4E4ViewModelDisposeIndex
 $stage4E4UnexpectedManualBridgePatterns = @(
