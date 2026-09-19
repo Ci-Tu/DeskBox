@@ -123,7 +123,8 @@ public sealed partial class FileService
                         itemException is not (
                             OperationCanceledException or
                             FileTransferSourceCleanupException or
-                            FileTransferSourceChangedException))
+                            FileTransferSourceChangedException or
+                            FileTransferDestinationCleanupException))
                     {
                         // The destination of a failed copy was already removed
                         // through its own open handle and the source is
@@ -131,6 +132,9 @@ public sealed partial class FileService
                         // item is safe. Cleanup/changed-source exceptions are
                         // excluded: their destination is a complete copy and
                         // must keep propagating to the batch-level handlers.
+                        // A destination-cleanup failure is excluded too: its
+                        // destination is an unremovable half-copy, and a
+                        // "skip" answer would drop that residue untracked.
                         FileTransferItemAction action = await onItemError(
                             new FileTransferItemError(
                                 operation.SourcePath,
@@ -388,16 +392,18 @@ public sealed partial class FileService
     }
 
     /// <summary>
-    /// Copies one file and returns the source object's identity, read from
-    /// the very handle that performed the copy while it was still open —
-    /// the directory-move source cleanup later verifies each deletion
-    /// against this identity.
+    /// Copies one file and returns both object identities, each read from
+    /// the very handle that performed the work while it was still open —
+    /// the directory-move source cleanup verifies each source deletion
+    /// against the first, and the partial-destination cleanup verifies
+    /// each created destination file against the second.
     /// </summary>
-    private static async Task<FileTransferSourceIdentity?> CopyFileWithProgressAsync(
-        string sourceFilePath,
-        string destinationFilePath,
-        TransferProgressReporter reporter,
-        CancellationToken cancellationToken)
+    private static async Task<(FileTransferSourceIdentity? Source, FileTransferSourceIdentity? Destination)>
+        CopyFileWithProgressAsync(
+            string sourceFilePath,
+            string destinationFilePath,
+            TransferProgressReporter reporter,
+            CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(destinationFilePath)!);
         var sourceInfo = new FileInfo(sourceFilePath);
@@ -405,6 +411,7 @@ public sealed partial class FileService
 
         FileStream? destination = null;
         FileTransferSourceIdentity? sourceIdentity;
+        FileTransferSourceIdentity? destinationIdentity;
         try
         {
             const int bufferSize = 256 * 1024;
@@ -416,7 +423,7 @@ public sealed partial class FileService
                 bufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             sourceIdentity = IdentityFromHandle(source.SafeFileHandle);
-            (destination, _) = await CopyFileCoreAsync(
+            (destination, destinationIdentity) = await CopyFileCoreAsync(
                 source,
                 sourceInfo,
                 destinationFilePath,
@@ -430,7 +437,7 @@ public sealed partial class FileService
         }
 
         reporter.Report(FileTransferPhase.Transferring, force: false);
-        return sourceIdentity;
+        return (sourceIdentity, destinationIdentity);
     }
 
     /// <summary>
@@ -441,7 +448,7 @@ public sealed partial class FileService
     /// disposition; a copy closes it). A failure deletes the partial
     /// destination through that same handle.
     /// </summary>
-    private static async Task<(FileStream Stream, FileTransferSourceIdentity? Identity)> CopyFileCoreAsync(
+    private static async Task<(FileStream Stream, FileTransferSourceIdentity? DestinationIdentity)> CopyFileCoreAsync(
         FileStream source,
         FileInfo sourceInfo,
         string destinationFilePath,
@@ -800,7 +807,10 @@ public sealed partial class FileService
     /// Copies one directory tree. Completed children are never rolled back
     /// (Explorer semantics); the manifest of copied source files is recorded
     /// for the directory-move source cleanup, which only runs after the
-    /// entire tree has copied and been verified.
+    /// entire tree has copied and been verified. When
+    /// <paramref name="copiedDestinationFiles"/> is supplied each created
+    /// destination file is recorded with its object identity too, so a
+    /// failed move can remove exactly the objects it created.
     /// </summary>
     private static async Task CopyDirectoryWithProgressAsync(
         string sourceDirectory,
@@ -808,7 +818,8 @@ public sealed partial class FileService
         TransferProgressReporter reporter,
         CancellationToken cancellationToken,
         ISet<string> visitedSourceDirectories,
-        List<CopiedSourceFileRecord> copiedSourceFiles)
+        List<CopiedSourceFileRecord> copiedSourceFiles,
+        List<CopiedDestinationFileRecord>? copiedDestinationFiles = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureSafeRecursiveDirectoryCopy(
@@ -830,17 +841,24 @@ public sealed partial class FileService
             DateTime sourceLastWriteUtc = sourceInfo.LastWriteTimeUtc;
             // The source identity comes from the copy's own handle: it
             // describes the object that was actually read, never whatever
-            // may have appeared at the path after the copy finished.
-            FileTransferSourceIdentity? sourceIdentity = await CopyFileWithProgressAsync(
-                filePath,
-                destinationFilePath,
-                reporter,
-                cancellationToken);
+            // may have appeared at the path after the copy finished. The
+            // destination identity is captured the same way — from the
+            // still-open CreateNew handle, not from the path.
+            (FileTransferSourceIdentity? sourceIdentity,
+                FileTransferSourceIdentity? destinationIdentity) =
+                await CopyFileWithProgressAsync(
+                    filePath,
+                    destinationFilePath,
+                    reporter,
+                    cancellationToken);
             copiedSourceFiles.Add(new CopiedSourceFileRecord(
                 filePath,
                 sourceLength,
                 sourceLastWriteUtc,
                 sourceIdentity));
+            copiedDestinationFiles?.Add(new CopiedDestinationFileRecord(
+                destinationFilePath,
+                destinationIdentity));
         }
 
         foreach (string subDirectory in Directory.EnumerateDirectories(sourceDirectory))
@@ -855,7 +873,8 @@ public sealed partial class FileService
                 reporter,
                 cancellationToken,
                 visitedSourceDirectories,
-                copiedSourceFiles);
+                copiedSourceFiles,
+                copiedDestinationFiles);
         }
     }
 
@@ -909,14 +928,16 @@ public sealed partial class FileService
         // completed-results lists only carry finished operations, so a retry
         // would meet its own half-copy — and re-copy its entries under "(2)"
         // names. When the destination held nothing before this operation,
-        // everything under it is ours and the partial tree can go; a
-        // destination that already had content is a merge we cannot
+        // the recorded manifest proves which entries are ours and they go;
+        // a destination that already had content is a merge we cannot
         // untangle, so it stays.
+        bool destinationExistedBefore = true;
         bool destinationPreHeldContent = true;
         try
         {
+            destinationExistedBefore = Directory.Exists(destinationDirectory);
             destinationPreHeldContent =
-                Directory.Exists(destinationDirectory) &&
+                destinationExistedBefore &&
                 Directory.EnumerateFileSystemEntries(destinationDirectory).Any();
         }
         catch
@@ -926,6 +947,7 @@ public sealed partial class FileService
         }
 
         var copiedSourceFiles = new List<CopiedSourceFileRecord>();
+        var copiedDestinationFiles = new List<CopiedDestinationFileRecord>();
         try
         {
             await CopyDirectoryWithProgressAsync(
@@ -934,22 +956,34 @@ public sealed partial class FileService
                 reporter,
                 cancellationToken,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-                copiedSourceFiles);
+                copiedSourceFiles,
+                copiedDestinationFiles);
         }
-        catch (Exception)
+        catch (Exception copyFailure)
         {
             if (!destinationPreHeldContent)
             {
-                try
+                // Manifest-scoped cleanup only: each recorded destination
+                // file is deleted through a handle verified against the
+                // identity captured at its CreateNew call, and directories
+                // only leave while empty. A foreign file dropped into the
+                // tree mid-copy — or a directory that existed before we ran —
+                // is never touched.
+                int stranded = CleanupCopiedDestinationTree(
+                    destinationDirectory,
+                    destinationExistedBefore,
+                    copiedDestinationFiles);
+                if (stranded > 0)
                 {
-                    Directory.Delete(destinationDirectory, recursive: true);
-                }
-                catch (Exception cleanupException)
-                {
-                    App.Log(
-                        $"[FileTransfer] Partial destination cleanup failed " +
-                        $"destination='{destinationDirectory}': " +
-                        $"{cleanupException.Message}");
+                    // Some of OUR objects could not be removed (locked,
+                    // swapped, identity lost). The half-copy must not be
+                    // answered by a per-item "skip": it is residue the
+                    // batch-level recovery flow has to see.
+                    throw new FileTransferDestinationCleanupException(
+                        sourceDirectory,
+                        destinationDirectory,
+                        copyFailure,
+                        stranded);
                 }
             }
 
@@ -990,6 +1024,80 @@ public sealed partial class FileService
         }
 
         Win32Helper.NotifyShellItemMoved(sourceDirectory, destinationDirectory);
+    }
+
+    /// <summary>
+    /// Removes only the destination objects this operation created, each
+    /// deleted through a handle verified against the identity captured at
+    /// its own CreateNew call — never a recursive path delete, which could
+    /// take foreign files dropped into the tree mid-copy (or a directory
+    /// that merely existed before we ran) down with it. Directories leave
+    /// deepest-first and only while empty, so unmanifested content can
+    /// survive but never disappear. Returns the number of manifest objects
+    /// that could not be removed.
+    /// </summary>
+    private static int CleanupCopiedDestinationTree(
+        string destinationDirectory,
+        bool destinationExistedBefore,
+        IReadOnlyList<CopiedDestinationFileRecord> copiedDestinationFiles)
+    {
+        int stranded = 0;
+        for (int index = copiedDestinationFiles.Count - 1; index >= 0; index--)
+        {
+            CopiedDestinationFileRecord record = copiedDestinationFiles[index];
+            // Without a recorded identity there is no deletion authority:
+            // keep the file and count it stranded rather than delete an
+            // unverified path.
+            if (record.Identity is not { } identity ||
+                !TryDeleteFileByIdentity(record.DestinationFilePath, identity))
+            {
+                stranded++;
+            }
+        }
+
+        try
+        {
+            foreach (string directory in Directory
+                         .EnumerateDirectories(
+                             destinationDirectory,
+                             "*",
+                             SearchOption.AllDirectories)
+                         .OrderByDescending(path => path.Length))
+            {
+                try
+                {
+                    Directory.Delete(directory, recursive: false);
+                }
+                catch (Exception)
+                {
+                    // Non-empty (foreign content or a stranded file) or
+                    // locked — either way it stays.
+                }
+            }
+
+            // The destination root itself is only ours when the operation
+            // created it; a pre-existing directory — even an empty one —
+            // belongs to whoever made it.
+            if (!destinationExistedBefore)
+            {
+                try
+                {
+                    Directory.Delete(destinationDirectory, recursive: false);
+                }
+                catch (Exception)
+                {
+                    // Leftover content (foreign or stranded) keeps it.
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            App.Log(
+                $"[FileTransfer] Partial destination cleanup failed while " +
+                $"walking '{destinationDirectory}': {ex.Message}");
+        }
+
+        return stranded;
     }
 
     private static void CopyFileMetadata(

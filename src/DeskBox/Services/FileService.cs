@@ -101,6 +101,17 @@ public sealed partial class FileService
         DateTime LastWriteTimeUtc,
         FileTransferSourceIdentity? Identity);
 
+    /// <summary>
+    /// A destination file this operation created, with the object identity
+    /// captured from its own CreateNew handle. Partial-copy cleanup may
+    /// only delete paths whose current object still matches this record —
+    /// a foreign file dropped into the tree mid-copy fails the check and
+    /// survives.
+    /// </summary>
+    internal readonly record struct CopiedDestinationFileRecord(
+        string DestinationFilePath,
+        FileTransferSourceIdentity? Identity);
+
     public sealed record FileTransferPlan(string SourcePath, string DestinationPath);
 
     public sealed record FileTransferResult(string SourcePath, string DestinationPath);
@@ -130,6 +141,38 @@ public sealed partial class FileService
         }
 
         public IReadOnlyList<FileTransferResult> CompletedResults { get; }
+    }
+
+    /// <summary>
+    /// A directory move's partial-copy cleanup could not remove every
+    /// destination object this operation created: files are stranded at
+    /// the destination. This must propagate past the per-item retry/skip
+    /// decision — a "skip" answer would leave an unrecorded partial tree
+    /// behind and the caller would report the batch as merely skipped.
+    /// </summary>
+    public sealed class FileTransferDestinationCleanupException : IOException
+    {
+        internal FileTransferDestinationCleanupException(
+            string sourceDirectory,
+            string destinationDirectory,
+            Exception copyFailure,
+            int strandedFileCount)
+            : base(
+                $"The directory move failed and its partial destination at " +
+                $"'{destinationDirectory}' could not be fully cleaned " +
+                $"({strandedFileCount} file(s) remain).",
+                copyFailure)
+        {
+            SourceDirectory = sourceDirectory;
+            DestinationDirectory = destinationDirectory;
+            StrandedFileCount = strandedFileCount;
+        }
+
+        public string SourceDirectory { get; }
+
+        public string DestinationDirectory { get; }
+
+        public int StrandedFileCount { get; }
     }
 
     public sealed class FileTransferSourceChangedException : IOException,
@@ -2989,11 +3032,12 @@ public sealed partial class FileService
             // The source identity comes from the copy's own handle: it
             // describes the object that was actually read, never whatever
             // may have appeared at the path after the copy finished.
-            FileTransferSourceIdentity? sourceIdentity = await CopyFileWithProgressAsync(
-                filePath,
-                destinationFilePath,
-                new TransferProgressReporter(progress: null, totalItems: 1),
-                CancellationToken.None);
+            (FileTransferSourceIdentity? sourceIdentity, _) =
+                await CopyFileWithProgressAsync(
+                    filePath,
+                    destinationFilePath,
+                    new TransferProgressReporter(progress: null, totalItems: 1),
+                    CancellationToken.None);
             copiedSourceFiles.Add(new CopiedSourceFileRecord(
                 filePath,
                 sourceLength,
