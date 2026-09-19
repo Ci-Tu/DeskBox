@@ -903,6 +903,7 @@ public static partial class Win32Helper
 
     private const uint AssocfNone = 0;
     private const uint AssocstrCommand = 1;
+    private const uint AssocstrProgId = 20; // ASSOCSTR_PROGID
     private const uint HResultEPointer = 0x80004003;
 
     [LibraryImport("shlwapi.dll", EntryPoint = "AssocQueryStringW", StringMarshalling = StringMarshalling.Utf16)]
@@ -960,12 +961,13 @@ public static partial class Win32Helper
         }
 
         // Packaged (AppX) defaults register shell\open\command with only a
-        // DelegateExecute CLSID and no command line, and their ProgIds are
-        // virtualized — invisible to plain registry and AssocQueryString
-        // lookups. The shell's recommended-handler enumeration resolves the
-        // full association chain (UserChoice, class default, AppX handlers)
-        // and stays empty for unknown or orphaned extensions.
-        if (HasRecommendedAssocHandler(extension))
+        // DelegateExecute CLSID and no command line. Resolving the EFFECTIVE
+        // ProgId is UserChoice-aware and fails outright when nothing is
+        // associated, so a resolved ProgId already proves a default exists —
+        // a recommended-handler list would only prove capability. The verb
+        // check on that ProgId then covers DelegateExecute-only defaults.
+        if (TryQueryEffectiveProgId(extension, out string effectiveProgId) &&
+            ProgIdHasOpenVerb(effectiveProgId))
         {
             return true;
         }
@@ -1021,61 +1023,47 @@ public static partial class Win32Helper
                    StringComparison.OrdinalIgnoreCase) < 0;
     }
 
-    private const int AssocFilterRecommended = 0x1; // ASSOC_FILTER_RECOMMENDED
-
-    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int SHAssocEnumHandlers(
-        string extra,
-        int filter,
-        out nint enumHandler);
-
     /// <summary>
-    /// Whether the shell resolves at least one recommended handler for the
-    /// extension — the same resolution Explorer performs before deciding a
-    /// file can be opened versus shown a picker.
+    /// Resolves the effective ProgId for the extension through the shell's
+    /// association chain — UserChoice first, then the class default. The
+    /// query fails when nothing is associated at all, which is what makes
+    /// it a proof of a default rather than of mere handler capability.
     /// </summary>
-    private static unsafe bool HasRecommendedAssocHandler(string extension)
+    private static bool TryQueryEffectiveProgId(string extension, out string progId)
     {
-        nint enumHandler = 0;
-        nint handler = 0;
-        try
+        progId = string.Empty;
+        var buffer = new char[512];
+        uint length = (uint)buffer.Length;
+        uint queryResult = AssocQueryString(
+            AssocfNone,
+            AssocstrProgId,
+            extension,
+            null,
+            buffer,
+            ref length);
+        if (queryResult == HResultEPointer && length > (uint)buffer.Length)
         {
-            if (SHAssocEnumHandlers(
-                    extension,
-                    AssocFilterRecommended,
-                    out enumHandler) != 0 ||
-                enumHandler == 0)
-            {
-                return false;
-            }
-
-            // IEnumAssocHandlers::Next — the first interface method after
-            // IUnknown, vtable slot 3.
-            uint fetched = 0;
-            ((delegate* unmanaged[Stdcall]<nint, uint, nint*, uint*, int>)
-                (*(nint**)enumHandler)[3])(
-                    enumHandler,
-                    1,
-                    &handler,
-                    &fetched);
-            return fetched > 0;
+            buffer = new char[length];
+            queryResult = AssocQueryString(
+                AssocfNone,
+                AssocstrProgId,
+                extension,
+                null,
+                buffer,
+                ref length);
         }
-        catch (Exception)
+
+        if (queryResult != 0)
         {
             return false;
         }
-        finally
-        {
-            if (handler != 0)
-            {
-                Marshal.Release(handler);
-            }
 
-            if (enumHandler != 0)
-            {
-                Marshal.Release(enumHandler);
-            }
-        }
+        progId = new string(
+                buffer,
+                0,
+                (int)Math.Min(length, (uint)buffer.Length))
+            .TrimEnd('\0');
+        return !string.IsNullOrWhiteSpace(progId);
     }
 
     /// <summary>
