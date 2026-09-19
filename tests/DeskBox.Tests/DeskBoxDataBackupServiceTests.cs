@@ -64,6 +64,46 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportBackupAsync_CopiesSettingsPairUnderFileWriteLock()
+    {
+        // A plain settings save commits settings.json + widget-layout.json
+        // under the settings file-write gate WITHOUT touching
+        // OperationGate. The snapshot must wait on that gate too, or it can
+        // tear the pair mid-save into a combination that never existed.
+        string dataDirectory = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(dataDirectory, "settings.json"), "{\"language\":\"en-US\"}");
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDirectory, "widget-layout.json"),
+            "{\"schemaVersion\":1,\"layout\":{\"widgets\":[]}}");
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+
+        SemaphoreSlim writeLock = SettingsService.FileWriteLockFor(dataDirectory);
+        await writeLock.WaitAsync();
+        Task<string> backup;
+        try
+        {
+            backup = service.ExportBackupAsync(_exportRoot);
+            // Give the export time to reach the metadata copy; it must be
+            // blocked on the write gate, not racing it.
+            await Task.Delay(750);
+            Assert.False(
+                backup.IsCompleted,
+                "the snapshot must wait for the settings write gate before " +
+                "copying the settings/layout pair");
+        }
+        finally
+        {
+            writeLock.Release();
+        }
+
+        string backupPath = await backup;
+        Assert.True(File.Exists(backupPath));
+        using ZipArchive archive = ZipFile.OpenRead(backupPath);
+        Assert.NotNull(archive.GetEntry("data/settings.json"));
+        Assert.NotNull(archive.GetEntry("data/widget-layout.json"));
+    }
+
+    [Fact]
     public async Task ExportBackupAsync_IncludesManifestDataAndNestedAttachments()
     {
         string dataDirectory = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
@@ -86,6 +126,16 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
         await File.WriteAllTextAsync(
             Path.Combine(dataDirectory, "desktop-organization-recovery.json.bak"), "{}");
         await File.WriteAllTextAsync(Path.Combine(dataDirectory, "ignored.tmp"), "partial");
+        // WidgetStyle restore's two-file transaction journal is in-flight
+        // machine state, not user data — it must never ride into a backup.
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDirectory, "settings.json.style-restore.pending"), "{}");
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDirectory, "settings.json.style-restore.committed"), "{}");
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDirectory, "settings.json.style-restore.orig"), "{}");
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDirectory, "widget-layout.json.style-restore.orig"), "{}");
         string thumbnailDirectory = Directory.CreateDirectory(
             Path.Combine(dataDirectory, "quick-capture", "thumbnails")).FullName;
         string exportDirectory = Directory.CreateDirectory(
@@ -123,6 +173,10 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
         Assert.Null(archive.GetEntry("data/settings.json.bak"));
         Assert.Null(archive.GetEntry("data/desktop-organization-recovery.json.bak"));
         Assert.Null(archive.GetEntry("data/ignored.tmp"));
+        Assert.Null(archive.GetEntry("data/settings.json.style-restore.pending"));
+        Assert.Null(archive.GetEntry("data/settings.json.style-restore.committed"));
+        Assert.Null(archive.GetEntry("data/settings.json.style-restore.orig"));
+        Assert.Null(archive.GetEntry("data/widget-layout.json.style-restore.orig"));
         Assert.Null(archive.GetEntry("data/quick-capture/thumbnails/cached.png"));
         Assert.Null(archive.GetEntry("data/quick-capture/exports/temporary.txt"));
         Assert.Null(archive.GetEntry("data/cache/glance/images/wallpaper.jpg"));

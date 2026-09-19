@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DeskBox.Core.Persistence;
 using DeskBox.Models;
 
 namespace DeskBox.Services;
@@ -243,6 +244,21 @@ internal static class WidgetStyleBackupProjection
                 layoutPath, cancellationToken);
             layoutDom = JsonNode.Parse(originalLayoutJson)?.AsObject()
                 ?? throw new InvalidDataException("widget-layout.json is empty.");
+
+            // The live layout carries the same write-protection the store
+            // enforces: a schemaVersion newer than this build makes the file
+            // read-only, and DOM-patching it here would bypass
+            // WidgetLayoutStore.CanWrite. Fail before either file is
+            // touched — settings must not commit a half-restored pair.
+            if (layoutDom["schemaVersion"] is JsonValue liveVersion &&
+                liveVersion.TryGetValue(out int liveSchema) &&
+                liveSchema > WidgetLayoutStore.CurrentSchemaVersion)
+            {
+                throw new InvalidDataException(
+                    $"widget-layout.json uses schema {liveSchema}, newer " +
+                    $"than this build understands " +
+                    $"({WidgetLayoutStore.CurrentSchemaVersion}).");
+            }
 
             widgetsArray = layoutDom["layout"]?["widgets"] as JsonArray;
         }

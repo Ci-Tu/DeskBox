@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -395,7 +396,23 @@ public const int DefaultSearchMaxResults = 100;
     private readonly string _settingsPath;
     private AppSettings _settings = new();
     private readonly object _lock = new();
-    private readonly SemaphoreSlim _fileWriteLock = new(1, 1);
+
+    // The settings.json / widget-layout.json commit pair is protected by a
+    // per-data-directory gate shared with coherent-snapshot readers:
+    // DeskBoxDataBackupService takes the same gate while copying the pair
+    // into a backup, and two service instances pointed at one directory
+    // serialize instead of racing the same files.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> s_fileWriteLocks =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    internal static SemaphoreSlim FileWriteLockFor(string dataDirectory) =>
+        s_fileWriteLocks.GetOrAdd(
+            Path.GetFullPath(dataDirectory).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            static _ => new SemaphoreSlim(1, 1));
+
+    private SemaphoreSlim FileWriteLock =>
+        FileWriteLockFor(Path.GetDirectoryName(_settingsPath)!);
     private readonly object _debounceLock = new();
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _appearancePreviewCts;
@@ -917,7 +934,7 @@ settings.FocusClickedWidgetOnRaise = false;
 
     private async Task<bool> SaveToFileOnlyAsync()
     {
-        await _fileWriteLock.WaitAsync();
+        await FileWriteLock.WaitAsync();
         try
         {
             // Layout first when the device store is authoritative: it owns the
@@ -1000,7 +1017,7 @@ settings.FocusClickedWidgetOnRaise = false;
         }
         finally
         {
-            _fileWriteLock.Release();
+            FileWriteLock.Release();
         }
     }
 
@@ -1015,7 +1032,7 @@ settings.FocusClickedWidgetOnRaise = false;
     /// pass and the serialization itself run under <c>_lock</c>, so one
     /// save still corresponds to exactly one coherent snapshot; only the
     /// destination of the encoder changed. The synchronous encode runs on a
-    /// pool thread (the caller already holds _fileWriteLock) so UI-thread
+    /// pool thread (the caller already holds FileWriteLock) so UI-thread
     /// savers pay the same lock time as before, not the encode.
     /// </summary>
     private Task WriteSettingsTempFileAsync(string tempPath, bool stripLayoutKeys) => Task.Run(() =>

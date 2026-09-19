@@ -534,6 +534,40 @@ public sealed class CloudBackupScopedTests : IDisposable
     }
 
     [Fact]
+    public async Task Projection_Apply_RefusesFutureLayoutSchema()
+    {
+        // A widget-layout.json stamped by a NEWER build is read-only to this
+        // one — WidgetLayoutStore.CanWrite enforces that for the normal save
+        // path, and the style apply must not bypass it by DOM-patching the
+        // file directly. The whole apply fails closed: settings.json must
+        // not commit a half-restored pair either.
+        string settingsPath = Path.Combine(_tempRoot, "settings.json");
+        string layoutPath = Path.Combine(_tempRoot, "widget-layout.json");
+
+        var liveSettings = new AppSettings { WidgetOpacity = 0.9 };
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(liveSettings, SettingsJsonContext.Default.AppSettings));
+        const string futureLayout =
+            "{\"schemaVersion\":99,\"futureField\":42," +
+            "\"layout\":{\"widgets\":[{\"id\":\"w1\",\"widgetKind\":\"Todo\"}]}}";
+        await File.WriteAllTextAsync(layoutPath, futureLayout);
+        string originalSettings = await File.ReadAllTextAsync(settingsPath);
+
+        var source = new AppSettings { WidgetOpacity = 0.42 };
+        source.Widgets.Add(
+            new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo, ViewMode = ViewMode.List });
+        byte[] doc = WidgetStyleBackupProjection.Serialize(source);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath));
+
+        Assert.Equal(originalSettings, await File.ReadAllTextAsync(settingsPath));
+        Assert.Equal(futureLayout, await File.ReadAllTextAsync(layoutPath));
+        Assert.Empty(Directory.GetFiles(_tempRoot, "*.style-restore.*"));
+    }
+
+    [Fact]
     public async Task Projection_Apply_LayoutCommitFailure_RollsSettingsBack()
     {
         // The two live files commit independently; when the layout commit
@@ -982,6 +1016,56 @@ public sealed class CloudBackupScopedTests : IDisposable
         TodoWidgetData orphan = await new TodoWidgetStore(
             Path.Combine(dataDir, "widgets"), "source-widget").LoadAsync();
         Assert.Equal("cloud task", Assert.Single(orphan.Items).Text);
+    }
+
+    [Fact]
+    public async Task ScopedRestore_RemapsOrphanedTodo_WhenOnlyLayoutFileSurvives()
+    {
+        // settings.json is gone (lost/quarantined) but widget-layout.json
+        // survived with a live todo widget — the device store is the first
+        // authority, so the orphan must still remap onto it instead of
+        // reporting no live widgets.
+        string dataDir = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
+        var slice = new WidgetLayoutSettingsSlice
+        {
+            Widgets = [new WidgetConfig { Id = "target-widget", WidgetKind = WidgetKind.Todo }]
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "widget-layout.json"),
+            JsonSerializer.Serialize(
+                new WidgetLayoutDocument { Layout = slice },
+                WidgetLayoutJsonContext.Default.WidgetLayoutDocument));
+        Assert.False(File.Exists(Path.Combine(dataDir, "settings.json")));
+        var liveTodo = new TodoWidgetStore(Path.Combine(dataDir, "widgets"), "target-widget");
+        await liveTodo.SaveAsync(new TodoWidgetData
+        {
+            Items = [new TodoItem { Id = "old", Text = "local task" }]
+        });
+
+        string sourceRoot = Path.Combine(_tempRoot, "source-app-data");
+        string sourceData = Directory.CreateDirectory(Path.Combine(sourceRoot, "data")).FullName;
+        var sourceTodo = new TodoWidgetStore(Path.Combine(sourceData, "widgets"), "source-widget");
+        await sourceTodo.SaveAsync(new TodoWidgetData
+        {
+            Items = [new TodoItem { Id = "new", Text = "cloud task" }]
+        });
+        string backupPath = await new DeskBoxDataBackupService(sourceRoot)
+            .ExportScopedBackupAsync(_exportRoot, CloudBackupDomain.TodoData);
+
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+        DeskBoxRestorePreparation prep = await service.PrepareScopedRestoreAsync(
+            backupPath, CloudBackupDomain.TodoData);
+
+        DeskBoxTodoWidgetRemap remap = Assert.Single(prep.TodoWidgetRemaps!);
+        Assert.Equal("source-widget", remap.SourceWidgetId);
+        Assert.Equal("target-widget", remap.TargetWidgetId);
+        Assert.Empty(prep.UnmappedTodoWidgetIds!);
+
+        DeskBoxRestoreApplyResult result = await service.ApplyPendingRestoreAsync();
+        Assert.True(result.Succeeded, result.ErrorMessage);
+        TodoWidgetData restored = await new TodoWidgetStore(
+            Path.Combine(dataDir, "widgets"), "target-widget").LoadAsync();
+        Assert.Equal("cloud task", Assert.Single(restored.Items).Text);
     }
 
     [Fact]

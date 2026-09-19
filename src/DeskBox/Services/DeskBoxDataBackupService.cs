@@ -864,34 +864,36 @@ public sealed partial class DeskBoxDataBackupService
     }
 
     /// <summary>
-    /// Live todo-widget ids from the data dir's settings.json. A wiped
-    /// device (the disaster-recovery case) has no settings yet — the empty
-    /// set just leaves every orphan unmapped, which is the honest answer.
+    /// Live todo-widget ids from the data dir. widget-layout.json is the
+    /// first authority once it exists — it survives a settings.json loss
+    /// independently, and the widgets array may already live there while
+    /// settings is gone. settings.json is only the pre-adoption fallback; a
+    /// wiped device (the disaster-recovery case) has neither file, and the
+    /// empty set just leaves every orphan unmapped, which is the honest
+    /// answer.
     /// </summary>
     private async Task<HashSet<string>> ReadLiveTodoWidgetIdsAsync(CancellationToken cancellationToken)
     {
         var ids = new HashSet<string>(StringComparer.Ordinal);
+        string layoutPath = Path.Combine(DataDirectory, "widget-layout.json");
         string settingsPath = Path.Combine(DataDirectory, "settings.json");
-        if (!File.Exists(settingsPath))
-        {
-            return ids;
-        }
 
         try
         {
-            // The widgets array lives in widget-layout.json once the device
-            // store exists; before adoption it is still a settings.json key.
-            JsonArray? widgets = null;
-            string layoutPath = Path.Combine(DataDirectory, "widget-layout.json");
+            JsonArray? widgets;
             if (File.Exists(layoutPath))
             {
                 byte[] layoutJson = await File.ReadAllBytesAsync(layoutPath, cancellationToken);
                 widgets = JsonNode.Parse(layoutJson)?["layout"]?["widgets"] as JsonArray;
             }
-            else
+            else if (File.Exists(settingsPath))
             {
                 byte[] json = await File.ReadAllBytesAsync(settingsPath, cancellationToken);
                 widgets = JsonNode.Parse(json)?["widgets"] as JsonArray;
+            }
+            else
+            {
+                return ids;
             }
 
             if (widgets is null)
@@ -973,7 +975,9 @@ public sealed partial class DeskBoxDataBackupService
                 string preRestorePath = GetAvailableArchivePath(
                     PreRestoreBackupDirectory,
                     $"DeskBox-PreRestore-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
-                await CreateArchiveCoreAsync(preRestorePath, "pre-restore", cancellationToken);
+                await CreateArchiveCoreAsync(
+                    preRestorePath, "pre-restore", cancellationToken,
+                    requireSettings: false);
                 PrunePreRestoreBackups();
                 App.Log($"[DataBackup] Created pre-restore backup '{preRestorePath}'.");
             }
@@ -1054,7 +1058,9 @@ public sealed partial class DeskBoxDataBackupService
                 string preRestorePath = GetAvailableArchivePath(
                     PreRestoreBackupDirectory,
                     $"DeskBox-PreRestore-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
-                await CreateArchiveCoreAsync(preRestorePath, "pre-restore", cancellationToken);
+                await CreateArchiveCoreAsync(
+                    preRestorePath, "pre-restore", cancellationToken,
+                    requireSettings: false);
                 PrunePreRestoreBackups();
                 App.Log($"[DataBackup] Created pre-restore backup '{preRestorePath}'.");
             }
@@ -1328,7 +1334,7 @@ public sealed partial class DeskBoxDataBackupService
         return new RestoreArchiveInfo(manifest, fileCount, totalUncompressedBytes);
     }
 
-    private static void ValidateRestoreData(string dataDirectory)
+    private static void ValidateRestoreData(string dataDirectory, bool requireSettings = true)
     {
         if (!Directory.Exists(dataDirectory) ||
             !Directory.EnumerateFiles(dataDirectory, "*", SearchOption.AllDirectories).Any())
@@ -1337,7 +1343,7 @@ public sealed partial class DeskBoxDataBackupService
         }
 
         string settingsPath = Path.Combine(dataDirectory, "settings.json");
-        if (!File.Exists(settingsPath))
+        if (requireSettings && !File.Exists(settingsPath))
         {
             throw new InvalidDataException("The backup is missing settings.json.");
         }
@@ -1744,7 +1750,8 @@ public sealed partial class DeskBoxDataBackupService
     private async Task CreateArchiveCoreAsync(
         string archivePath,
         string backupKind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireSettings = true)
     {
         string snapshotRoot = Path.Combine(
             BackupSnapshotStagingDirectory,
@@ -1752,8 +1759,9 @@ public sealed partial class DeskBoxDataBackupService
         string snapshotDataDirectory = Path.Combine(snapshotRoot, "data");
         try
         {
-            await CreateDataSnapshotAsync(snapshotDataDirectory, cancellationToken);
-            ValidateRestoreData(snapshotDataDirectory);
+            await CreateDataSnapshotAsync(
+                snapshotDataDirectory, cancellationToken, requireSettings);
+            ValidateRestoreData(snapshotDataDirectory, requireSettings);
             await CreateArchiveFromSnapshotAsync(
                 archivePath,
                 backupKind,
@@ -1936,10 +1944,14 @@ public sealed partial class DeskBoxDataBackupService
 
     private async Task CreateDataSnapshotAsync(
         string snapshotDataDirectory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireSettings = true)
     {
         string settingsPath = Path.Combine(DataDirectory, "settings.json");
-        if (!File.Exists(settingsPath))
+        // The pre-restore safety net must not require settings.json: a device
+        // whose settings were lost or quarantined still has widget stores
+        // worth preserving before a restore overwrites them.
+        if (requireSettings && !File.Exists(settingsPath))
         {
             throw new InvalidOperationException("DeskBox settings are not available for backup.");
         }
@@ -1964,6 +1976,13 @@ public sealed partial class DeskBoxDataBackupService
         // the backup would hold settings@T1 with history@T0 and no WAL to
         // converge them. Hold the gate only for these few small files; the
         // rest still copies one by one from the pre-enumerated list.
+        //
+        // settings.json and widget-layout.json additionally commit under the
+        // settings write gate — a plain settings save does not take
+        // OperationGate, so without it the snapshot could tear mid-save into
+        // a pair that never existed on disk (settings@S0 with layout@S1).
+        // Lock order is OperationGate-then-write-gate everywhere, matching
+        // DesktopOrganizationTransaction's own save path.
         string[] fileSafetyMetadata =
         [
             "settings.json",
@@ -1975,14 +1994,23 @@ public sealed partial class DeskBoxDataBackupService
         await DesktopOrganizationTransaction.OperationGate.WaitAsync(cancellationToken);
         try
         {
-            foreach (string relativePath in fileSafetyMetadata)
+            SemaphoreSlim settingsWriteLock = SettingsService.FileWriteLockFor(DataDirectory);
+            await settingsWriteLock.WaitAsync(cancellationToken);
+            try
             {
-                string sourcePath = Path.Combine(DataDirectory, relativePath);
-                if (!File.Exists(sourcePath)) continue;
-                await CopyStableSnapshotFileAsync(
-                    sourcePath,
-                    Path.Combine(snapshotDataDirectory, relativePath),
-                    cancellationToken);
+                foreach (string relativePath in fileSafetyMetadata)
+                {
+                    string sourcePath = Path.Combine(DataDirectory, relativePath);
+                    if (!File.Exists(sourcePath)) continue;
+                    await CopyStableSnapshotFileAsync(
+                        sourcePath,
+                        Path.Combine(snapshotDataDirectory, relativePath),
+                        cancellationToken);
+                }
+            }
+            finally
+            {
+                settingsWriteLock.Release();
             }
         }
         finally
@@ -2323,7 +2351,12 @@ public sealed partial class DeskBoxDataBackupService
         // regenerates its .bak on the next save anyway. The artifact check
         // is scoped to the ResilientJsonStore naming convention itself
         // ("<store>.json.bak" / "<store>.json.corrupt-*").
+        // The style-restore journal is in-flight transaction state, not user
+        // data: carrying pending/committed/orig files into a backup would
+        // land a half-applied restore on the target machine and let a stale
+        // journal fire the first time a style restore runs there.
         if (relativePath.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+            relativePath.Contains(".style-restore.", StringComparison.OrdinalIgnoreCase) ||
             IsInternalStoreRecoveryArtifact(relativePath))
         {
             return false;
