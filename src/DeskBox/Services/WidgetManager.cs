@@ -51,11 +51,53 @@ public sealed record ManagedStorageRollbackFailure(
     bool PreserveExisting,
     string Reason);
 
+/// <summary>
+/// One entry the user chose to skip (or that stayed behind) during a storage
+/// migration. The file still exists at <see cref="SourcePath"/>; the widget's
+/// destination folder simply never received it.
+/// </summary>
+public sealed record ManagedStorageSkippedItem(
+    string WidgetId,
+    string WidgetName,
+    string SourcePath,
+    string DestinationPath,
+    FileService.FileTransferItemErrorKind ErrorKind,
+    string Detail);
+
+/// <summary>
+/// Progress of a managed storage migration across all affected widgets.
+/// Item counters are cumulative across widget folders.
+/// </summary>
+public sealed record ManagedStorageMigrationProgress(
+    FileService.FileTransferPhase Phase,
+    int CompletedWidgets,
+    int TotalWidgets,
+    string? CurrentWidgetName,
+    string? CurrentItemName,
+    int CompletedItems,
+    int TotalItems,
+    long BytesTransferred,
+    double? BytesPerSecond,
+    TimeSpan? EstimatedRemaining);
+
+/// <summary>
+/// Optional interactive controls for a storage migration: progress reports,
+/// cancellation, and a per-item retry/skip/abort decision callback. The
+/// callback runs on a background thread; UI callers must marshal through the
+/// dispatcher before touching XAML.
+/// </summary>
+public sealed record ManagedStorageMigrationOptions(
+    IProgress<ManagedStorageMigrationProgress>? Progress = null,
+    CancellationToken CancellationToken = default,
+    Func<FileService.FileTransferItemError, Task<FileService.FileTransferItemAction>>? OnItemError = null);
+
 public sealed record ManagedStorageMigrationResult(
     int AffectedWidgetCount,
     string OldRootPath,
     string NewRootPath,
-    IReadOnlyList<ManagedStorageMigrationResidue> Residues);
+    IReadOnlyList<ManagedStorageMigrationResidue> Residues,
+    int MovedItemCount,
+    IReadOnlyList<ManagedStorageSkippedItem> SkippedItems);
 
 /// <summary>
 /// The migration destination already holds non-empty widget folders, usually

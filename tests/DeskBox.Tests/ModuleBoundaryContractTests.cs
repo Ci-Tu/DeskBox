@@ -79,8 +79,8 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Services/DirectStartupTaskBackend.cs"] = 2,
         ["src/DeskBox/Services/FeedbackService.cs"] = 1,
         ["src/DeskBox/Services/FileService.CaseOnlyRename.cs"] = 2,
-        ["src/DeskBox/Services/FileService.TransferProgress.cs"] = 2,
-        ["src/DeskBox/Services/FileService.cs"] = 8,
+        ["src/DeskBox/Services/FileService.TransferProgress.cs"] = 3,
+        ["src/DeskBox/Services/FileService.cs"] = 9,
         ["src/DeskBox/Services/GlanceImageService.cs"] = 3,
         ["src/DeskBox/Services/GlanceWidgetStore.cs"] = 1,
         ["src/DeskBox/Services/LegacySearchIndexCleanupService.cs"] = 1,
@@ -95,7 +95,7 @@ public sealed class ModuleBoundaryContractTests
         // +1: orphan managed-storage restore deletes the emptied source
         // folder after moving its contents back to the desktop (#112
         // migration rollback work in progress).
-        ["src/DeskBox/Services/WidgetManager.Storage.cs"] = 4,
+        ["src/DeskBox/Services/WidgetManager.Storage.cs"] = 5,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.DetailAndAttachments.cs"] = 1,
         ["src/DeskBox/Views/ContentWidgetWindow.NativeDragDrop.cs"] = 1,
         ["src/DeskBox/Views/SearchPopupWindow.xaml.cs"] = 2,
