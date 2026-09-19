@@ -31,7 +31,10 @@ internal sealed class WidgetLayoutDocument
 {
     public int SchemaVersion { get; set; } = WidgetLayoutStore.CurrentSchemaVersion;
 
-    public WidgetLayoutSettingsSlice Layout { get; set; } = new();
+    // required, not defaulted: a document without a `layout` key must fail
+    // deserialization and take the quarantine path, never pass as a valid
+    // empty layout that would strip the surviving settings keys.
+    public required WidgetLayoutSettingsSlice Layout { get; set; }
 }
 
 /// <summary>
@@ -126,11 +129,23 @@ public sealed class WidgetLayoutStore
         ResilientJsonLoadResult<WidgetLayoutDocument> result =
             await ResilientJsonStore.LoadWithResultAsync(
                 _layoutPath,
-                static json => JsonSerializer.Deserialize(
-                    json,
-                    WidgetLayoutJsonContext.Default.WidgetLayoutDocument)
-                    ?? new WidgetLayoutDocument(),
-                static () => new WidgetLayoutDocument(),
+                static json =>
+                {
+                    // Fail closed on "parses but is not a layout document":
+                    // `null`, `{}` or `{"layout":null}` must not be adopted
+                    // as an authoritative empty layout — that would empty
+                    // the desktop and strip the surviving settings keys on
+                    // the next save. Throwing routes the file through the
+                    // same quarantine/backup path as torn JSON.
+                    WidgetLayoutDocument? document = JsonSerializer.Deserialize(
+                        json,
+                        WidgetLayoutJsonContext.Default.WidgetLayoutDocument);
+                    return document?.Layout is { } layout
+                        ? document
+                        : throw new InvalidDataException(
+                            "widget-layout.json is structurally empty.");
+                },
+                static () => new WidgetLayoutDocument { Layout = new WidgetLayoutSettingsSlice() },
                 "WidgetLayout");
 
         if (result.Source is ResilientJsonLoadSource.Primary or ResilientJsonLoadSource.Backup)

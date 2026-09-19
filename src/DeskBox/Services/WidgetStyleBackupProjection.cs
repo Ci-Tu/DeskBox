@@ -196,20 +196,13 @@ internal static class WidgetStyleBackupProjection
             return new ApplyResult(false, 0, 0, "settings.json does not exist");
         }
 
-        JsonObject settingsDom;
-        await using (var input = new FileStream(
-                         settingsPath,
-                         FileMode.Open,
-                         FileAccess.Read,
-                         FileShare.Read,
-                         bufferSize: 81920,
-                         useAsync: true))
-        {
-            settingsDom = (await JsonNode.ParseAsync(
-                    input,
-                    cancellationToken: cancellationToken))?.AsObject()
-                ?? throw new InvalidDataException("settings.json is empty.");
-        }
+        // Keep the original bytes: the settings and layout commits below are
+        // two independent stores and cannot be atomic, so a layout-commit
+        // failure rolls the settings file back to exactly this content.
+        string originalSettingsJson = await File.ReadAllTextAsync(
+            settingsPath, cancellationToken);
+        JsonObject settingsDom = JsonNode.Parse(originalSettingsJson)?.AsObject()
+            ?? throw new InvalidDataException("settings.json is empty.");
 
         int shellPatched = 0;
         if (document["shell"] is JsonObject shellDoc)
@@ -295,7 +288,29 @@ internal static class WidgetStyleBackupProjection
         if (widgetsInLayoutFile && layoutDom is not null)
         {
             string patchedLayout = layoutDom.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            await ResilientJsonStore.SaveAsync(layoutPath, patchedLayout);
+            try
+            {
+                await ResilientJsonStore.SaveAsync(layoutPath, patchedLayout);
+            }
+            catch
+            {
+                // The settings commit already landed; leaving it would apply
+                // half the restore (new shell style, old widget styles).
+                // Roll the settings file back to its pre-apply bytes —
+                // best-effort, the original failure still propagates.
+                try
+                {
+                    await ResilientJsonStore.SaveAsync(settingsPath, originalSettingsJson);
+                }
+                catch (Exception rollbackException)
+                {
+                    App.Log(
+                        $"[WidgetStyleRestore] Settings rollback after " +
+                        $"layout-commit failure also failed: {rollbackException}");
+                }
+
+                throw;
+            }
         }
         return new ApplyResult(true, shellPatched, widgetsPatched, null);
     }

@@ -214,6 +214,44 @@ public sealed class WidgetLayoutStoreTests : IDisposable
         Assert.NotEmpty(Directory.GetFiles(_tempRoot, "*.corrupt-*"));
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("""{"schemaVersion":1,"layout":null}""")]
+    public async Task LoadAsync_StructurallyEmptyFile_StaysPending_KeepsSeed(string content)
+    {
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(LayoutPath, content);
+
+        var store = new WidgetLayoutStore(LayoutPath);
+        WidgetLayoutLoadResult result = await store.LoadAsync(CreateSeed("rescued"));
+
+        // Same fail-closed contract as torn JSON: a parseable-but-empty
+        // document must never become an authoritative empty layout — the
+        // next save would strip the real keys out of settings.json too.
+        Assert.False(result.Authoritative);
+        Assert.False(store.IsAuthoritative);
+        Assert.Single(result.Data.Widgets);
+        Assert.NotEmpty(Directory.GetFiles(_tempRoot, "*.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task LoadAsync_StructurallyEmptyPrimary_RecoversFromBackup()
+    {
+        var store = new WidgetLayoutStore(LayoutPath);
+        await store.LoadAsync(CreateSeed("durable"));
+        Assert.True(await store.SaveCheckedAsync(WriterFor(CreateSeed("durable"))));
+
+        await File.WriteAllTextAsync(LayoutPath, "null");
+
+        var reloaded = new WidgetLayoutStore(LayoutPath);
+        WidgetLayoutLoadResult result = await reloaded.LoadAsync(CreateSeed("stale"));
+
+        Assert.True(result.Authoritative);
+        Assert.Equal("durable", Assert.Single(result.Data.Widgets).Id);
+        Assert.NotEmpty(Directory.GetFiles(_tempRoot, "*.corrupt-*"));
+    }
+
     [Fact]
     public async Task LoadAsync_NullCollections_FlaggedForPersist()
     {

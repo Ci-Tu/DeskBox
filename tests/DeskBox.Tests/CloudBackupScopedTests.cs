@@ -532,6 +532,48 @@ public sealed class CloudBackupScopedTests : IDisposable
     }
 
     [Fact]
+    public async Task Projection_Apply_LayoutCommitFailure_RollsSettingsBack()
+    {
+        // The two live files commit independently; when the layout commit
+        // fails after the settings commit landed, the settings file must be
+        // rolled back — a failed restore cannot leave shell keys on the new
+        // style while widget styles stayed on the old one.
+        string settingsPath = Path.Combine(_tempRoot, "settings.json");
+        string layoutPath = Path.Combine(_tempRoot, "widget-layout.json");
+
+        var liveSettings = new AppSettings { WidgetOpacity = 0.11 };
+        liveSettings.Widgets.Add(new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo });
+        string originalSettings = JsonSerializer.Serialize(
+            liveSettings, SettingsJsonContext.Default.AppSettings);
+        await File.WriteAllTextAsync(settingsPath, originalSettings);
+
+        var slice = new WidgetLayoutSettingsSlice
+        {
+            Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+        };
+        await File.WriteAllTextAsync(
+            layoutPath,
+            JsonSerializer.Serialize(
+                new WidgetLayoutDocument { Layout = slice },
+                WidgetLayoutJsonContext.Default.WidgetLayoutDocument));
+
+        var source = new AppSettings { WidgetOpacity = 0.42 };
+        source.Widgets.Add(
+            new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo, ViewMode = ViewMode.List });
+        byte[] doc = WidgetStyleBackupProjection.Serialize(source);
+
+        // Read-share the layout file: reads still work (the DOM load needs
+        // them) but the replace-commit onto it is denied.
+        await using var lockStream = new FileStream(
+            layoutPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath));
+
+        Assert.Equal(originalSettings, await File.ReadAllTextAsync(settingsPath));
+    }
+
+    [Fact]
     public async Task CredentialStore_Fake_RoundTrips()
     {
         var store = new InMemoryCredentialStore();
