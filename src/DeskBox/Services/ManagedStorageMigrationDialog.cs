@@ -46,6 +46,7 @@ internal sealed class ManagedStorageMigrationDialog
     private FileService.FileTransferItemAction? _stickyItemAction;
     private bool _cancelRequested;
     private IReadOnlyList<ManagedStorageSkippedItem> _remainingSkipped = [];
+    private ManagedStorageRollbackFailureException? _pendingRollbackFailure;
     private bool _resultShown;
 
     private ManagedStorageMigrationDialog(
@@ -294,6 +295,13 @@ internal sealed class ManagedStorageMigrationDialog
         _remainingSkipped = result?.SkippedItems ?? [];
         ShowResultView(result, failure);
         await dialogTask;
+        if (_pendingRollbackFailure is { } pendingRollbackFailure)
+        {
+            // A skipped-item retry stranded files across both roots; hand
+            // the receipts to the caller's rollback-failure dialog.
+            throw pendingRollbackFailure;
+        }
+
         return result;
     }
 
@@ -596,6 +604,16 @@ internal sealed class ManagedStorageMigrationDialog
         try
         {
             remaining = await _retrySkippedAsync(_remainingSkipped, BuildOptions());
+        }
+        catch (ManagedStorageRollbackFailureException ex)
+        {
+            // Files are stranded across both roots. Close this dialog so the
+            // caller can show the dedicated rollback-retry dialog — same
+            // hand-off as a failed migration (RunInternalAsync rethrows).
+            App.Log($"[ManagedStorageMigration] Skipped-item retry left stranded files: {ex}");
+            _pendingRollbackFailure = ex;
+            HideDialogSafe();
+            return;
         }
         catch (Exception ex)
         {

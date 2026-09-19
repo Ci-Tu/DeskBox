@@ -386,6 +386,192 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateDefaultManagedStorageRootAsync_ReportsStrandedItemsWhenPartialRestoreFails()
+    {
+        var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widget.MappedFolderPath!).FullName;
+        string movedFile = Path.Combine(folderA, "a.txt");
+        File.WriteAllText(movedFile, "a");
+        File.WriteAllText(Path.Combine(folderA, "locked.txt"), "locked");
+        _settingsService.Settings.Widgets.Add(widget);
+
+        string destinationFolder = Path.Combine(_newStorageRoot, "A");
+        string strandedFile = Path.Combine(destinationFolder, "a.txt");
+        // Pinning the moved file makes the restore-back fail the way a
+        // sharing violation does. The widget never reached completedMoves,
+        // so without a receipt the stranded file would be lost to every
+        // recovery channel.
+        FileStream? lockStream = null;
+        _widgetManager.RelocateDirectoryForMigrationOverride = (source, destination) =>
+        {
+            Directory.CreateDirectory(destination);
+            File.Move(movedFile, strandedFile);
+            lockStream = new FileStream(
+                strandedFile,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.None);
+            throw new FileService.FileTransferPartialFailureException(
+                [new FileService.FileTransferResult(movedFile, strandedFile)],
+                new IOException("simulated sharing violation"));
+        };
+
+        ManagedStorageRollbackFailureException failure;
+        try
+        {
+            failure = await Assert.ThrowsAsync<ManagedStorageRollbackFailureException>(
+                () => _widgetManager.UpdateDefaultManagedStorageRootAsync(_newStorageRoot));
+        }
+        finally
+        {
+            lockStream?.Dispose();
+        }
+
+        ManagedStorageRollbackFailure receipt = Assert.Single(failure.Failures);
+        Assert.Equal(widget.Id, receipt.WidgetId);
+        Assert.Equal("A", receipt.WidgetName);
+        Assert.Equal(destinationFolder, receipt.DestinationFolder, ignoreCase: true);
+        Assert.Equal(folderA, receipt.SourceFolder, ignoreCase: true);
+        Assert.True(receipt.PreserveExisting);
+        Assert.IsType<FileService.FileTransferPartialFailureException>(failure.OriginalFailure);
+        Assert.Equal(
+            _storageRoot,
+            _settingsService.Settings.DefaultManagedStorageRootPath,
+            ignoreCase: true);
+        Assert.Equal(folderA, widget.MappedFolderPath, ignoreCase: true);
+        Assert.True(File.Exists(strandedFile),
+            "The stranded file stays at the destination until a retry returns it.");
+        Assert.True(File.Exists(Path.Combine(folderA, "locked.txt")));
+
+        IReadOnlyList<ManagedStorageRollbackFailure> remaining =
+            await _widgetManager.RetryMigrationRollbackAsync(failure.Failures);
+
+        Assert.Empty(remaining);
+        Assert.True(File.Exists(movedFile),
+            "The rollback retry must return the stranded file to its source.");
+        Assert.False(File.Exists(strandedFile));
+    }
+
+    [Fact]
+    public async Task RetrySkippedMigrationItemsAsync_CancelUndoesMovedItems()
+    {
+        var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widget.MappedFolderPath!).FullName;
+        string fileA = Path.Combine(folderA, "a.txt");
+        string fileB = Path.Combine(folderA, "b.txt");
+        File.WriteAllText(fileA, "a");
+        File.WriteAllText(fileB, "b");
+        _settingsService.Settings.Widgets.Add(widget);
+
+        string destinationFolder = Path.Combine(_newStorageRoot, "A");
+        string movedFileA = Path.Combine(destinationFolder, "a.txt");
+        var skipped = new List<ManagedStorageSkippedItem>
+        {
+            new(widget.Id, widget.Name, fileA, movedFileA,
+                FileService.FileTransferItemErrorKind.InUse, "skipped earlier"),
+            new(widget.Id, widget.Name, fileB,
+                Path.Combine(destinationFolder, "b.txt"),
+                FileService.FileTransferItemErrorKind.InUse, "skipped earlier"),
+        };
+
+        // A cancel mid-retry must behave like a cancelled migration: the
+        // item that already moved goes back, so the skipped list stays
+        // truthful and no file is stranded without a receipt.
+        _widgetManager.RelocateDirectoryForMigrationOverrideEx =
+            (source, destination, progress, cancellationToken, onItemError) =>
+            {
+                Directory.CreateDirectory(destination);
+                File.Move(fileA, movedFileA);
+                throw new FileService.FileTransferCanceledException(
+                    [new FileService.FileTransferResult(fileA, movedFileA)],
+                    cancellationToken);
+            };
+
+        try
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => _widgetManager.RetrySkippedMigrationItemsAsync(skipped));
+        }
+        finally
+        {
+            _widgetManager.RelocateDirectoryForMigrationOverrideEx = null;
+        }
+
+        Assert.True(File.Exists(fileA),
+            "The item moved before the cancel must be returned to the source.");
+        Assert.False(File.Exists(movedFileA),
+            "No half-retried item may remain at the destination.");
+        Assert.False(Directory.Exists(destinationFolder),
+            "The emptied destination shell goes with the undo.");
+        Assert.True(File.Exists(fileB));
+        Assert.Equal(folderA, widget.MappedFolderPath, ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task RetrySkippedMigrationItemsAsync_ReportsStrandedItemsWhenUndoFails()
+    {
+        var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widget.MappedFolderPath!).FullName;
+        string fileA = Path.Combine(folderA, "a.txt");
+        File.WriteAllText(fileA, "a");
+        _settingsService.Settings.Widgets.Add(widget);
+
+        string destinationFolder = Path.Combine(_newStorageRoot, "A");
+        string movedFileA = Path.Combine(destinationFolder, "a.txt");
+        var skipped = new List<ManagedStorageSkippedItem>
+        {
+            new(widget.Id, widget.Name, fileA, movedFileA,
+                FileService.FileTransferItemErrorKind.InUse, "skipped earlier"),
+        };
+
+        // The undo itself is blocked by a sharing violation: the stranded
+        // item must surface as a rollback-failure receipt instead of a bare
+        // cancel whose only copy of the receipt dies with the dialog.
+        FileStream? lockStream = null;
+        _widgetManager.RelocateDirectoryForMigrationOverrideEx =
+            (source, destination, progress, cancellationToken, onItemError) =>
+            {
+                Directory.CreateDirectory(destination);
+                File.Move(fileA, movedFileA);
+                lockStream = new FileStream(
+                    movedFileA,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.None);
+                throw new FileService.FileTransferCanceledException(
+                    [new FileService.FileTransferResult(fileA, movedFileA)],
+                    cancellationToken);
+            };
+
+        ManagedStorageRollbackFailureException failure;
+        try
+        {
+            failure = await Assert.ThrowsAsync<ManagedStorageRollbackFailureException>(
+                () => _widgetManager.RetrySkippedMigrationItemsAsync(skipped));
+        }
+        finally
+        {
+            lockStream?.Dispose();
+            _widgetManager.RelocateDirectoryForMigrationOverrideEx = null;
+        }
+
+        ManagedStorageRollbackFailure receipt = Assert.Single(failure.Failures);
+        Assert.Equal(widget.Id, receipt.WidgetId);
+        Assert.Equal(destinationFolder, receipt.DestinationFolder, ignoreCase: true);
+        Assert.Equal(folderA, receipt.SourceFolder, ignoreCase: true);
+        Assert.True(File.Exists(movedFileA));
+        Assert.Equal(folderA, widget.MappedFolderPath, ignoreCase: true);
+
+        IReadOnlyList<ManagedStorageRollbackFailure> remaining =
+            await _widgetManager.RetryMigrationRollbackAsync(failure.Failures);
+
+        Assert.Empty(remaining);
+        Assert.True(File.Exists(fileA),
+            "Once unblocked, the rollback retry must return the file.");
+        Assert.False(File.Exists(movedFileA));
+    }
+
+    [Fact]
     public async Task UpdateDefaultManagedStorageRootAsync_RejectsNonEmptyDestinationFolders()
     {
         var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
