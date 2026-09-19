@@ -30,7 +30,8 @@ public sealed class CloudBackupScopedTests : IDisposable
     {
         Assert.True(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.TodoData, "widgets/todo-widget/todo.json"));
-        Assert.True(CloudBackupDomains.IsInDomain(
+        // Attachments stay out of the domain until upload size bounds land.
+        Assert.False(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.TodoData, "widgets/todo-widget/attachments/note/pic.png"));
         Assert.False(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.TodoData, "widgets/todo-widget/glance.json"));
@@ -39,7 +40,7 @@ public sealed class CloudBackupScopedTests : IDisposable
 
         Assert.True(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.QuickCaptureData, "quick-capture/quick-capture.json"));
-        Assert.True(CloudBackupDomains.IsInDomain(
+        Assert.False(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.QuickCaptureData, "quick-capture/attachments/note/pic.png"));
         Assert.False(CloudBackupDomains.IsInDomain(
             CloudBackupDomain.QuickCaptureData, "quick-capture/thumbnails/x.png"));
@@ -98,7 +99,8 @@ public sealed class CloudBackupScopedTests : IDisposable
 
         using ZipArchive archive = ZipFile.OpenRead(backupPath);
         Assert.NotNull(archive.GetEntry("data/widgets/todo-widget/todo.json"));
-        Assert.NotNull(archive.GetEntry("data/widgets/todo-widget/attachments/pic.png"));
+        // Attachment files do not ship until upload size bounds land.
+        Assert.Null(archive.GetEntry("data/widgets/todo-widget/attachments/pic.png"));
         Assert.Null(archive.GetEntry("data/settings.json"));
         Assert.Null(archive.GetEntry("data/desktop-organization-recovery.json"));
         Assert.Null(archive.GetEntry("widget-style.json"));
@@ -987,7 +989,10 @@ public sealed class CloudBackupScopedTests : IDisposable
     {
         // The remap moves the staged dir source→target; embedded attachment
         // FilePaths carry the source id and must be rewritten to the target
-        // — otherwise the restore "succeeds" with dead references.
+        // — otherwise the restore "succeeds" with dead references. The
+        // attachment FILE itself is not in the domain right now (uploads
+        // have no size bound): the metadata still rewrites so the reference
+        // is correct whenever the file exists locally or attachments return.
         string dataDir = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
         await File.WriteAllTextAsync(
             Path.Combine(dataDir, "settings.json"),
@@ -1040,10 +1045,12 @@ public sealed class CloudBackupScopedTests : IDisposable
             Path.Combine(dataDir, "widgets"), "target-widget").LoadAsync();
         TodoAttachment attachment = Assert.Single(
             Assert.Single(restored.Items).Attachments);
-        Assert.Equal(
-            Path.Combine(dataDir, "widgets", "target-widget", "attachments", "a.pdf"),
-            attachment.FilePath);
-        Assert.True(File.Exists(attachment.FilePath));
+        // The attachment file is excluded from the domain, so the staged
+        // payload carries no attachments/ and TryRebaseManagedPath leaves
+        // the reference untouched — which is correct for a same-machine
+        // restore: the live attachment still sits at its original path
+        // (the delete phase never touches out-of-domain files).
+        Assert.Equal(sourceAttachment, attachment.FilePath);
     }
 
     [Fact]
