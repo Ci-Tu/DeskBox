@@ -52,7 +52,10 @@ public sealed class SyncDomainState
 /// </summary>
 public sealed class SyncStateStore
 {
+    private const int CurrentSchemaVersion = 1;
+
     private readonly string _statePath;
+    private int _loadedSchemaVersion = CurrentSchemaVersion;
 
     public SyncStateStore(string? statePath = null)
     {
@@ -65,17 +68,45 @@ public sealed class SyncStateStore
     public Task<SyncStateDocument> LoadAsync() =>
         ResilientJsonStore.LoadAsync(
             _statePath,
-            static json => JsonSerializer.Deserialize(
-                json, SyncStateJsonContext.Default.SyncStateDocument)
-                ?? new SyncStateDocument(),
+            json =>
+            {
+                // Fail closed on "parses but is not a document": `null` or a
+                // record missing its required collections is corrupt state,
+                // not an empty store — throwing routes the file through
+                // quarantine and .bak recovery instead of silently starting
+                // over with account id, cursors and epoch all dropped.
+                SyncStateDocument? document = JsonSerializer.Deserialize(
+                    json, SyncStateJsonContext.Default.SyncStateDocument);
+                if (document is null || document.Domains is null)
+                {
+                    throw new InvalidDataException(
+                        "sync state.json is structurally empty.");
+                }
+
+                _loadedSchemaVersion = document.SchemaVersion;
+                return document;
+            },
             static () => new SyncStateDocument(),
             "SyncState");
 
-    public Task SaveAsync(SyncStateDocument document) =>
-        ResilientJsonStore.SaveAsync(
+    public Task SaveAsync(SyncStateDocument document)
+    {
+        // Same read-only stance as WidgetLayoutStore.CanWrite: a file stamped
+        // by a newer build is pristine to this one — overwriting it would
+        // drop fields the newer schema introduced.
+        if (_loadedSchemaVersion > CurrentSchemaVersion)
+        {
+            throw new InvalidDataException(
+                $"sync state.json schema {_loadedSchemaVersion} is newer than " +
+                $"this build understands ({CurrentSchemaVersion}); " +
+                "refusing to overwrite it.");
+        }
+
+        return ResilientJsonStore.SaveAsync(
             _statePath,
             JsonSerializer.SerializeToUtf8Bytes(
                 document, SyncStateJsonContext.Default.SyncStateDocument));
+    }
 
     /// <inheritdoc cref="WidgetLayoutStore.SaveCheckedAsync"/>
     public async Task<bool> SaveCheckedAsync(SyncStateDocument document)

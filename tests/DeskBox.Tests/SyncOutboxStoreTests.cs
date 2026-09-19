@@ -206,4 +206,107 @@ public sealed class SyncOutboxStoreTests : IDisposable
         SyncRevisionsDocument loaded = await new SyncRevisionsStore(RevisionsPath).LoadAsync();
         Assert.Empty(loaded.Entities);
     }
+
+    // ── Structural validation: "valid JSON, invalid document" ─────────
+
+    [Fact]
+    public async Task List_QuarantinesJsonNullEntry()
+    {
+        // `null` parses cleanly — but it is not an envelope, and silently
+        // skipping it would strand a pending push forever while its .bak
+        // may still hold the real operation. It must take the corruption
+        // path like torn JSON does.
+        var store = new SyncOutboxStore(OutboxDir);
+        await store.EnqueueAsync(Envelope(operation: "op-good"));
+        string badDir = Directory.CreateDirectory(
+            Path.Combine(OutboxDir, SyncDomains.TodoData)).FullName;
+        await File.WriteAllTextAsync(Path.Combine(badDir, "op-null.json"), "null");
+
+        IReadOnlyList<SyncEnvelope> pending = await store.ListAsync(SyncDomains.TodoData);
+
+        Assert.Single(pending);
+        Assert.Equal("op-good", pending[0].OperationId);
+        Assert.NotEmpty(Directory.GetFiles(badDir, "op-null.json.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task List_QuarantinesEnvelopeMissingIdentity()
+    {
+        var store = new SyncOutboxStore(OutboxDir);
+        string badDir = Directory.CreateDirectory(
+            Path.Combine(OutboxDir, SyncDomains.TodoData)).FullName;
+        await File.WriteAllTextAsync(
+            Path.Combine(badDir, "op-empty.json"),
+            "{\"domain\":\"todo-data\"}");
+
+        IReadOnlyList<SyncEnvelope> pending = await store.ListAsync(SyncDomains.TodoData);
+
+        Assert.Empty(pending);
+        Assert.NotEmpty(Directory.GetFiles(badDir, "op-empty.json.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task StateStore_JsonNull_QuarantinesAndDefaults()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(StatePath, "null");
+
+        SyncStateDocument loaded = await new SyncStateStore(StatePath).LoadAsync();
+
+        Assert.Null(loaded.AccountId);
+        Assert.Empty(loaded.Domains);
+        Assert.NotEmpty(Directory.GetFiles(_tempRoot, "state.json.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task StateStore_FutureSchema_LoadsReadOnly()
+    {
+        // A file stamped by a newer build stays readable but must never be
+        // overwritten — same stance as WidgetLayoutStore.CanWrite.
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(
+            StatePath,
+            "{\"schemaVersion\":99,\"accountId\":\"acct-x\",\"domains\":{}}");
+        var store = new SyncStateStore(StatePath);
+
+        SyncStateDocument loaded = await store.LoadAsync();
+        Assert.Equal("acct-x", loaded.AccountId);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(new SyncStateDocument()));
+        Assert.False(await store.SaveCheckedAsync(new SyncStateDocument()));
+        Assert.Equal(
+            "{\"schemaVersion\":99,\"accountId\":\"acct-x\",\"domains\":{}}",
+            await File.ReadAllTextAsync(StatePath));
+    }
+
+    [Fact]
+    public async Task RevisionsStore_JsonNull_QuarantinesAndDefaults()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(RevisionsPath, "null");
+
+        SyncRevisionsDocument loaded = await new SyncRevisionsStore(RevisionsPath).LoadAsync();
+
+        Assert.Empty(loaded.Entities);
+        Assert.NotEmpty(Directory.GetFiles(_tempRoot, "revisions.json.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task RevisionsStore_FutureSchema_LoadsReadOnly()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(
+            RevisionsPath,
+            "{\"schemaVersion\":99,\"entities\":{}}");
+        var store = new SyncRevisionsStore(RevisionsPath);
+
+        await store.LoadAsync();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            store.SaveAsync(new SyncRevisionsDocument()));
+        Assert.Equal(
+            "{\"schemaVersion\":99,\"entities\":{}}",
+            await File.ReadAllTextAsync(RevisionsPath));
+    }
 }

@@ -79,8 +79,25 @@ public sealed class SyncOutboxStore
             ResilientJsonLoadResult<SyncEnvelope> result =
                 await ResilientJsonStore.LoadWithResultAsync(
                     path,
-                    json => JsonSerializer.Deserialize(
-                        json, SyncJsonContext.Default.SyncEnvelope)!,
+                    static json =>
+                    {
+                        // Fail closed on "parses but is not an envelope":
+                        // `null`, `{}` or a record missing its identity must
+                        // take the quarantine/.bak path — silently skipping
+                        // it would strand a push intent forever while a
+                        // recoverable backup sits beside it.
+                        SyncEnvelope? envelope = JsonSerializer.Deserialize(
+                            json, SyncJsonContext.Default.SyncEnvelope);
+                        return envelope is { } e &&
+                               !string.IsNullOrWhiteSpace(e.OperationId) &&
+                               !string.IsNullOrWhiteSpace(e.CollectionId) &&
+                               !string.IsNullOrWhiteSpace(e.EntityId) &&
+                               !string.IsNullOrWhiteSpace(e.Domain) &&
+                               SyncDomains.IsKnownDomain(e.Domain)
+                            ? e
+                            : throw new InvalidDataException(
+                                "Sync outbox entry is not a valid envelope.");
+                    },
                     static () => null!,
                     "SyncOutbox");
             if ((result.Source is ResilientJsonLoadSource.Primary or
