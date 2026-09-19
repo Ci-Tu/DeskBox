@@ -97,6 +97,9 @@ public sealed class WidgetLayoutStore
     /// </summary>
     internal bool CanWrite => _loadedSchemaVersion <= CurrentSchemaVersion;
 
+    /// <summary>The schema version stamped on the loaded file, for diagnostics.</summary>
+    internal int LoadedSchemaVersion => _loadedSchemaVersion;
+
     /// <summary>
     /// settings.json wire names owned by this store — the facade keys that
     /// stop being written once the store is authoritative. Derived from the

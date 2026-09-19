@@ -571,6 +571,119 @@ public sealed class CloudBackupScopedTests : IDisposable
             WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath));
 
         Assert.Equal(originalSettings, await File.ReadAllTextAsync(settingsPath));
+
+        // The journal recovery also neutralizes settings.json.bak: the
+        // resilient commit rotated the half-applied bytes into it, and
+        // leaving them would resurrect the failed transaction the next
+        // time the primary corrupts and the loader falls back to .bak.
+        Assert.Equal(
+            originalSettings,
+            await File.ReadAllTextAsync(settingsPath + ".bak"));
+
+        // Journal artifacts are swept after recovery.
+        Assert.False(File.Exists(settingsPath + ".style-restore.pending"));
+        Assert.False(File.Exists(settingsPath + ".style-restore.committed"));
+        Assert.False(File.Exists(settingsPath + ".style-restore.orig"));
+        Assert.False(File.Exists(layoutPath + ".style-restore.orig"));
+    }
+
+    [Fact]
+    public async Task Projection_Apply_PendingJournal_HealsBeforeApply()
+    {
+        // Simulated crash between the two commits: the pending journal and
+        // its snapshots survive, the live settings file carries half-applied
+        // state. The next ApplyAsync must restore the originals first —
+        // before it snapshots its own rollback bytes.
+        string settingsPath = Path.Combine(_tempRoot, "settings.json");
+        string layoutPath = Path.Combine(_tempRoot, "widget-layout.json");
+
+        var originalSettings = new AppSettings { WidgetOpacity = 0.11 };
+        originalSettings.Widgets.Add(new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo });
+        string originalSettingsJson = JsonSerializer.Serialize(
+            originalSettings, SettingsJsonContext.Default.AppSettings);
+        string originalLayoutJson = JsonSerializer.Serialize(
+            new WidgetLayoutDocument
+            {
+                Layout = new WidgetLayoutSettingsSlice
+                {
+                    Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+                }
+            },
+            WidgetLayoutJsonContext.Default.WidgetLayoutDocument);
+
+        await File.WriteAllTextAsync(settingsPath + ".style-restore.orig", originalSettingsJson);
+        await File.WriteAllTextAsync(layoutPath + ".style-restore.orig", originalLayoutJson);
+        await File.WriteAllTextAsync(
+            settingsPath + ".style-restore.pending", "2026-01-01T00:00:00Z");
+
+        // The "crashed mid-transaction" live state: shell style already
+        // patched, layout still original.
+        var halfApplied = new AppSettings { WidgetOpacity = 0.42 };
+        halfApplied.Widgets.Add(new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo });
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(halfApplied, SettingsJsonContext.Default.AppSettings));
+        await File.WriteAllTextAsync(layoutPath, originalLayoutJson);
+
+        // A document with nothing to patch keeps the apply a pure
+        // observation of the recovery: live files must return to the
+        // journaled originals.
+        byte[] doc = System.Text.Encoding.UTF8.GetBytes(
+            """{"schemaVersion":1,"kind":"widget-style"}""");
+        WidgetStyleBackupProjection.ApplyResult result =
+            await WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath);
+
+        Assert.True(result.Applied);
+        JsonObject restored = JsonNode.Parse(
+            await File.ReadAllTextAsync(settingsPath))!.AsObject();
+        Assert.Equal(0.11, restored["widgetOpacity"]!.GetValue<double>());
+        Assert.False(File.Exists(settingsPath + ".style-restore.pending"));
+        Assert.False(File.Exists(settingsPath + ".style-restore.orig"));
+        Assert.False(File.Exists(layoutPath + ".style-restore.orig"));
+    }
+
+    [Fact]
+    public async Task Projection_Apply_CommittedJournal_IsSweptNotReverted()
+    {
+        // Crash AFTER both commits but before cleanup: the committed flag
+        // must keep recovery from reverting a finished transaction.
+        string settingsPath = Path.Combine(_tempRoot, "settings.json");
+        string layoutPath = Path.Combine(_tempRoot, "widget-layout.json");
+
+        var liveSettings = new AppSettings { WidgetOpacity = 0.42 };
+        liveSettings.Widgets.Add(new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo });
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(liveSettings, SettingsJsonContext.Default.AppSettings));
+        await File.WriteAllTextAsync(
+            layoutPath,
+            JsonSerializer.Serialize(
+                new WidgetLayoutDocument
+                {
+                    Layout = new WidgetLayoutSettingsSlice
+                    {
+                        Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+                    }
+                },
+                WidgetLayoutJsonContext.Default.WidgetLayoutDocument));
+
+        await File.WriteAllTextAsync(settingsPath + ".style-restore.orig", "{}");
+        await File.WriteAllTextAsync(layoutPath + ".style-restore.orig", "{}");
+        await File.WriteAllTextAsync(settingsPath + ".style-restore.pending", "x");
+        await File.WriteAllTextAsync(settingsPath + ".style-restore.committed", "1");
+
+        byte[] doc = System.Text.Encoding.UTF8.GetBytes(
+            """{"schemaVersion":1,"kind":"widget-style"}""");
+        WidgetStyleBackupProjection.ApplyResult result =
+            await WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath);
+
+        Assert.True(result.Applied);
+        JsonObject live = JsonNode.Parse(
+            await File.ReadAllTextAsync(settingsPath))!.AsObject();
+        Assert.Equal(0.42, live["widgetOpacity"]!.GetValue<double>());
+        Assert.False(File.Exists(settingsPath + ".style-restore.pending"));
+        Assert.False(File.Exists(settingsPath + ".style-restore.committed"));
+        Assert.False(File.Exists(settingsPath + ".style-restore.orig"));
     }
 
     [Fact]

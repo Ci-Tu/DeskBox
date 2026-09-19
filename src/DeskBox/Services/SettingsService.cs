@@ -926,12 +926,26 @@ settings.FocusClickedWidgetOnRaise = false;
             // settings file that no longer carries those keys anyway). A file
             // stamped by a NEWER schema than this build understands is never
             // overwritten — the typed slice cannot represent its unknown
-            // fields, so the pristine file stays the authority and only the
-            // redundant settings keys are stripped.
+            // fields. That read-only stance must be honest: layout mutations
+            // made this session cannot persist anywhere, so the save reports
+            // failure (and keeps the settings keys) instead of a false
+            // success that silently discards the changes.
             bool layoutSaved = true;
-            if (Layout.IsAuthoritative && Layout.CanWrite)
+            string layoutFailureReason = "widget-layout.json commit failed";
+            if (Layout.IsAuthoritative)
             {
-                layoutSaved = await Layout.SaveCheckedAsync(WriteLayoutTempFileAsync);
+                if (Layout.CanWrite)
+                {
+                    layoutSaved = await Layout.SaveCheckedAsync(WriteLayoutTempFileAsync);
+                }
+                else
+                {
+                    layoutSaved = false;
+                    layoutFailureReason =
+                        $"widget-layout.json schema {Layout.LoadedSchemaVersion} is newer " +
+                        "than this build understands; layout changes cannot persist";
+                    App.Log($"[SettingsService] Save refused: {layoutFailureReason}");
+                }
             }
 
             // Fail-closed: when the layout commit failed, the layout slice
@@ -945,7 +959,7 @@ settings.FocusClickedWidgetOnRaise = false;
             {
                 var failure = new SettingsPersistenceFailure(
                     "save",
-                    "widget-layout.json commit failed",
+                    layoutFailureReason,
                     DateTimeOffset.UtcNow);
                 LastPersistenceFailure = failure;
                 try

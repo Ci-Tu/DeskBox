@@ -437,14 +437,17 @@ public sealed class WidgetLayoutStoreTests : IDisposable
         Assert.False(service.Layout.CanWrite);
         Assert.Equal("future", Assert.Single(service.Settings.Widgets).Id);
 
-        Assert.True(await service.SaveCheckedAsync(notifySubscribers: false));
+        // Layout mutations cannot persist anywhere while the file is
+        // read-only — the save must report failure (and keep the redundant
+        // settings keys) instead of a false success that discards them.
+        Assert.False(await service.SaveCheckedAsync(notifySubscribers: false));
+        Assert.NotNull(service.LastPersistenceFailure);
 
         string layout = await File.ReadAllTextAsync(LayoutPath);
         Assert.Contains("\"schemaVersion\":99", layout);
         Assert.Contains("\"futureField\":42", layout);
 
-        // settings.json still strips — the pristine layout file owns the data.
         JsonObject saved = await ReadObjectAsync(SettingsPath);
-        Assert.False(saved.ContainsKey("widgets"));
+        Assert.True(saved.ContainsKey("widgets"));
     }
 }
