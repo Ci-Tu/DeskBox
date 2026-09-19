@@ -132,14 +132,13 @@ public sealed class SyncOutboxStore
 
     /// <summary>operation_id is a client GUID — filename-safe by contract —
     /// but the queue is only as trustworthy as its inputs, so anything that
-    /// is not <c>[a-zA-Z0-9_-]</c> is stripped rather than trusted.</summary>
+    /// is not <c>[a-zA-Z0-9_-]</c> is rejected outright: silently stripping
+    /// could fold two distinct operations onto one file name.</summary>
     private static string SanitizeOperationId(string operationId)
     {
-        var chars = operationId
-            .Where(c => char.IsLetterOrDigit(c) || c is '-' or '_')
-            .ToArray();
-        return chars.Length == 0
-            ? throw new ArgumentException("operation_id is not filename-safe.", nameof(operationId))
-            : new string(chars);
+        return operationId.Length > 0 &&
+               operationId.All(c => char.IsLetterOrDigit(c) || c is '-' or '_')
+            ? operationId
+            : throw new ArgumentException("operation_id is not filename-safe.", nameof(operationId));
     }
 }

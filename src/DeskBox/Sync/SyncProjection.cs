@@ -27,14 +27,25 @@ public static class SyncProjection
 
     /// <summary>todo-data: one collection per widget — the collection id IS
     /// the widget id (§2.1), so independently created todo widgets on two
-    /// devices never merge.</summary>
+    /// devices never merge. <paramref name="managedAttachmentRoot"/> is the
+    /// todo store's attachment directory — only paths inside it may be read
+    /// for blob references (§5 boundary).</summary>
     public static async Task<SyncEnvelope> FromTodoItemAsync(
         TodoItem item,
         string widgetId,
+        string managedAttachmentRoot,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentException.ThrowIfNullOrWhiteSpace(widgetId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(managedAttachmentRoot);
+
+        // §4: a deleted record is a tombstone — no payload, and its bytes
+        // are never even opened for hashing.
+        if (item.IsDeleted)
+        {
+            return Tombstone(SyncDomains.TodoData, widgetId, item.Id);
+        }
 
         JsonObject payload = JsonSerializer
             .SerializeToNode(item, TodoJsonContext.Default.TodoItem)!
@@ -42,6 +53,7 @@ public static class SyncProjection
 
         List<SyncAttachmentRef> blobRefs = await ProjectAttachmentsAsync(
             payload["attachments"] as JsonArray,
+            managedAttachmentRoot,
             cancellationToken);
 
         return new SyncEnvelope
@@ -59,12 +71,29 @@ public static class SyncProjection
     }
 
     /// <summary>quick-capture-data: singleton collection (§2.1) — items
-    /// merge across devices by construction.</summary>
+    /// merge across devices by construction. <paramref name="managedAttachmentRoot"/>
+    /// and <paramref name="imageRoot"/> bound which local paths may be read
+    /// for blob references — anything outside is degraded to a basename
+    /// stub (§5 boundary).</summary>
     public static async Task<SyncEnvelope> FromQuickCaptureItemAsync(
         QuickCaptureItem item,
+        string managedAttachmentRoot,
+        string imageRoot,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
+        ArgumentException.ThrowIfNullOrWhiteSpace(managedAttachmentRoot);
+        ArgumentException.ThrowIfNullOrWhiteSpace(imageRoot);
+
+        // §4: a deleted record is a tombstone — no payload, and its bytes
+        // are never even opened for hashing.
+        if (item.IsDeleted)
+        {
+            return Tombstone(
+                SyncDomains.QuickCaptureData,
+                SyncDomains.QuickCaptureCollection,
+                item.Id);
+        }
 
         JsonObject payload = JsonSerializer
             .SerializeToNode(item, QuickCaptureJsonContext.Default.QuickCaptureItem)!
@@ -72,6 +101,7 @@ public static class SyncProjection
 
         List<SyncAttachmentRef> blobRefs = await ProjectAttachmentsAsync(
             payload["attachments"] as JsonArray,
+            managedAttachmentRoot,
             cancellationToken);
 
         // The capture image lives under quick-capture/images/ and is already
@@ -81,12 +111,27 @@ public static class SyncProjection
             !string.IsNullOrEmpty(imagePath))
         {
             string basename = Path.GetFileName(imagePath);
-            payload["imagePath"] = string.IsNullOrEmpty(basename)
-                ? string.Empty
-                : $"images/{basename}";
-            if (!string.IsNullOrEmpty(basename) && File.Exists(imagePath))
+            if (!string.IsNullOrEmpty(basename) &&
+                IsInsideManagedRoot(imagePath, imageRoot))
             {
-                blobRefs.Add(await BlobRefAsync(basename, imagePath, cancellationToken));
+                payload["imagePath"] = $"images/{basename}";
+                if (File.Exists(imagePath))
+                {
+                    blobRefs.Add(await BlobRefAsync(basename, imagePath, cancellationToken));
+                }
+            }
+            else
+            {
+                // Outside the managed image root (or nameless): keep only a
+                // display-stub basename — the bytes stay on this device.
+                if (!string.IsNullOrEmpty(basename))
+                {
+                    App.Log(
+                        $"[SyncProjection] Refusing quick-capture image outside " +
+                        $"'{imageRoot}': '{imagePath}'");
+                }
+
+                payload["imagePath"] = basename ?? string.Empty;
             }
         }
 
@@ -176,9 +221,13 @@ public static class SyncProjection
     }
 
     /// <summary>Rewrites an attachments array in place and collects blob
-    /// references for the files that exist locally.</summary>
+    /// references for the files that exist locally. "managed" alone does not
+    /// earn a blob: the path must provably resolve inside
+    /// <paramref name="managedAttachmentRoot"/>, otherwise the record is
+    /// degraded to a basename stub and its bytes are never read.</summary>
     private static async Task<List<SyncAttachmentRef>> ProjectAttachmentsAsync(
         JsonArray? payloadAttachments,
+        string managedAttachmentRoot,
         CancellationToken cancellationToken)
     {
         var blobRefs = new List<SyncAttachmentRef>();
@@ -199,7 +248,7 @@ public static class SyncProjection
             string basename = Path.GetFileName(filePath);
             bool managed = TryGetString(attachment["storageMode"], out string? mode) &&
                            string.Equals(mode, "managed", StringComparison.OrdinalIgnoreCase);
-            if (managed)
+            if (managed && IsInsideManagedRoot(filePath, managedAttachmentRoot))
             {
                 attachment["filePath"] = $"attachments/{basename}";
                 if (File.Exists(filePath))
@@ -209,6 +258,16 @@ public static class SyncProjection
             }
             else
             {
+                if (managed)
+                {
+                    // A "managed" record pointing outside the managed root is
+                    // tampered or badly imported data — degrade it like a
+                    // linked attachment so its bytes never leave the device.
+                    App.Log(
+                        $"[SyncProjection] Refusing managed attachment outside " +
+                        $"'{managedAttachmentRoot}': '{filePath}'");
+                }
+
                 // Linked attachment: the absolute path stays on this device;
                 // the basename survives as a display-only stub (§3.3).
                 attachment["filePath"] = basename;
@@ -217,6 +276,13 @@ public static class SyncProjection
 
         return blobRefs;
     }
+
+    /// <summary>Resolved-path containment: junctions and symlinks must not
+    /// smuggle a path into the managed root. Unresolvable identity fails
+    /// closed — no containment, no read.</summary>
+    private static bool IsInsideManagedRoot(string path, string managedRoot) =>
+        FileService.TryIsPathUnderDirectoryResolved(path, managedRoot, out bool inside) &&
+        inside;
 
     private static async Task<SyncAttachmentRef> BlobRefAsync(
         string name,

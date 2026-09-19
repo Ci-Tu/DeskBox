@@ -59,7 +59,10 @@ public sealed class SyncProjectionTests : IDisposable
             DeviceId = DeviceIdentity.Id
         };
 
-        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(item, "widget-9");
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "widget-9",
+            Path.Combine(_tempRoot, "widgets", "widget-9", "attachments"));
 
         Assert.Equal(SyncDomains.TodoData, envelope.Domain);
         // §2.1: the todo collection id IS the widget id.
@@ -102,7 +105,10 @@ public sealed class SyncProjectionTests : IDisposable
             ]
         };
 
-        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(item, "w1");
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "w1",
+            Path.Combine(_tempRoot, "widgets", "w1", "attachments"));
 
         // Payload path is collection-relative — the absolute path stays home.
         Assert.Equal(
@@ -135,7 +141,10 @@ public sealed class SyncProjectionTests : IDisposable
             ]
         };
 
-        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(item, "w1");
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "w1",
+            Path.Combine(_tempRoot, "widgets", "w1", "attachments"));
 
         // Basename survives as a display stub; the absolute path never
         // leaves the device, and a linked file earns no blob reference.
@@ -166,7 +175,10 @@ public sealed class SyncProjectionTests : IDisposable
             ]
         };
 
-        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(item, "w1");
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "w1",
+            _tempRoot);
 
         // The record still projects (the receiving side degrades the
         // attachment display) — only the blob reference is skipped.
@@ -174,6 +186,75 @@ public sealed class SyncProjectionTests : IDisposable
             "attachments/gone.pdf",
             envelope.Payload!["attachments"]![0]!["filePath"]!.GetValue<string>());
         Assert.Empty(envelope.Attachments);
+    }
+
+    [Fact]
+    public async Task TodoItem_ManagedAttachmentOutsideRoot_DegradesToStub()
+    {
+        // A "managed" record whose path escapes the managed root (tampered
+        // or badly imported data) must never be opened for hashing — it
+        // degrades to the linked-style basename stub (§5 boundary).
+        string secretPath = WriteAttachment(
+            Path.Combine("outside", "secret.pdf"), [7, 7, 7]);
+        string secretHash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData([7, 7, 7])).ToLowerInvariant();
+        var item = new TodoItem
+        {
+            Text = "tampered",
+            Attachments =
+            [
+                new TodoAttachment
+                {
+                    FilePath = secretPath,
+                    DisplayName = "secret.pdf",
+                    StorageMode = TodoAttachment.ManagedStorageMode
+                }
+            ]
+        };
+
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "w1",
+            Path.Combine(_tempRoot, "widgets", "w1", "attachments"));
+
+        Assert.Equal(
+            "secret.pdf",
+            envelope.Payload!["attachments"]![0]!["filePath"]!.GetValue<string>());
+        Assert.Empty(envelope.Attachments);
+        Assert.DoesNotContain(secretHash, SerializeEnvelope(envelope));
+    }
+
+    [Fact]
+    public async Task TodoItem_Deleted_ProjectsTombstoneWithoutBlobReads()
+    {
+        // §4: a deleted record is a tombstone — no payload, and its
+        // attachments are never even opened for hashing.
+        string filePath = WriteAttachment(
+            Path.Combine("widgets", "w1", "attachments", "gone.pdf"), [1]);
+        var item = new TodoItem
+        {
+            Text = "deleted",
+            IsDeleted = true,
+            Attachments =
+            [
+                new TodoAttachment
+                {
+                    FilePath = filePath,
+                    StorageMode = TodoAttachment.ManagedStorageMode
+                }
+            ]
+        };
+
+        SyncEnvelope envelope = await SyncProjection.FromTodoItemAsync(
+            item,
+            "w1",
+            Path.Combine(_tempRoot, "widgets", "w1", "attachments"));
+
+        Assert.True(envelope.Deleted);
+        Assert.Null(envelope.Payload);
+        Assert.Empty(envelope.Attachments);
+        Assert.Equal(item.Id, envelope.EntityId);
+        Assert.Equal("w1", envelope.CollectionId);
     }
 
     // ── quick-capture-data ────────────────────────────────────────────
@@ -190,7 +271,10 @@ public sealed class SyncProjectionTests : IDisposable
             ImagePath = imagePath
         };
 
-        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(item);
+        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(
+            item,
+            Path.Combine(_tempRoot, "quick-capture", "attachments"),
+            Path.Combine(_tempRoot, "quick-capture", "images"));
 
         Assert.Equal(SyncDomains.QuickCaptureData, envelope.Domain);
         Assert.Equal(SyncDomains.QuickCaptureCollection, envelope.CollectionId);
@@ -202,14 +286,50 @@ public sealed class SyncProjectionTests : IDisposable
     }
 
     [Fact]
-    public async Task QuickCaptureItem_TombstoneFlag_RidesIsDeleted()
+    public async Task QuickCaptureItem_Deleted_ProjectsTombstone()
     {
-        var item = new QuickCaptureItem { IsDeleted = true, Body = "gone" };
+        // §4: deleted envelopes carry no payload — the record body and its
+        // image bytes never cross the boundary.
+        string imagePath = WriteAttachment(
+            Path.Combine("quick-capture", "images", "ccdd.png"), [2, 2]);
+        var item = new QuickCaptureItem
+        {
+            IsDeleted = true,
+            Body = "gone",
+            ImagePath = imagePath
+        };
 
-        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(item);
+        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(
+            item,
+            Path.Combine(_tempRoot, "quick-capture", "attachments"),
+            Path.Combine(_tempRoot, "quick-capture", "images"));
 
         Assert.True(envelope.Deleted);
-        Assert.NotNull(envelope.Payload);
+        Assert.Null(envelope.Payload);
+        Assert.Empty(envelope.Attachments);
+    }
+
+    [Fact]
+    public async Task QuickCaptureItem_ImageOutsideImageRoot_DegradesToStub()
+    {
+        // An imagePath escaping the managed image root is kept as a
+        // display-stub basename only — its bytes never leave the device.
+        string secretImage = WriteAttachment("secret.png", [5, 5, 5]);
+        var item = new QuickCaptureItem
+        {
+            Type = QuickCaptureItemType.Image,
+            ImagePath = secretImage
+        };
+
+        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(
+            item,
+            Path.Combine(_tempRoot, "quick-capture", "attachments"),
+            Path.Combine(_tempRoot, "quick-capture", "images"));
+
+        Assert.Equal(
+            "secret.png",
+            envelope.Payload!["imagePath"]!.GetValue<string>());
+        Assert.Empty(envelope.Attachments);
     }
 
     // ── widget-style ──────────────────────────────────────────────────
