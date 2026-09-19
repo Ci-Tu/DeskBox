@@ -29,9 +29,10 @@ public enum CloudBackupDomain
 ///                      are derived artifacts and stay out).
 ///   WidgetStyle      — no data files; carried as widget-style.json.
 ///
-/// Everything else — settings.json, FileSafety history/journal, sidecars,
-/// caches, device.id, file-widget contents (which only ever hold path
-/// references anyway) — is never part of a scoped cloud backup.
+/// Everything else — settings.json, widget-layout.json (device-local layout
+/// state), FileSafety history/journal, sidecars, caches, device.id,
+/// file-widget contents (which only ever hold path references anyway) — is
+/// never part of a scoped cloud backup.
 /// </summary>
 internal static class CloudBackupDomains
 {

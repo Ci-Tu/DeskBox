@@ -148,14 +148,19 @@ internal static class WidgetStyleBackupProjection
     }
 
     /// <summary>
-    /// Patches the style document onto a settings.json file, atomically via
+    /// Patches the style document onto the live data files, atomically via
     /// the same resilient-write path the settings store itself uses. Only
     /// whitelisted keys are written; widgets are matched by id and verified
-    /// by widgetKind before any field is touched.
+    /// by widgetKind before any field is touched. Shell keys always land in
+    /// settings.json; per-widget keys land wherever the device layout
+    /// currently lives — widget-layout.json once it exists, else the legacy
+    /// settings.json widgets array (pre-migration profiles, which the layout
+    /// store then adopts).
     /// </summary>
-    internal static async Task<ApplyResult> ApplyToSettingsFileAsync(
+    internal static async Task<ApplyResult> ApplyAsync(
         byte[] documentBytes,
         string settingsPath,
+        string layoutPath,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(documentBytes);
@@ -221,10 +226,37 @@ internal static class WidgetStyleBackupProjection
             }
         }
 
+        // The widgets array lives in widget-layout.json once the device store
+        // exists; before adoption it is still a settings.json key.
+        JsonObject? layoutDom = null;
+        JsonArray? widgetsArray = null;
+        bool widgetsInLayoutFile = File.Exists(layoutPath);
+        if (widgetsInLayoutFile)
+        {
+            await using (var input = new FileStream(
+                             layoutPath,
+                             FileMode.Open,
+                             FileAccess.Read,
+                             FileShare.Read,
+                             bufferSize: 81920,
+                             useAsync: true))
+            {
+                layoutDom = (await JsonNode.ParseAsync(
+                        input,
+                        cancellationToken: cancellationToken))?.AsObject()
+                    ?? throw new InvalidDataException("widget-layout.json is empty.");
+            }
+
+            widgetsArray = layoutDom["layout"]?["widgets"] as JsonArray;
+        }
+        else if (settingsDom.TryGetPropertyValue("widgets", out JsonNode? widgetsNode))
+        {
+            widgetsArray = widgetsNode as JsonArray;
+        }
+
         int widgetsPatched = 0;
         if (document["widgets"] is JsonObject widgetsDoc &&
-            settingsDom.TryGetPropertyValue("widgets", out JsonNode? widgetsNode) &&
-            widgetsNode is JsonArray widgetsArray)
+            widgetsArray is not null)
         {
             foreach (JsonNode? node in widgetsArray)
             {
@@ -260,6 +292,11 @@ internal static class WidgetStyleBackupProjection
 
         string patched = settingsDom.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
         await ResilientJsonStore.SaveAsync(settingsPath, patched);
+        if (widgetsInLayoutFile && layoutDom is not null)
+        {
+            string patchedLayout = layoutDom.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            await ResilientJsonStore.SaveAsync(layoutPath, patchedLayout);
+        }
         return new ApplyResult(true, shellPatched, widgetsPatched, null);
     }
 }

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DeskBox.Core.Persistence;
 using DeskBox.Models;
 using DeskBox.Services;
 
@@ -474,10 +475,60 @@ public sealed class CloudBackupScopedTests : IDisposable
     public async Task Projection_ApplyToMissingSettings_SkipsGracefully()
     {
         byte[] doc = WidgetStyleBackupProjection.Serialize(new AppSettings());
-        var result = await WidgetStyleBackupProjection.ApplyToSettingsFileAsync(
-            doc, Path.Combine(_tempRoot, "missing-settings.json"));
+        var result = await WidgetStyleBackupProjection.ApplyAsync(
+            doc,
+            Path.Combine(_tempRoot, "missing-settings.json"),
+            Path.Combine(_tempRoot, "widget-layout.json"));
         Assert.False(result.Applied);
         Assert.NotNull(result.SkippedReason);
+    }
+
+    [Fact]
+    public async Task Projection_Apply_WidgetsPatch_LandsInLayoutFile()
+    {
+        // Live pair: settings.json owns shell style, widget-layout.json owns
+        // the widgets array — the apply must split the patch accordingly and
+        // leave the layout envelope (schemaVersion) intact.
+        string settingsPath = Path.Combine(_tempRoot, "settings.json");
+        string layoutPath = Path.Combine(_tempRoot, "widget-layout.json");
+
+        var liveSettings = new AppSettings();
+        liveSettings.Widgets.Add(new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo });
+        await File.WriteAllTextAsync(
+            settingsPath,
+            JsonSerializer.Serialize(liveSettings, SettingsJsonContext.Default.AppSettings));
+
+        var slice = new WidgetLayoutSettingsSlice
+        {
+            Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+        };
+        await File.WriteAllTextAsync(
+            layoutPath,
+            JsonSerializer.Serialize(
+                new WidgetLayoutDocument { Layout = slice },
+                WidgetLayoutJsonContext.Default.WidgetLayoutDocument));
+
+        var source = new AppSettings { WidgetOpacity = 0.42 };
+        source.Widgets.Add(
+            new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo, ViewMode = ViewMode.List });
+        byte[] doc = WidgetStyleBackupProjection.Serialize(source);
+
+        WidgetStyleBackupProjection.ApplyResult result =
+            await WidgetStyleBackupProjection.ApplyAsync(doc, settingsPath, layoutPath);
+
+        Assert.True(result.Applied);
+        Assert.Equal(1, result.WidgetsPatched);
+
+        JsonObject settingsDom = JsonNode.Parse(
+            await File.ReadAllTextAsync(settingsPath))!.AsObject();
+        Assert.Equal(0.42, settingsDom["widgetOpacity"]!.GetValue<double>());
+
+        JsonObject layoutDom = JsonNode.Parse(
+            await File.ReadAllTextAsync(layoutPath))!.AsObject();
+        Assert.Equal(1, layoutDom["schemaVersion"]!.GetValue<int>());
+        Assert.Equal(
+            "List",
+            layoutDom["layout"]!["widgets"]![0]!["viewMode"]!.GetValue<string>());
     }
 
     [Fact]
