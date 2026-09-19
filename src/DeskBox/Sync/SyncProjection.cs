@@ -289,12 +289,22 @@ public static class SyncProjection
         string localPath,
         CancellationToken cancellationToken)
     {
-        byte[] bytes = await File.ReadAllBytesAsync(localPath, cancellationToken);
+        // Stream the hash: managed attachments may be multi-hundred-MB
+        // videos, and materializing them as byte[] would spike the LOH the
+        // memory work is actively fighting.
+        await using var stream = new FileStream(
+            localPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 128 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        byte[] hash = await SHA256.HashDataAsync(stream, cancellationToken);
         return new SyncAttachmentRef
         {
             Name = name,
-            BlobId = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
-            Size = bytes.LongLength
+            BlobId = Convert.ToHexString(hash).ToLowerInvariant(),
+            Size = stream.Length
         };
     }
 
