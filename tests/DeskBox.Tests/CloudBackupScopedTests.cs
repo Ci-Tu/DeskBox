@@ -432,6 +432,56 @@ public sealed class CloudBackupScopedTests : IDisposable
     }
 
     [Fact]
+    public async Task StyleApply_RestoresGoodBackupBeforePatchingCorruptPrimary()
+    {
+        // A "{}" primary parses as a JsonObject but is not a layout
+        // document. Patching it directly would commit the corrupt DOM and
+        // rotate the surviving good .bak out of existence — the apply must
+        // run the store's own heal pass (quarantine bad primary, promote
+        // valid .bak) before touching either file.
+        string dataDir = Directory.CreateDirectory(
+            Path.Combine(_appDataRoot, "data")).FullName;
+        string settingsPath = Path.Combine(dataDir, "settings.json");
+        string layoutPath = Path.Combine(dataDir, "widget-layout.json");
+        string backupPath = layoutPath + ".bak";
+
+        await File.WriteAllTextAsync(
+            settingsPath, """{"language":"zh-CN","widgetOpacity":0.9}""");
+
+        var goodSlice = new WidgetLayoutSettingsSlice
+        {
+            Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+        };
+        string goodLayoutJson = JsonSerializer.Serialize(
+            new WidgetLayoutDocument { Layout = goodSlice },
+            WidgetLayoutJsonContext.Default.WidgetLayoutDocument);
+        await File.WriteAllTextAsync(backupPath, goodLayoutJson);
+        await File.WriteAllTextAsync(layoutPath, "{}");
+
+        var cloudSettings = new AppSettings { WidgetOpacity = 0.42 };
+        WidgetStyleBackupProjection.ApplyResult result =
+            await WidgetStyleBackupProjection.ApplyAsync(
+                WidgetStyleBackupProjection.Serialize(cloudSettings),
+                settingsPath,
+                layoutPath,
+                CancellationToken.None);
+
+        Assert.True(result.Applied, result.SkippedReason);
+
+        // The healed primary carries the good layout's widgets (patched);
+        // the .bak still holds the same good bytes — no copy was burned.
+        WidgetLayoutDocument healed = WidgetLayoutStore.ParseLayoutDocument(
+            await File.ReadAllTextAsync(layoutPath));
+        Assert.Single(healed.Layout.Widgets);
+        Assert.Equal(goodLayoutJson, await File.ReadAllTextAsync(backupPath));
+
+        AppSettings patched = JsonSerializer.Deserialize<AppSettings>(
+            await File.ReadAllTextAsync(settingsPath),
+            SettingsJsonContext.Default.AppSettings)!;
+        Assert.Equal(0.42, patched.WidgetOpacity);
+    }
+
+    [Fact]
     public async Task Projection_DocumentExcludesGeometryAndDeviceFields()
     {
         var settings = new AppSettings

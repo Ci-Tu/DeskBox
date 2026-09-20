@@ -240,6 +240,27 @@ internal static class WidgetStyleBackupProjection
         bool widgetsInLayoutFile = File.Exists(layoutPath);
         if (widgetsInLayoutFile)
         {
+            // Heal the store the same way WidgetLayoutStore will on launch —
+            // quarantine a corrupt primary and promote a valid .bak — BEFORE
+            // patching. A corrupt-but-parseable primary ("{}") would
+            // otherwise pass as a valid DOM here, and this apply's commit
+            // would rotate the surviving good .bak out of existence,
+            // burning the only recovery copy of a restorable layout.
+            await ResilientJsonStore.LoadWithResultAsync(
+                layoutPath,
+                static json => WidgetLayoutStore.ParseLayoutDocument(json),
+                static () => new WidgetLayoutDocument
+                {
+                    Layout = new WidgetLayoutSettingsSlice()
+                },
+                "WidgetStyleRestore");
+
+            if (!File.Exists(layoutPath))
+            {
+                throw new InvalidDataException(
+                    "widget-layout.json is corrupt and no valid backup remains.");
+            }
+
             originalLayoutJson = await File.ReadAllTextAsync(
                 layoutPath, cancellationToken);
             layoutDom = JsonNode.Parse(originalLayoutJson)?.AsObject()
