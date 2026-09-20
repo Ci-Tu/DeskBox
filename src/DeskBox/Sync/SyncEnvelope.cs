@@ -47,8 +47,10 @@ public sealed class SyncEnvelope
 /// <summary>One attachment blob reference inside an envelope (§5).</summary>
 public sealed class SyncAttachmentRef
 {
-    /// <summary>Collection-relative file name, e.g. <c>report.pdf</c> —
-    /// the payload references it as <c>attachments/report.pdf</c>.</summary>
+    /// <summary>Collection-relative payload path the envelope cites —
+    /// <c>attachments/report.pdf</c>, <c>images/photo.png</c>. Not a bare
+    /// basename: a record may carry a same-basename image and attachment,
+    /// and the blob→payload-path mapping must stay unambiguous.</summary>
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Content address: lowercase hex SHA-256 of the bytes.</summary>

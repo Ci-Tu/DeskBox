@@ -119,7 +119,7 @@ public sealed class SyncProjectionTests : IDisposable
         Assert.DoesNotContain("C:\\\\", wire);
 
         SyncAttachmentRef blob = Assert.Single(envelope.Attachments);
-        Assert.Equal("report.pdf", blob.Name);
+        Assert.Equal("attachments/report.pdf", blob.Name);
         Assert.Equal(expectedHash, blob.BlobId);
         Assert.Equal(bytes.LongLength, blob.Size);
     }
@@ -282,7 +282,59 @@ public sealed class SyncProjectionTests : IDisposable
         Assert.Equal("images/aabbcc.png", envelope.Payload!["imagePath"]!.GetValue<string>());
         // The enum rides the domain profile's string form.
         Assert.Equal("Image", envelope.Payload!["type"]!.GetValue<string>());
-        Assert.Single(envelope.Attachments);
+        // Blob names are the same collection-relative paths the payload
+        // cites — not bare basenames.
+        SyncAttachmentRef imageBlob = Assert.Single(envelope.Attachments);
+        Assert.Equal("images/aabbcc.png", imageBlob.Name);
+    }
+
+    [Fact]
+    public async Task QuickCaptureItem_ImageAndAttachmentWithSameBasename_ProjectDistinctBlobNames()
+    {
+        // A capture may carry a main image and managed attachments at once.
+        // When both share a basename, the blob refs must still map each blob
+        // to exactly one payload path (images/ vs attachments/) — the wire
+        // name is that payload path, so the restore side never has to guess.
+        byte[] imageBytes = [1, 1, 1];
+        byte[] attachmentBytes = [2, 2, 2];
+        string imagePath = WriteAttachment(
+            Path.Combine("quick-capture", "images", "photo.png"), imageBytes);
+        string attachmentPath = WriteAttachment(
+            Path.Combine("quick-capture", "attachments", "photo.png"), attachmentBytes);
+        var item = new QuickCaptureItem
+        {
+            Type = QuickCaptureItemType.Image,
+            ImagePath = imagePath,
+            Attachments =
+            [
+                new TodoAttachment
+                {
+                    FilePath = attachmentPath,
+                    DisplayName = "photo.png",
+                    StorageMode = TodoAttachment.ManagedStorageMode
+                }
+            ]
+        };
+
+        SyncEnvelope envelope = await SyncProjection.FromQuickCaptureItemAsync(
+            item,
+            Path.Combine(_tempRoot, "quick-capture", "attachments"),
+            Path.Combine(_tempRoot, "quick-capture", "images"));
+
+        Assert.Equal(2, envelope.Attachments.Count);
+        Assert.Contains(envelope.Attachments, r =>
+            r.Name == "images/photo.png" &&
+            r.Size == imageBytes.LongLength);
+        Assert.Contains(envelope.Attachments, r =>
+            r.Name == "attachments/photo.png" &&
+            r.Size == attachmentBytes.LongLength);
+        // Every blob-ref name is a path the payload actually cites.
+        Assert.Equal(
+            "images/photo.png",
+            envelope.Payload!["imagePath"]!.GetValue<string>());
+        Assert.Equal(
+            "attachments/photo.png",
+            envelope.Payload!["attachments"]![0]!["filePath"]!.GetValue<string>());
     }
 
     [Fact]

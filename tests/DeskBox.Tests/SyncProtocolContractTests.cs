@@ -37,7 +37,7 @@ public sealed class SyncProtocolContractTests
             Payload = new JsonObject { ["id"] = "entity-1" },
             Attachments =
             [
-                new SyncAttachmentRef { Name = "a.pdf", BlobId = "ab12", Size = 7 }
+                new SyncAttachmentRef { Name = "attachments/a.pdf", BlobId = "ab12", Size = 7 }
             ]
         };
 

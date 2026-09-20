@@ -16,6 +16,9 @@ namespace DeskBox.Sync;
 /// absolute path never crosses the wire. Managed attachments additionally
 /// earn a content-addressed blob reference; linked attachments keep only
 /// their basename as a display stub (the record still renders, degraded).
+/// Blob-ref names use the same collection-relative payload paths, so an
+/// image and an attachment that share a basename still restore
+/// unambiguously on the receiving side.
 /// </summary>
 public static class SyncProjection
 {
@@ -117,7 +120,8 @@ public static class SyncProjection
                 payload["imagePath"] = $"images/{basename}";
                 if (File.Exists(imagePath))
                 {
-                    blobRefs.Add(await BlobRefAsync(basename, imagePath, cancellationToken));
+                    blobRefs.Add(await BlobRefAsync(
+                        $"images/{basename}", imagePath, cancellationToken));
                 }
             }
             else
@@ -253,7 +257,8 @@ public static class SyncProjection
                 attachment["filePath"] = $"attachments/{basename}";
                 if (File.Exists(filePath))
                 {
-                    blobRefs.Add(await BlobRefAsync(basename, filePath, cancellationToken));
+                    blobRefs.Add(await BlobRefAsync(
+                        $"attachments/{basename}", filePath, cancellationToken));
                 }
             }
             else
