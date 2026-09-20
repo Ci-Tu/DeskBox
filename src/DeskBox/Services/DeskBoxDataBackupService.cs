@@ -475,14 +475,23 @@ public sealed partial class DeskBoxDataBackupService
                 archiveInfo.Manifest.SourceDataPath,
                 todoWidgetIdRemaps: null,
                 cancellationToken);
-            ValidateRestoreData(stagedDataDirectory);
+            // Pre-restore archives are the safety net for restores: they can
+            // be created without settings.json, so they must also be
+            // restorable without it. Manual/automatic snapshots stay strict.
+            bool allowMissingSettings = string.Equals(
+                archiveInfo.Manifest.Kind, "pre-restore", StringComparison.Ordinal);
+            ValidateRestoreData(
+                stagedDataDirectory,
+                requireSettings: !allowMissingSettings);
 
             var marker = new PendingRestoreMarker(
                 stagingRoot,
                 archivePath,
                 DateTimeOffset.UtcNow,
                 archiveInfo.Manifest.CreatedAtUtc,
-                archiveInfo.Manifest.AppVersion);
+                archiveInfo.Manifest.AppVersion,
+                Domains: null,
+                AllowMissingSettings: allowMissingSettings);
             await WritePendingRestoreMarkerAtomicallyAsync(
                 PendingRestoreMarkerPath,
                 marker,
@@ -967,7 +976,9 @@ public sealed partial class DeskBoxDataBackupService
             }
 
             string stagedDataDirectory = Path.Combine(stagingRoot, "data");
-            ValidateRestoreData(stagedDataDirectory);
+            ValidateRestoreData(
+                stagedDataDirectory,
+                requireSettings: !marker.AllowMissingSettings);
 
             if (HasBackupSourceData())
             {
@@ -1328,7 +1339,10 @@ public sealed partial class DeskBoxDataBackupService
 
         if (!isScopedArchive)
         {
-            ValidateRestoreData(Path.Combine(stagingRoot, "data"));
+            ValidateRestoreData(
+                Path.Combine(stagingRoot, "data"),
+                requireSettings: !string.Equals(
+                    manifest.Kind, "pre-restore", StringComparison.Ordinal));
         }
 
         return new RestoreArchiveInfo(manifest, fileCount, totalUncompressedBytes);
@@ -1743,8 +1757,15 @@ public sealed partial class DeskBoxDataBackupService
 
     private bool HasBackupSourceData()
     {
+        // "Source data" means data the archive filter would actually keep:
+        // a data directory holding only device.id, sync/ protocol state or
+        // cache/ produces an empty snapshot whose validation would fail —
+        // and that failure would block the restore the net protects.
         return Directory.Exists(DataDirectory) &&
-            Directory.EnumerateFiles(DataDirectory, "*", SearchOption.AllDirectories).Any();
+            Directory.EnumerateFiles(DataDirectory, "*", SearchOption.AllDirectories)
+                .Any(path => ShouldIncludeInBackup(
+                    Path.GetRelativePath(DataDirectory, path)
+                        .Replace(Path.DirectorySeparatorChar, '/')));
     }
 
     private async Task CreateArchiveCoreAsync(
@@ -2525,7 +2546,12 @@ public sealed partial class DeskBoxDataBackupService
         // files instead of swapping the whole data directory. Null stays
         // unwritten so classic markers keep their canonical key set.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<string>? Domains = null);
+        IReadOnlyList<string>? Domains = null,
+        // A "pre-restore" safety archive legitimately lacks settings.json —
+        // it captured whatever survived on a device that lost it. Refusing
+        // to restore it would strand the very data it exists to protect.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        bool AllowMissingSettings = false);
 
     [JsonSourceGenerationOptions(
         GenerationMode = JsonSourceGenerationMode.Metadata,

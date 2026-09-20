@@ -969,6 +969,62 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareRestoreAsync_AcceptsPreRestoreBackupWithoutSettings()
+    {
+        // A pre-restore safety archive can legitimately lack settings.json —
+        // it captured whatever survived on a device that lost it. Refusing
+        // to restore it would strand the very data it exists to protect.
+        string archivePath = Path.Combine(_exportRoot, "pre-restore-no-settings.zip");
+        using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        {
+            WriteEntry(
+                archive,
+                "manifest.json",
+                "{\"schemaVersion\":1,\"kind\":\"pre-restore\",\"createdAtUtc\":\"2026-07-01T00:00:00Z\",\"appVersion\":\"1.2.9\"}");
+            WriteEntry(archive, "data/surviving-note.txt", "data that outlived settings");
+        }
+
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+
+        DeskBoxRestorePreparation preparation = await service.PrepareRestoreAsync(archivePath);
+
+        Assert.True(File.Exists(service.PendingRestoreMarkerPath));
+
+        DeskBoxRestoreApplyResult applied = await service.ApplyPendingRestoreAsync();
+        Assert.True(applied.Succeeded);
+        Assert.True(File.Exists(Path.Combine(_appDataRoot, "data", "surviving-note.txt")));
+    }
+
+    [Fact]
+    public async Task ApplyPendingRestoreAsync_SkipsSafetyNetWhenOnlyExcludedFilesRemain()
+    {
+        // device.id and sync/ are filtered out of backups, so a data
+        // directory holding only them must not trigger a pre-restore
+        // archive — the filtered snapshot would be empty and its
+        // validation would fail the very restore it protects.
+        string sourceRoot = Directory.CreateDirectory(Path.Combine(_tempRoot, "restore-source")).FullName;
+        string sourceData = Directory.CreateDirectory(Path.Combine(sourceRoot, "data")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(sourceData, "settings.json"), "{\"theme\":\"Dark\"}");
+        string archivePath = await new DeskBoxDataBackupService(sourceRoot).ExportBackupAsync(_exportRoot);
+
+        string currentData = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(currentData, "device.id"), "device-id");
+        Directory.CreateDirectory(Path.Combine(currentData, "sync"));
+        await File.WriteAllTextAsync(Path.Combine(currentData, "sync", "state.json"), "{}");
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+        await service.PrepareRestoreAsync(archivePath);
+
+        DeskBoxRestoreApplyResult result = await service.ApplyPendingRestoreAsync();
+
+        Assert.True(result.Succeeded);
+        Assert.False(
+            Directory.Exists(service.PreRestoreBackupDirectory) &&
+            Directory.EnumerateFiles(service.PreRestoreBackupDirectory, "*.zip").Any(),
+            "no safety archive when nothing back-uppable exists");
+        Assert.Contains("Dark", await File.ReadAllTextAsync(Path.Combine(currentData, "settings.json")));
+    }
+
+    [Fact]
     public async Task PrepareRestoreAsync_RejectsTamperedSchemaTwoFile()
     {
         string dataDirectory = Directory.CreateDirectory(Path.Combine(_appDataRoot, "data")).FullName;
