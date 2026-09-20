@@ -437,6 +437,23 @@ public sealed partial class WidgetManager
                         partialFailure.CompletedResults,
                         widgetPlan.Widget.Id,
                         widgetPlan.Widget.Name));
+                    // A destination-cleanup failure carries no completed
+                    // results — its stranded files live in the tree the
+                    // transfer could not take back. It still needs a receipt
+                    // or the partial copy would sit at the new root with no
+                    // recovery path attached.
+                    if (partialFailure.InnerException is
+                        FileService.FileTransferDestinationCleanupException cleanup)
+                    {
+                        restoreBackFailures.Add(new ManagedStorageRollbackFailure(
+                            widgetPlan.Widget.Id,
+                            widgetPlan.Widget.Name,
+                            cleanup.DestinationDirectory,
+                            cleanup.SourceDirectory,
+                            PreserveExisting: true,
+                            cleanup.Message));
+                    }
+
                     TryDeleteEmptyFolder(widgetPlan.DestinationFolder);
                     throw;
                 }
@@ -885,11 +902,27 @@ public sealed partial class WidgetManager
                 catch (FileService.FileTransferPartialFailureException partial)
                 {
                     retryFailed = true;
-                    IReadOnlyList<ManagedStorageRollbackFailure> undoFailures =
+                    var undoFailures = new List<ManagedStorageRollbackFailure>(
                         await RestorePartiallyMigratedItemsAsync(
                             partial.CompletedResults,
                             group.Key.WidgetId,
-                            group.Key.WidgetName);
+                            group.Key.WidgetName));
+                    // Same stranded-destination case as the first migration:
+                    // the cleanup failure carries no completed results, so
+                    // without an explicit receipt the residue would sit at
+                    // the destination untracked.
+                    if (partial.InnerException is
+                        FileService.FileTransferDestinationCleanupException cleanup)
+                    {
+                        undoFailures.Add(new ManagedStorageRollbackFailure(
+                            group.Key.WidgetId,
+                            group.Key.WidgetName,
+                            cleanup.DestinationDirectory,
+                            cleanup.SourceDirectory,
+                            PreserveExisting: true,
+                            cleanup.Message));
+                    }
+
                     TryDeleteEmptyFolder(group.Key.DestinationFolder);
                     if (undoFailures.Count > 0)
                     {
@@ -1161,25 +1194,17 @@ public sealed partial class WidgetManager
             // widget's folder can sit under the managed root when the root
             // moved around it): two widgets sharing one directory means the
             // first "close and delete files" wipes the other's contents.
+            // The shared resolved-path guard is required here — a junction
+            // or symlink alias resolves to the claimed physical directory
+            // while comparing lexical paths would wave it through.
             // Whether the destination is genuinely a closed widget's kept
             // folder is unprovable — RemoveWidgetImmediate drops the config
             // and only the id tombstone survives — so live-claim exclusion
             // is the only enforceable guard.
-            string normalizedDestination = Path.TrimEndingDirectorySeparator(
-                Path.GetFullPath(destinationFolderPath));
-            bool destinationClaimedByLiveWidget = _settingsService.Settings.WidgetLayout.Widgets.Any(widget =>
-                widget.WidgetKind == WidgetKind.File &&
-                !IsDeleted(widget.Id) &&
-                !string.Equals(widget.Id, config.Id, StringComparison.Ordinal) &&
-                !string.IsNullOrWhiteSpace(widget.MappedFolderPath) &&
-                string.Equals(
-                    Path.TrimEndingDirectorySeparator(Path.GetFullPath(widget.MappedFolderPath)),
-                    normalizedDestination,
-                    StringComparison.OrdinalIgnoreCase));
-            if (destinationClaimedByLiveWidget)
-            {
-                throw new InvalidOperationException(_localizationService.T("Widget.Error.ManagedFolderNameUnavailable"));
-            }
+            EnsureFileWidgetPathAvailable(
+                destinationFolderPath,
+                excludedWidgetId: config.Id,
+                candidateFollowsDefaultStoragePath: true);
 
             // The empty current folder is the default folder a fresh widget
             // got; the existing destination is the managed folder a closed

@@ -466,6 +466,50 @@ public sealed class WidgetManagerStorageCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task RenameWidgetAsync_RejectsAdoptionThroughJunctionAlias()
+    {
+        // "OldA" is a junction onto the live widget's real folder: a
+        // lexical path compare sees two different strings, but resolved
+        // they are the same physical directory. Adopting it would leave
+        // both widgets sharing one tree — the first "close and delete
+        // files" would wipe the other's contents.
+        string claimedFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "AI")).FullName;
+        File.WriteAllText(Path.Combine(claimedFolder, "theirs.txt"), "mapped content");
+        _settingsService.Settings.Widgets.Add(new WidgetConfig
+        {
+            Name = "Mapped",
+            WidgetKind = WidgetKind.File,
+            MappedFolderPath = claimedFolder,
+            FollowsDefaultStoragePath = false
+        });
+        string junctionFolder = Path.Combine(_storageRoot, "OldA");
+        Assert.True(
+            TryCreateDirectoryJunction(junctionFolder, claimedFolder),
+            "The Windows test host must support creating a directory junction.");
+        try
+        {
+            string emptyFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "Work")).FullName;
+            var widget = CreateManagedWidget("Work", emptyFolder);
+            _settingsService.Settings.Widgets.Add(widget);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _widgetManager.RenameWidgetAsync(widget.Id, "OldA"));
+
+            Assert.Equal("Work", widget.ManagedFolderName);
+            Assert.Equal(emptyFolder, widget.MappedFolderPath, ignoreCase: true);
+            Assert.True(Directory.Exists(emptyFolder),
+                "A rejected adoption must keep the widget's current folder.");
+            Assert.True(File.Exists(Path.Combine(claimedFolder, "theirs.txt")));
+            Assert.True(Directory.Exists(junctionFolder),
+                "The foreign junction is never adopted or removed.");
+        }
+        finally
+        {
+            TryDeleteDirectoryJunction(junctionFolder);
+        }
+    }
+
+    [Fact]
     public async Task RenameWidgetAsync_RejectsNameWhenBothFoldersHoldFiles()
     {
         string residueFolder = Directory.CreateDirectory(Path.Combine(_storageRoot, "AI")).FullName;
