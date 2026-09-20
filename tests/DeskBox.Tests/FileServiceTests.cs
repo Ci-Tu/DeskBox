@@ -880,6 +880,62 @@ public sealed class FileServiceTests : IDisposable
         Assert.True(File.Exists(lockedFile));
     }
 
+    [Fact]
+    public async Task RelocateDirectoryAsync_RemovesOwnEmptyDestinationAfterAllSkipped()
+    {
+        // A destination this call created and never populated is litter —
+        // it goes away when every entry was skipped.
+        var service = new FileService();
+        string sourceDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "relocate-own-source")).FullName;
+        string lockedFile = Path.Combine(sourceDirectory, "locked.txt");
+        File.WriteAllText(lockedFile, "x");
+        string destinationDirectory = Path.Combine(_tempRoot, "relocate-own-dest");
+
+        await using var lockStream = new FileStream(
+            lockedFile, FileMode.Open, FileAccess.Read, FileShare.None);
+        FileService.DirectoryMoveReport report = await service.RelocateDirectoryAsync(
+            sourceDirectory,
+            destinationDirectory,
+            progress: null,
+            CancellationToken.None,
+            onItemError: _ => Task.FromResult(
+                FileService.FileTransferItemAction.Skip));
+
+        Assert.Single(report.SkippedItems);
+        Assert.False(Directory.Exists(destinationDirectory),
+            "the empty destination this call created is litter");
+    }
+
+    [Fact]
+    public async Task RelocateDirectoryAsync_PreservesForeignEmptyDestinationAfterAllSkipped()
+    {
+        // Ownership is decided by the atomic create, not a pre-check: a
+        // destination that already existed — whoever made it — survives
+        // even though it is still empty after every entry was skipped.
+        var service = new FileService();
+        string sourceDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "relocate-foreign-source")).FullName;
+        string lockedFile = Path.Combine(sourceDirectory, "locked.txt");
+        File.WriteAllText(lockedFile, "x");
+        string destinationDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "relocate-foreign-dest")).FullName;
+
+        await using var lockStream = new FileStream(
+            lockedFile, FileMode.Open, FileAccess.Read, FileShare.None);
+        FileService.DirectoryMoveReport report = await service.RelocateDirectoryAsync(
+            sourceDirectory,
+            destinationDirectory,
+            progress: null,
+            CancellationToken.None,
+            onItemError: _ => Task.FromResult(
+                FileService.FileTransferItemAction.Skip));
+
+        Assert.Single(report.SkippedItems);
+        Assert.True(Directory.Exists(destinationDirectory),
+            "a destination this call did not create stays — even when empty");
+    }
+
     [Theory]
     [InlineData(@"E:\source.bin", @"E:\folder\destination.bin", true)]
     [InlineData(@"F:\source.bin", @"E:\folder\destination.bin", false)]

@@ -898,16 +898,30 @@ public sealed partial class FileService
             return;
         }
 
-        if (Kernel32NativeMethods.CreateDirectory(path, IntPtr.Zero))
+        if (TryCreateOwnedDirectory(path))
         {
             createdDestinationDirectories.Add(path);
-            return;
+        }
+    }
+
+    /// <summary>
+    /// Creates exactly one directory level through CreateDirectoryW and
+    /// reports whether THIS call created it — the atomic ownership proof an
+    /// Exists-check before a managed CreateDirectory cannot give (a foreign
+    /// actor can win the gap in between). False means the path already
+    /// existed: not ours, whoever made it keeps it.
+    /// </summary>
+    private static bool TryCreateOwnedDirectory(string path)
+    {
+        if (Kernel32NativeMethods.CreateDirectory(path, IntPtr.Zero))
+        {
+            return true;
         }
 
         int error = Marshal.GetLastWin32Error();
         if (error == ErrorAlreadyExists)
         {
-            return;
+            return false;
         }
 
         throw new IOException(

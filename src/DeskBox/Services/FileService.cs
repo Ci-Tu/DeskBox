@@ -2162,8 +2162,10 @@ public sealed partial class FileService
         {
         }
 
-        bool destinationPreExisted = Directory.Exists(normalizedDestination);
-        Directory.CreateDirectory(normalizedDestination);
+        // Creation ownership must come from the atomic call itself: an
+        // Exists-check first would still blame us for a directory a foreign
+        // actor created in between.
+        bool destinationCreatedByUs = TryCreateOwnedDirectory(normalizedDestination);
         var entries = Directory.EnumerateFileSystemEntries(normalizedSource).ToList();
         var skipped = new List<FileTransferSkippedItem>();
         IReadOnlyList<FileTransferResult> results;
@@ -2180,7 +2182,7 @@ public sealed partial class FileService
         }
         catch
         {
-            RemoveDestinationIfOursAndEmpty(normalizedDestination, destinationPreExisted);
+            RemoveDestinationIfOursAndEmpty(normalizedDestination, destinationCreatedByUs);
             throw;
         }
 
@@ -2191,20 +2193,21 @@ public sealed partial class FileService
 
         // A folder this call created but never populated (every entry skipped,
         // or a failure that left nothing behind) is litter, not a result.
-        RemoveDestinationIfOursAndEmpty(normalizedDestination, destinationPreExisted);
+        RemoveDestinationIfOursAndEmpty(normalizedDestination, destinationCreatedByUs);
         return new DirectoryMoveReport(results.Count, skipped);
     }
 
     /// <summary>
-    /// Deletes <paramref name="destination"/> only when this operation created
-    /// it (it did not exist beforehand) and nothing remains inside. A folder
-    /// that pre-existed or still holds entries is never touched.
+    /// Deletes <paramref name="destination"/> only when this operation
+    /// provably created it and nothing remains inside. A folder that
+    /// existed beforehand — whoever created it — or still holds entries is
+    /// never touched.
     /// </summary>
     private static void RemoveDestinationIfOursAndEmpty(
         string destination,
-        bool destinationPreExisted)
+        bool createdByUs)
     {
-        if (destinationPreExisted)
+        if (!createdByUs)
         {
             return;
         }
