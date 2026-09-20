@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
+using DeskBox.Core.Persistence;
 using DeskBox.Models;
 using DeskBox.Services;
 
@@ -1022,6 +1023,60 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
             Directory.EnumerateFiles(service.PreRestoreBackupDirectory, "*.zip").Any(),
             "no safety archive when nothing back-uppable exists");
         Assert.Contains("Dark", await File.ReadAllTextAsync(Path.Combine(currentData, "settings.json")));
+    }
+
+    [Fact]
+    public async Task ScopedRestore_RepeatedFailuresKeepOriginalSafetyBackup()
+    {
+        // A scoped restore retries on every launch until it converges.
+        // Each attempt must reuse the FIRST pre-restore snapshot — the only
+        // one holding pre-restore data — instead of stacking post-restore
+        // archives that eventually prune the original away.
+        string dataDir = Directory.CreateDirectory(
+            Path.Combine(_appDataRoot, "data")).FullName;
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "settings.json"),
+            """{"language":"xx-ORIGINAL","widgetOpacity":0.9}""");
+
+        // A layout stamped by a newer schema makes the style apply throw
+        // AFTER the safety net — every attempt fails, the marker stays.
+        var slice = new WidgetLayoutSettingsSlice
+        {
+            Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(dataDir, "widget-layout.json"),
+            JsonSerializer.Serialize(
+                new WidgetLayoutDocument { SchemaVersion = 99, Layout = slice },
+                WidgetLayoutJsonContext.Default.WidgetLayoutDocument));
+
+        var cloudSettings = new AppSettings { WidgetOpacity = 0.42 };
+        string backupPath = await new DeskBoxDataBackupService(_appDataRoot)
+            .ExportScopedBackupAsync(
+                _exportRoot,
+                CloudBackupDomain.WidgetStyle,
+                _ => Task.FromResult<byte[]?>(
+                    WidgetStyleBackupProjection.Serialize(cloudSettings)));
+
+        var service = new DeskBoxDataBackupService(_appDataRoot);
+        await service.PrepareScopedRestoreAsync(
+            backupPath, CloudBackupDomain.WidgetStyle);
+
+        for (int attempt = 0; attempt < 7; attempt++)
+        {
+            DeskBoxRestoreApplyResult result = await service.ApplyPendingRestoreAsync();
+            Assert.False(result.Succeeded, $"attempt {attempt} should keep failing");
+        }
+
+        string archive = Assert.Single(
+            Directory.GetFiles(service.PreRestoreBackupDirectory, "DeskBox-PreRestore-*.zip"));
+
+        using var zip = new ZipArchive(File.OpenRead(archive), ZipArchiveMode.Read);
+        ZipArchiveEntry? settingsEntry = zip.GetEntry("data/settings.json");
+        Assert.NotNull(settingsEntry);
+        using var reader = new StreamReader(settingsEntry!.Open());
+        string archivedSettings = await reader.ReadToEndAsync();
+        Assert.Contains("xx-ORIGINAL", archivedSettings);
     }
 
     [Fact]

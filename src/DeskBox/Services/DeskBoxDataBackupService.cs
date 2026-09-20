@@ -980,18 +980,7 @@ public sealed partial class DeskBoxDataBackupService
                 stagedDataDirectory,
                 requireSettings: !marker.AllowMissingSettings);
 
-            if (HasBackupSourceData())
-            {
-                Directory.CreateDirectory(PreRestoreBackupDirectory);
-                string preRestorePath = GetAvailableArchivePath(
-                    PreRestoreBackupDirectory,
-                    $"DeskBox-PreRestore-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
-                await CreateArchiveCoreAsync(
-                    preRestorePath, "pre-restore", cancellationToken,
-                    requireSettings: false);
-                PrunePreRestoreBackups();
-                App.Log($"[DataBackup] Created pre-restore backup '{preRestorePath}'.");
-            }
+            await EnsurePreRestoreSafetyBackupAsync(marker, cancellationToken);
 
             rollbackRoot = Path.Combine(_rootPath, "restore-rollback", Guid.NewGuid().ToString("N"));
             string rollbackDataDirectory = Path.Combine(rollbackRoot, "data");
@@ -1063,18 +1052,7 @@ public sealed partial class DeskBoxDataBackupService
         {
             // Full local safety net before ANY restore — same as the
             // classic path.
-            if (HasBackupSourceData())
-            {
-                Directory.CreateDirectory(PreRestoreBackupDirectory);
-                string preRestorePath = GetAvailableArchivePath(
-                    PreRestoreBackupDirectory,
-                    $"DeskBox-PreRestore-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
-                await CreateArchiveCoreAsync(
-                    preRestorePath, "pre-restore", cancellationToken,
-                    requireSettings: false);
-                PrunePreRestoreBackups();
-                App.Log($"[DataBackup] Created pre-restore backup '{preRestorePath}'.");
-            }
+            await EnsurePreRestoreSafetyBackupAsync(marker, cancellationToken);
 
             Directory.CreateDirectory(DataDirectory);
             foreach (CloudBackupDomain domain in CloudBackupDomains.FileDomains)
@@ -2230,14 +2208,62 @@ public sealed partial class DeskBoxDataBackupService
         }
     }
 
-    private void PrunePreRestoreBackups()
+    /// <summary>
+    /// Creates the pre-restore safety net once per pending-restore
+    /// transaction. A scoped restore retries on every launch until it
+    /// converges; creating a fresh archive per attempt would stack
+    /// post-restore states and eventually prune the FIRST snapshot — the
+    /// only one that actually holds pre-restore data. The pinned path is
+    /// written into the marker BEFORE the archive is created so a crash
+    /// can never leave an unbounded accumulation, and the pin exempts the
+    /// archive from pruning while the marker lives.
+    /// </summary>
+    private async Task EnsurePreRestoreSafetyBackupAsync(
+        PendingRestoreMarker marker,
+        CancellationToken cancellationToken)
     {
-        foreach (string obsoletePath in Directory
-                     .EnumerateFiles(PreRestoreBackupDirectory, "DeskBox-PreRestore-*.zip")
-                     .OrderByDescending(File.GetLastWriteTimeUtc)
-                     .Skip(MaxPreRestoreBackupCount))
+        if (marker.SafetyBackupPath is { } pinned && File.Exists(pinned))
         {
-            TryDeleteFile(obsoletePath);
+            return;
+        }
+
+        if (!HasBackupSourceData())
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(PreRestoreBackupDirectory);
+        string preRestorePath = GetAvailableArchivePath(
+            PreRestoreBackupDirectory,
+            $"DeskBox-PreRestore-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+        await WritePendingRestoreMarkerAtomicallyAsync(
+            PendingRestoreMarkerPath,
+            marker with { SafetyBackupPath = preRestorePath },
+            cancellationToken);
+        await CreateArchiveCoreAsync(
+            preRestorePath, "pre-restore", cancellationToken,
+            requireSettings: false);
+        PrunePreRestoreBackups(preRestorePath);
+        App.Log($"[DataBackup] Created pre-restore backup '{preRestorePath}'.");
+    }
+
+    private void PrunePreRestoreBackups(string? pinnedPath = null)
+    {
+        int kept = 0;
+        foreach (string candidatePath in Directory
+                     .EnumerateFiles(PreRestoreBackupDirectory, "DeskBox-PreRestore-*.zip")
+                     .OrderByDescending(File.GetLastWriteTimeUtc))
+        {
+            if (pinnedPath is not null &&
+                string.Equals(candidatePath, pinnedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (++kept > MaxPreRestoreBackupCount)
+            {
+                TryDeleteFile(candidatePath);
+            }
         }
     }
 
@@ -2551,7 +2577,13 @@ public sealed partial class DeskBoxDataBackupService
         // it captured whatever survived on a device that lost it. Refusing
         // to restore it would strand the very data it exists to protect.
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        bool AllowMissingSettings = false);
+        bool AllowMissingSettings = false,
+        // The safety archive belongs to this pending-restore transaction,
+        // not to a single apply attempt: retries reuse the FIRST snapshot
+        // (the only one holding pre-restore data) and pruning must never
+        // age it out while the marker lives.
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? SafetyBackupPath = null);
 
     [JsonSourceGenerationOptions(
         GenerationMode = JsonSourceGenerationMode.Metadata,
