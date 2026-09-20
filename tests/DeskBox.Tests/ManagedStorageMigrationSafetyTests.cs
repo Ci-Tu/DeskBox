@@ -1186,6 +1186,108 @@ public sealed class ManagedStorageMigrationSafetyTests : IDisposable
             FileService.ClassifyTransferError(new InvalidOperationException("odd")));
     }
 
+    [Fact]
+    public async Task UpdateDefaultManagedStorageRootAsync_DurablePairStaysOnOldRootWhenSettingsCommitFails()
+    {
+        // The migration's metadata commit spans two stores: widget-layout.json
+        // (mapped paths) commits before settings.json (the root). If the
+        // second commit dies, in-memory + physical rollback alone leaves the
+        // durable layout repointed at the new root while the files went
+        // home — an apparent-data-loss pair on next launch.
+        await _settingsService.LoadAsync();
+
+        var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widget.MappedFolderPath!).FullName;
+        string fileA = Path.Combine(folderA, "a.txt");
+        File.WriteAllText(fileA, "a");
+        _settingsService.Settings.DefaultManagedStorageRootPath = _storageRoot;
+        _settingsService.Settings.Widgets.Add(widget);
+        Assert.True(await _settingsService.SaveCheckedAsync(),
+            "The baseline pair must persist before the migration attempt.");
+
+        // Holding settings.json open lets the layout commit succeed while
+        // the settings commit (and the rollback re-save) hit a sharing
+        // violation — the exact split-commit failure under test.
+        string settingsPath = Path.Combine(_tempRoot, "settings", "settings.json");
+        ManagedStorageRollbackFailureException exception;
+        await using (new FileStream(
+                         settingsPath,
+                         FileMode.Open,
+                         FileAccess.ReadWrite,
+                         FileShare.None))
+        {
+            exception = await Assert.ThrowsAsync<ManagedStorageRollbackFailureException>(
+                () => _widgetManager.UpdateDefaultManagedStorageRootAsync(_newStorageRoot));
+        }
+
+        // A fresh load must not resurrect the new root: both durable files
+        // stay on the old state the physical rollback restored.
+        var reloaded = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        await reloaded.LoadAsync();
+        Assert.Equal(
+            _storageRoot,
+            reloaded.Settings.DefaultManagedStorageRootPath,
+            ignoreCase: true);
+        WidgetConfig persisted = Assert.Single(reloaded.Settings.Widgets);
+        Assert.Equal(folderA, persisted.MappedFolderPath, ignoreCase: true);
+
+        Assert.True(File.Exists(fileA),
+            "The physical rollback must return the file to the old root.");
+        Assert.False(Directory.Exists(Path.Combine(_newStorageRoot, "A")));
+        Assert.Single(exception.Failures);
+        Assert.Contains("durable widget mapping", exception.Failures[0].Reason);
+    }
+
+    [Fact]
+    public async Task RetrySkippedMigrationItemsAsync_MovesFilesBackWhenRepointPersistFails()
+    {
+        // A skipped-item retry physically delivers the files BEFORE
+        // persisting the repoint; saving through SaveAsync() would swallow
+        // a failed commit and leave files NEW + durable OLD. The repoint
+        // must roll the group back so every layer stays on the old mapping.
+        await _settingsService.LoadAsync();
+
+        var widget = CreateManagedWidget("A", Path.Combine(_storageRoot, "A"));
+        string folderA = Directory.CreateDirectory(widget.MappedFolderPath!).FullName;
+        string fileA = Path.Combine(folderA, "only.txt");
+        File.WriteAllText(fileA, "only");
+        _settingsService.Settings.DefaultManagedStorageRootPath = _storageRoot;
+        _settingsService.Settings.Widgets.Add(widget);
+        Assert.True(await _settingsService.SaveCheckedAsync());
+
+        string destinationFolder = Path.Combine(_newStorageRoot, "A");
+        var skipped = new ManagedStorageSkippedItem(
+            widget.Id,
+            widget.Name,
+            fileA,
+            Path.Combine(destinationFolder, "only.txt"),
+            FileService.FileTransferItemErrorKind.Unknown,
+            "locked during the first migration");
+
+        string settingsPath = Path.Combine(_tempRoot, "settings", "settings.json");
+        await using (new FileStream(
+                         settingsPath,
+                         FileMode.Open,
+                         FileAccess.ReadWrite,
+                         FileShare.None))
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => _widgetManager.RetrySkippedMigrationItemsAsync([skipped]));
+        }
+
+        Assert.True(File.Exists(fileA),
+            "Persist failure must return the retried file to its source folder.");
+        Assert.False(File.Exists(Path.Combine(destinationFolder, "only.txt")));
+        Assert.Equal(folderA, widget.MappedFolderPath, ignoreCase: true);
+
+        var reloaded = new SettingsService(Path.Combine(_tempRoot, "settings"));
+        await reloaded.LoadAsync();
+        Assert.Equal(
+            folderA,
+            Assert.Single(reloaded.Settings.Widgets).MappedFolderPath,
+            ignoreCase: true);
+    }
+
     private string _newStoragePath()
     {
         return SettingsService.NormalizeManagedStorageRootPath(_newStorageRoot);

@@ -590,7 +590,39 @@ public sealed partial class WidgetManager
                 widgetPlan.Widget.MappedFolderPath = originalStorage.MappedFolderPath;
             }
 
+            // A commit that died between the two stores can leave
+            // widget-layout.json carrying the new paths while settings.json
+            // kept the old root — the in-memory restore above alone would
+            // not heal that. Re-saving the restored state converges both
+            // durable files back to the old root; files-old + durable-old is
+            // the only consistent failure outcome.
+            bool metadataRestored;
+            try
+            {
+                metadataRestored = await _settingsService.SaveCheckedAsync(
+                    notifySubscribers: false);
+            }
+            catch (Exception metadataException)
+            {
+                App.Log(
+                    $"[ManagedStorageMigration] Durable-state rollback save " +
+                    $"failed: {metadataException}");
+                metadataRestored = false;
+            }
+
             var rollbackFailures = new List<ManagedStorageRollbackFailure>();
+            if (!metadataRestored)
+            {
+                rollbackFailures.Add(new ManagedStorageRollbackFailure(
+                    affectedWidgets.FirstOrDefault()?.Widget.Id ?? string.Empty,
+                    "managed storage metadata",
+                    normalizedNewRootPath,
+                    oldRootPath,
+                    PreserveExisting: true,
+                    "The durable widget mapping could not be restored; " +
+                    "widget-layout.json may still reference the new root."));
+            }
+
             foreach (var move in completedMoves.AsEnumerable().Reverse())
             {
                 try
@@ -972,7 +1004,45 @@ public sealed partial class WidgetManager
                      !Directory.EnumerateFileSystemEntries(group.Key.SourceFolder).Any()))
                 {
                     widget.MappedFolderPath = group.Key.DestinationFolder;
-                    await _settingsService.SaveAsync();
+                    if (!await _settingsService.SaveCheckedAsync())
+                    {
+                        // The physical move already landed; a persisted-old
+                        // mapping would orphan the items at the destination
+                        // (files NEW + durable OLD — the apparent-data-loss
+                        // pair). Undo the repoint and move the group back so
+                        // the failure leaves old + old on every layer.
+                        widget.MappedFolderPath = group.Key.SourceFolder;
+                        try
+                        {
+                            await _fileService.RelocateDirectoryAsync(
+                                group.Key.DestinationFolder,
+                                group.Key.SourceFolder,
+                                progress: null,
+                                cancellationToken,
+                                onItemError: null);
+                        }
+                        catch (Exception rollbackException)
+                        {
+                            throw new ManagedStorageRollbackFailureException(
+                                rollbackException,
+                                [
+                                    new ManagedStorageRollbackFailure(
+                                        group.Key.WidgetId,
+                                        group.Key.WidgetName,
+                                        group.Key.DestinationFolder,
+                                        group.Key.SourceFolder,
+                                        PreserveExisting: true,
+                                        "Persisting the repoint failed and the " +
+                                        "moved items could not be returned to " +
+                                        "the old folder.")
+                                ]);
+                        }
+
+                        throw new InvalidOperationException(
+                            $"Failed to persist the widget folder repoint " +
+                            $"for '{group.Key.WidgetName}'.");
+                    }
+
                     try
                     {
                         await RefreshFileWidgetAsync(widget.Id);
