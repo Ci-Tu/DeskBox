@@ -25,7 +25,9 @@ $ErrorActionPreference = 'Stop'
 # direction is mixed.
 function Get-TrendState {
     param([double[]]$Values, [double]$TolerancePercent)
-    if ($Values.Count -lt 2) { return 'Flat' }
+    # Fewer than two samples is not evidence of stability: "not measured"
+    # must never satisfy the plateau contract's "idle baseline stable" leg.
+    if ($Values.Count -lt 2) { return 'Insufficient' }
     $first = $Values[0]; $last = $Values[-1]
     $deltaPercent = if ($first -gt 0) { (($last - $first) / $first) * 100 } else { 0 }
     $ups = 0; $downs = 0
@@ -60,7 +62,10 @@ if ($SelfTest) {
         @{ Peaks = @(100, 103, 105);      Idles = @(400, 500, 600);       Expect = 'INCONCLUSIVE'; Note = 'flat peaks but idle baseline creeps' },
         @{ Peaks = @(100, 300, 300, 300); Idles = @();                    Expect = 'RISE';         Note = 'a single large step still flags' },
         @{ Peaks = @(100, 200, 150);      Idles = @();                    Expect = 'INCONCLUSIVE'; Note = 'net +50% without majority direction' },
-        @{ Peaks = @(100, 90, 80);        Idles = @(400, 395);            Expect = 'PLATEAU';      Note = 'falling peaks are not a leak signal' }
+        @{ Peaks = @(100, 90, 80);        Idles = @(400, 395);            Expect = 'PLATEAU';      Note = 'falling peaks are not a leak signal' },
+        @{ Peaks = @(100, 103, 99, 105);  Idles = @();                    Expect = 'INCONCLUSIVE'; Note = 'flat peaks but no idle evidence at all' },
+        @{ Peaks = @(100, 103, 99, 105);  Idles = @(400);                 Expect = 'INCONCLUSIVE'; Note = 'a single idle sample is not a trend' },
+        @{ Peaks = @(100, 103, 99, 105);  Idles = @(400, 398);            Expect = 'PLATEAU';      Note = 'flat peaks plus two stable idles' }
     )
     $failures = 0
     foreach ($case in $cases) {
