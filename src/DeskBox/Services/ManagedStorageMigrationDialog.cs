@@ -416,7 +416,35 @@ internal sealed class ManagedStorageMigrationDialog
         var decision = new TaskCompletionSource<FileService.FileTransferItemAction>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         _pendingItemDecision = decision;
-        _dispatcher.TryEnqueue(() => ShowItemError(error));
+
+        // The dialog's cancellation must end the wait even when the prompt
+        // never appeared (dispatcher dying mid-migration would otherwise
+        // leave the worker awaiting a decision that can never arrive).
+        await using CancellationTokenRegistration registration =
+            _cancellation.Token.Register(
+                static state => ((TaskCompletionSource<FileService.FileTransferItemAction>)state!)
+                    .TrySetResult(FileService.FileTransferItemAction.Abort),
+                decision);
+
+        if (!_dispatcher.TryEnqueue(() =>
+            {
+                try
+                {
+                    ShowItemError(error);
+                }
+                catch (Exception uiException)
+                {
+                    App.Log(
+                        $"[ManagedStorageMigration] Item error UI failed: {uiException}");
+                    decision.TrySetResult(FileService.FileTransferItemAction.Abort);
+                }
+            }))
+        {
+            // The dispatcher is gone (window closing): the prompt can never
+            // appear, so the worker must not wait on it.
+            _pendingItemDecision = null;
+            return FileService.FileTransferItemAction.Abort;
+        }
 
         FileService.FileTransferItemAction action = await decision.Task;
         return action;
