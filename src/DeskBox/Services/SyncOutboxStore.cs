@@ -76,10 +76,15 @@ public sealed class SyncOutboxStore
                      .EnumerateFiles(directory, "*.json", SearchOption.TopDirectoryOnly)
                      .Order(StringComparer.Ordinal))
         {
+            // The outbox contract is <domain>/<operation_id>.json: the
+            // envelope payload must agree with its storage location or a
+            // later dequeue would target the wrong file and the entry would
+            // re-push forever. A mismatch is corruption, not a variant.
+            string expectedOperationId = Path.GetFileNameWithoutExtension(path);
             ResilientJsonLoadResult<SyncEnvelope> result =
                 await ResilientJsonStore.LoadWithResultAsync(
                     path,
-                    static json =>
+                    json =>
                     {
                         // Fail closed on "parses but is not an envelope":
                         // `null`, `{}` or a record missing its identity must
@@ -93,10 +98,14 @@ public sealed class SyncOutboxStore
                                !string.IsNullOrWhiteSpace(e.CollectionId) &&
                                !string.IsNullOrWhiteSpace(e.EntityId) &&
                                !string.IsNullOrWhiteSpace(e.Domain) &&
-                               SyncDomains.IsKnownDomain(e.Domain)
+                               SyncDomains.IsKnownDomain(e.Domain) &&
+                               string.Equals(
+                                   e.Domain, domain, StringComparison.Ordinal) &&
+                               string.Equals(
+                                   e.OperationId, expectedOperationId, StringComparison.Ordinal)
                             ? e
                             : throw new InvalidDataException(
-                                "Sync outbox entry is not a valid envelope.");
+                                "Sync outbox entry does not match its storage location.");
                     },
                     static () => null!,
                     "SyncOutbox");

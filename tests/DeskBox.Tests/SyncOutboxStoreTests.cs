@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DeskBox.Core.Persistence;
 using DeskBox.Sync;
 using Xunit;
@@ -243,6 +244,32 @@ public sealed class SyncOutboxStoreTests : IDisposable
 
         Assert.Empty(pending);
         Assert.NotEmpty(Directory.GetFiles(badDir, "op-empty.json.corrupt-*"));
+    }
+
+    [Fact]
+    public async Task List_QuarantinesEnvelopeStoredAtWrongLocation()
+    {
+        // outbox/<domain>/<operation_id>.json is part of the contract: an
+        // envelope whose payload disagrees with its directory or file name
+        // would be dequeued at the wrong path and re-push forever.
+        var store = new SyncOutboxStore(OutboxDir);
+        await store.EnqueueAsync(Envelope(operation: "op-good"));
+        string todoDir = Directory.CreateDirectory(
+            Path.Combine(OutboxDir, SyncDomains.TodoData)).FullName;
+        // File name op-a.json, payload says domain=quick-capture-data,
+        // operation_id=op-b.
+        var rogue = Envelope(
+            domain: SyncDomains.QuickCaptureData,
+            operation: "op-b");
+        await File.WriteAllTextAsync(
+            Path.Combine(todoDir, "op-a.json"),
+            JsonSerializer.Serialize(rogue, SyncJsonContext.Default.SyncEnvelope));
+
+        IReadOnlyList<SyncEnvelope> pending = await store.ListAsync(SyncDomains.TodoData);
+
+        Assert.Single(pending);
+        Assert.Equal("op-good", pending[0].OperationId);
+        Assert.NotEmpty(Directory.GetFiles(todoDir, "op-a.json.corrupt-*"));
     }
 
     [Fact]
