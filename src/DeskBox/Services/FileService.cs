@@ -3270,6 +3270,7 @@ public sealed partial class FileService
     private const uint FileFlagOverlapped = 0x40000000;
     private const int FileDispositionInfoClass = 4; // FILE_INFO_BY_HANDLE_CLASS.FileDispositionInfo
     private const int ErrorAccessDenied = 5;
+    private const int ErrorAlreadyExists = 183;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileDispositionInfo

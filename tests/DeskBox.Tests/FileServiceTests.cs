@@ -729,6 +729,63 @@ public sealed class FileServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExecuteTransferPlanAsync_AbortedDirectoryMove_PreservesForeignDirectory()
+    {
+        // Same ownership rule as the foreign file: an EMPTY directory a
+        // foreign actor drops into the destination mid-copy is not ours —
+        // cleanup may only remove directories this operation provably
+        // created, never a re-enumerated empty tree.
+        var service = new FileService();
+        string sourceDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "foreign-dir-move-source")).FullName;
+        File.WriteAllText(Path.Combine(sourceDirectory, "01.txt"), "a");
+        string bigSource = Path.Combine(sourceDirectory, "02-big.bin");
+        await using (FileStream big = File.Create(bigSource))
+        {
+            big.SetLength(64L * 1024 * 1024);
+        }
+        string lockedFile = Path.Combine(sourceDirectory, "zz-locked.txt");
+        File.WriteAllText(lockedFile, "locked");
+        string destinationDirectory = Directory.CreateDirectory(
+            Path.Combine(_tempRoot, "foreign-dir-move-dest")).FullName;
+        string foreignDirectory = Path.Combine(destinationDirectory, "ForeignEmpty");
+        string copiedBigPath = Path.Combine(destinationDirectory, "02-big.bin");
+
+        var foreignWriter = Task.Run(async () =>
+        {
+            while (!File.Exists(copiedBigPath) &&
+                   !Directory.Exists(foreignDirectory))
+            {
+                await Task.Delay(1);
+            }
+
+            Directory.CreateDirectory(foreignDirectory);
+        });
+
+        await using (var lockStream = new FileStream(
+                         lockedFile, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            await Assert.ThrowsAsync<FileService.FileTransferCanceledException>(() =>
+                service.ExecuteTransferPlanAsync(
+                    [new FileService.FileTransferPlan(
+                        sourceDirectory,
+                        destinationDirectory)],
+                    move: true,
+                    onItemError: _ => Task.FromResult(
+                        FileService.FileTransferItemAction.Abort)));
+        }
+
+        await foreignWriter;
+        Assert.True(
+            Directory.Exists(foreignDirectory),
+            "a foreign directory dropped into the destination mid-copy is " +
+            "not ours to delete — even while empty");
+        Assert.False(File.Exists(copiedBigPath));
+        Assert.Single(Directory.EnumerateFileSystemEntries(destinationDirectory));
+        Assert.True(File.Exists(lockedFile));
+    }
+
+    [Fact]
     public async Task ExecuteTransferPlanAsync_AbortedDirectoryMove_UnremovablePartialEscalates()
     {
         // A partial destination file that cannot be removed (held open by

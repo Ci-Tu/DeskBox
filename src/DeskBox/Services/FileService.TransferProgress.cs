@@ -819,14 +819,15 @@ public sealed partial class FileService
         CancellationToken cancellationToken,
         ISet<string> visitedSourceDirectories,
         List<CopiedSourceFileRecord> copiedSourceFiles,
-        List<CopiedDestinationFileRecord>? copiedDestinationFiles = null)
+        List<CopiedDestinationFileRecord>? copiedDestinationFiles = null,
+        List<string>? createdDestinationDirectories = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         EnsureSafeRecursiveDirectoryCopy(
             sourceDirectory,
             destinationDirectory,
             visitedSourceDirectories);
-        Directory.CreateDirectory(destinationDirectory);
+        CreateDestinationDirectory(destinationDirectory, createdDestinationDirectories);
         foreach (string filePath in Directory.EnumerateFiles(sourceDirectory))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -874,8 +875,44 @@ public sealed partial class FileService
                 cancellationToken,
                 visitedSourceDirectories,
                 copiedSourceFiles,
-                copiedDestinationFiles);
+                copiedDestinationFiles,
+                createdDestinationDirectories);
         }
+    }
+
+    /// <summary>
+    /// Creates one destination directory level through CreateDirectoryW so
+    /// the return value atomically proves THIS operation created it — an
+    /// Exists-check before a managed CreateDirectory could still record a
+    /// directory a foreign actor won in between. Directories that already
+    /// exist never reach the manifest: cleanup may only delete objects this
+    /// operation provably created.
+    /// </summary>
+    private static void CreateDestinationDirectory(
+        string path,
+        List<string>? createdDestinationDirectories)
+    {
+        if (createdDestinationDirectories is null)
+        {
+            Directory.CreateDirectory(path);
+            return;
+        }
+
+        if (Kernel32NativeMethods.CreateDirectory(path, IntPtr.Zero))
+        {
+            createdDestinationDirectories.Add(path);
+            return;
+        }
+
+        int error = Marshal.GetLastWin32Error();
+        if (error == ErrorAlreadyExists)
+        {
+            return;
+        }
+
+        throw new IOException(
+            $"Failed to create destination directory '{path}' (win32={error}).",
+            new System.ComponentModel.Win32Exception(error));
     }
 
     private static async Task MoveDirectoryWithProgressAsync(
@@ -948,6 +985,7 @@ public sealed partial class FileService
 
         var copiedSourceFiles = new List<CopiedSourceFileRecord>();
         var copiedDestinationFiles = new List<CopiedDestinationFileRecord>();
+        var createdDestinationDirectories = new List<string>();
         try
         {
             await CopyDirectoryWithProgressAsync(
@@ -957,7 +995,8 @@ public sealed partial class FileService
                 cancellationToken,
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                 copiedSourceFiles,
-                copiedDestinationFiles);
+                copiedDestinationFiles,
+                createdDestinationDirectories);
         }
         catch (Exception copyFailure)
         {
@@ -965,14 +1004,13 @@ public sealed partial class FileService
             {
                 // Manifest-scoped cleanup only: each recorded destination
                 // file is deleted through a handle verified against the
-                // identity captured at its CreateNew call, and directories
-                // only leave while empty. A foreign file dropped into the
-                // tree mid-copy — or a directory that existed before we ran —
-                // is never touched.
+                // identity captured at its CreateNew call, and only
+                // directories this operation provably created leave — while
+                // empty. A foreign file or directory dropped into the tree
+                // mid-copy is never touched.
                 int stranded = CleanupCopiedDestinationTree(
-                    destinationDirectory,
-                    destinationExistedBefore,
-                    copiedDestinationFiles);
+                    copiedDestinationFiles,
+                    createdDestinationDirectories);
                 if (stranded > 0)
                 {
                     // Some of OUR objects could not be removed (locked,
@@ -1037,9 +1075,8 @@ public sealed partial class FileService
     /// that could not be removed.
     /// </summary>
     private static int CleanupCopiedDestinationTree(
-        string destinationDirectory,
-        bool destinationExistedBefore,
-        IReadOnlyList<CopiedDestinationFileRecord> copiedDestinationFiles)
+        IReadOnlyList<CopiedDestinationFileRecord> copiedDestinationFiles,
+        IReadOnlyList<string> createdDestinationDirectories)
     {
         int stranded = 0;
         for (int index = copiedDestinationFiles.Count - 1; index >= 0; index--)
@@ -1055,46 +1092,30 @@ public sealed partial class FileService
             }
         }
 
-        try
+        // Only directories this operation provably created may leave, and
+        // only while still empty — never a tree re-enumeration, which would
+        // take foreign directories dropped in mid-copy down with ours.
+        // Creation order puts parents before children, so reversing walks
+        // deepest-first without a re-sort.
+        for (int index = createdDestinationDirectories.Count - 1; index >= 0; index--)
         {
-            foreach (string directory in Directory
-                         .EnumerateDirectories(
-                             destinationDirectory,
-                             "*",
-                             SearchOption.AllDirectories)
-                         .OrderByDescending(path => path.Length))
+            string directory = createdDestinationDirectories[index];
+            try
             {
-                try
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
                 {
-                    Directory.Delete(directory, recursive: false);
+                    // Our directory was swapped for a junction/symlink: the
+                    // object at the path is foreign now — fail closed.
+                    continue;
                 }
-                catch (Exception)
-                {
-                    // Non-empty (foreign content or a stranded file) or
-                    // locked — either way it stays.
-                }
-            }
 
-            // The destination root itself is only ours when the operation
-            // created it; a pre-existing directory — even an empty one —
-            // belongs to whoever made it.
-            if (!destinationExistedBefore)
-            {
-                try
-                {
-                    Directory.Delete(destinationDirectory, recursive: false);
-                }
-                catch (Exception)
-                {
-                    // Leftover content (foreign or stranded) keeps it.
-                }
+                Directory.Delete(directory, recursive: false);
             }
-        }
-        catch (Exception ex)
-        {
-            App.Log(
-                $"[FileTransfer] Partial destination cleanup failed while " +
-                $"walking '{destinationDirectory}': {ex.Message}");
+            catch (Exception)
+            {
+                // Non-empty (foreign content or a stranded file), already
+                // gone, or locked — either way it stays.
+            }
         }
 
         return stranded;

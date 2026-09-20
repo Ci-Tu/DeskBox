@@ -32,6 +32,17 @@ internal static partial class Kernel32NativeMethods
         SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     internal static partial nint LoadLibraryEx(string fileName, nint file, uint flags);
 
+    /// <summary>
+    /// Creates exactly one directory level (no intermediate parents) and
+    /// fails with ERROR_ALREADY_EXISTS when the path exists — the return
+    /// value is the atomic proof of creation ownership that
+    /// Directory.CreateDirectory cannot give.
+    /// </summary>
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateDirectoryW",
+        SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool CreateDirectory(string pathName, nint securityAttributes);
+
     [DllImport("kernel32.dll", EntryPoint = "GetVolumePathNameW",
         CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
