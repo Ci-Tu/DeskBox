@@ -69,7 +69,10 @@ public sealed partial class FileSurfaceContent :
     // True from DragItemsStarting cancellation until the native DoDragDrop
     // call returns; guards the (platform-dependent) Completed event against
     // double-finishing a session the native path owns.
-    private bool _nativeFileDragInFlight;
+    // Revival seam for the shelved native drag-out (drag contract §8.1.1b):
+    // nothing assigns it today, so the WinUI Completed reconciliation always
+    // runs; a revived native path sets it to skip the double completion.
+    private bool _nativeFileDragInFlight = false;
     private bool _activeDragHandledAsStackMembership;
     private string? _activeDragSessionId;
     private readonly FileDragSessionState _sourceDragSession = new();
