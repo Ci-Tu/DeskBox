@@ -208,6 +208,65 @@ public sealed class SyncOutboxStoreTests : IDisposable
         Assert.Empty(loaded.Entities);
     }
 
+    // ── Write-time schema gate ────────────────────────────────────────
+
+    [Fact]
+    public async Task StateStore_SaveRefusesFutureSchemaFileWithoutPriorLoad()
+    {
+        // A fresh store carries no loaded stamp; only the write-time disk
+        // gate keeps a save-before-load from stamping v1 over a newer file.
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(
+            StatePath, """{"schemaVersion":2,"domains":{}}""");
+        var store = new SyncStateStore(StatePath);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => store.SaveAsync(new SyncStateDocument()));
+
+        Assert.Contains("\"schemaVersion\":2", await File.ReadAllTextAsync(StatePath));
+    }
+
+    [Fact]
+    public async Task StateStore_SaveRefusesAfterExternalNewerSchemaReplace()
+    {
+        // The cached stamp knows only what THIS instance loaded — an
+        // external replace after the load must still refuse the write.
+        var store = new SyncStateStore(StatePath);
+        await store.SaveAsync(new SyncStateDocument());
+        await store.LoadAsync();
+
+        await File.WriteAllTextAsync(
+            StatePath, """{"schemaVersion":2,"domains":{}}""");
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => store.SaveAsync(new SyncStateDocument()));
+        Assert.Contains("\"schemaVersion\":2", await File.ReadAllTextAsync(StatePath));
+    }
+
+    [Fact]
+    public async Task RevisionsStore_SaveRefusesFutureSchemaFileWithoutPriorLoad()
+    {
+        Directory.CreateDirectory(_tempRoot);
+        await File.WriteAllTextAsync(
+            RevisionsPath, """{"schemaVersion":2,"entities":{}}""");
+        var store = new SyncRevisionsStore(RevisionsPath);
+
+        await Assert.ThrowsAsync<InvalidDataException>(
+            () => store.SaveAsync(new SyncRevisionsDocument()));
+        Assert.Contains("\"schemaVersion\":2", await File.ReadAllTextAsync(RevisionsPath));
+    }
+
+    [Fact]
+    public void RevisionKey_SlashInsideIdsStaysUnambiguous()
+    {
+        // "a/b"+"c" and "a"+"b/c" must not collide — ids are GUIDs today,
+        // but the wire-protocol foundation should not depend on that.
+        Assert.NotEqual(
+            SyncRevisionRecord.Key("d", "a/b", "c"),
+            SyncRevisionRecord.Key("d", "a", "b/c"));
+        Assert.Equal("1:d3:a/bc", SyncRevisionRecord.Key("d", "a/b", "c"));
+    }
+
     // ── Structural validation: "valid JSON, invalid document" ─────────
 
     [Fact]

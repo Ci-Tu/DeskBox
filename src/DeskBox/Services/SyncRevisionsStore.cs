@@ -29,9 +29,13 @@ public sealed class SyncRevisionsDocument
 
 public sealed class SyncRevisionRecord
 {
-    /// <summary>Composite key used in <see cref="SyncRevisionsDocument.Entities"/>.</summary>
+    /// <summary>
+    /// Composite key used in <see cref="SyncRevisionsDocument.Entities"/>.
+    /// Length-prefixed so ids containing '/' stay unambiguous — a plain
+    /// "{a}/{b}/{c}" join cannot tell "a/b"+"c" from "a"+"b/c".
+    /// </summary>
     public static string Key(string domain, string collectionId, string entityId) =>
-        $"{domain}/{collectionId}/{entityId}";
+        $"{domain.Length}:{domain}{collectionId.Length}:{collectionId}{entityId}";
 
     /// <summary>Server-issued monotonically increasing revision of the
     /// last envelope the server holds for this entity.</summary>
@@ -88,20 +92,29 @@ public sealed class SyncRevisionsStore
             static () => new SyncRevisionsDocument(),
             "SyncRevisions");
 
-    public Task SaveAsync(SyncRevisionsDocument document)
+    public async Task SaveAsync(SyncRevisionsDocument document)
     {
         // Same read-only stance as WidgetLayoutStore.CanWrite: a file stamped
         // by a newer build is pristine to this one — overwriting it would
-        // drop fields the newer schema introduced.
-        if (_loadedSchemaVersion > CurrentSchemaVersion)
+        // drop fields the newer schema introduced. The cached stamp alone is
+        // not enough: it only knows what THIS instance loaded, so a fresh
+        // store saving before LoadAsync, or an external replace after our
+        // load, would stamp v1 over a newer file. Read the on-disk stamp at
+        // write time; an unreadable file falls through to the normal save
+        // path (corruption recovery owns it, not the schema gate).
+        int onDiskSchema = Math.Max(
+            _loadedSchemaVersion,
+            await SyncStoreSchemaGate.ReadDiskSchemaVersionAsync(
+                _revisionsPath, CurrentSchemaVersion));
+        if (onDiskSchema > CurrentSchemaVersion)
         {
             throw new InvalidDataException(
-                $"sync revisions.json schema {_loadedSchemaVersion} is newer " +
+                $"sync revisions.json schema {onDiskSchema} is newer " +
                 $"than this build understands ({CurrentSchemaVersion}); " +
                 "refusing to overwrite it.");
         }
 
-        return ResilientJsonStore.SaveAsync(
+        await ResilientJsonStore.SaveAsync(
             _revisionsPath,
             JsonSerializer.SerializeToUtf8Bytes(
                 document, SyncRevisionsJsonContext.Default.SyncRevisionsDocument));
