@@ -101,6 +101,25 @@ public sealed class WidgetLayoutStore
     internal int LoadedSchemaVersion => _loadedSchemaVersion;
 
     /// <summary>
+    /// Structural validation shared by every reader of widget-layout.json.
+    /// Fail closed on "parses but is not a layout document": `null`, `{}`
+    /// or `{"layout":null}` must not be adopted as an authoritative empty
+    /// layout — that would empty the desktop and strip the surviving
+    /// settings keys on the next save. Throwing routes the file through
+    /// the same quarantine/backup path as torn JSON.
+    /// </summary>
+    internal static WidgetLayoutDocument ParseLayoutDocument(string json)
+    {
+        WidgetLayoutDocument? document = JsonSerializer.Deserialize(
+            json,
+            WidgetLayoutJsonContext.Default.WidgetLayoutDocument);
+        return document?.Layout is { }
+            ? document
+            : throw new InvalidDataException(
+                "widget-layout.json is structurally empty.");
+    }
+
+    /// <summary>
     /// settings.json wire names owned by this store — the facade keys that
     /// stop being written once the store is authoritative. Derived from the
     /// slice's own serialization so a new member joins the strip set
@@ -132,22 +151,7 @@ public sealed class WidgetLayoutStore
         ResilientJsonLoadResult<WidgetLayoutDocument> result =
             await ResilientJsonStore.LoadWithResultAsync(
                 _layoutPath,
-                static json =>
-                {
-                    // Fail closed on "parses but is not a layout document":
-                    // `null`, `{}` or `{"layout":null}` must not be adopted
-                    // as an authoritative empty layout — that would empty
-                    // the desktop and strip the surviving settings keys on
-                    // the next save. Throwing routes the file through the
-                    // same quarantine/backup path as torn JSON.
-                    WidgetLayoutDocument? document = JsonSerializer.Deserialize(
-                        json,
-                        WidgetLayoutJsonContext.Default.WidgetLayoutDocument);
-                    return document?.Layout is { } layout
-                        ? document
-                        : throw new InvalidDataException(
-                            "widget-layout.json is structurally empty.");
-                },
+                static json => ParseLayoutDocument(json),
                 static () => new WidgetLayoutDocument { Layout = new WidgetLayoutSettingsSlice() },
                 "WidgetLayout");
 
@@ -220,9 +224,11 @@ public sealed class WidgetLayoutStore
             return false;
         }
 
+        bool primaryExistedBeforeCommit = File.Exists(_layoutPath);
         try
         {
             await SaveAsync(writeTempFileAsync);
+            _primaryExistedBeforeLastCommit = primaryExistedBeforeCommit;
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -231,6 +237,24 @@ public sealed class WidgetLayoutStore
             return false;
         }
     }
+
+    /// <summary>
+    /// Undoes this store's most recent commit so a composite save that
+    /// failed on its second file leaves no half-persisted pair: the
+    /// durable layout returns to exactly its pre-commit bytes.
+    /// </summary>
+    internal void RevertLastCommit()
+    {
+        if (_primaryExistedBeforeLastCommit is not { } hadPrimary)
+        {
+            return;
+        }
+
+        ResilientJsonStore.RevertLastCommit(_layoutPath, hadPrimary);
+        _primaryExistedBeforeLastCommit = null;
+    }
+
+    private bool? _primaryExistedBeforeLastCommit;
 
     private Task<bool> TrySaveSeedAsync(WidgetLayoutSettingsSlice seed) =>
         SaveCheckedAsync(tempPath => WriteSeedTempFileAsync(tempPath, seed));

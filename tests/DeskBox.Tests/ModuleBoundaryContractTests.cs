@@ -88,7 +88,10 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Services/NativeNotificationActivationEnvelopeStore.cs"] = 6,
         ["src/DeskBox/Services/QuickCaptureService.cs"] = 8,
         ["src/DeskBox/Services/ReleaseNotesService.cs"] = 1,
-        ["src/DeskBox/Services/ResilientJsonStore.cs"] = 7,
+        // +2: RevertLastCommit restores its own .bak (File.Copy) or deletes
+        // a primary the same commit created — composite-save rollback inside
+        // the store's owned surface.
+        ["src/DeskBox/Services/ResilientJsonStore.cs"] = 9,
         ["src/DeskBox/Services/TodoWidgetStore.cs"] = 3,
         ["src/DeskBox/Services/VirtualDropFileNameResolver.cs"] = 1,
         ["src/DeskBox/Services/WidgetManager.FeatureWidgets.cs"] = 1,

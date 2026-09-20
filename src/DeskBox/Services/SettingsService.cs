@@ -948,12 +948,14 @@ settings.FocusClickedWidgetOnRaise = false;
             // failure (and keeps the settings keys) instead of a false
             // success that silently discards the changes.
             bool layoutSaved = true;
+            bool layoutCommitted = false;
             string layoutFailureReason = "widget-layout.json commit failed";
             if (Layout.IsAuthoritative)
             {
                 if (Layout.CanWrite)
                 {
                     layoutSaved = await Layout.SaveCheckedAsync(WriteLayoutTempFileAsync);
+                    layoutCommitted = layoutSaved;
                 }
                 else
                 {
@@ -969,9 +971,36 @@ settings.FocusClickedWidgetOnRaise = false;
             // exists only in memory — the settings file must keep carrying
             // the keys so the data survives to the next successful save.
             bool stripLayoutKeys = Layout.IsAuthoritative && layoutSaved;
-            await ResilientJsonStore.SaveAsync(
-                _settingsPath,
-                tempPath => WriteSettingsTempFileAsync(tempPath, stripLayoutKeys));
+            try
+            {
+                await ResilientJsonStore.SaveAsync(
+                    _settingsPath,
+                    tempPath => WriteSettingsTempFileAsync(tempPath, stripLayoutKeys));
+            }
+            catch
+            {
+                // The two stores cannot commit atomically, so callers treat
+                // a false result as "nothing persisted". That contract is
+                // only honest if the layout commit is undone too — restore
+                // the layout primary to its pre-commit bytes (held in .bak
+                // by the commit that just ran) so the durable pair stays
+                // consistent instead of pointing half at the new state.
+                if (layoutCommitted)
+                {
+                    try
+                    {
+                        Layout.RevertLastCommit();
+                    }
+                    catch (Exception revertException)
+                    {
+                        App.Log(
+                            $"[SettingsService] Settings commit failed and the " +
+                            $"layout rollback failed too: {revertException}");
+                    }
+                }
+
+                throw;
+            }
             if (!layoutSaved)
             {
                 var failure = new SettingsPersistenceFailure(
