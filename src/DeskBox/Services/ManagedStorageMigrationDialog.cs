@@ -437,13 +437,26 @@ internal sealed class ManagedStorageMigrationDialog
         _errorView.Visibility = Visibility.Visible;
     }
 
+    /// <summary>
+    /// Which decision may auto-resolve future item errors when "apply to
+    /// all" is checked. Only Skip qualifies: Retry feeds FileService's
+    /// per-item retry loop, so a sticky Retry would spin forever on a
+    /// persistently locked file without ever asking again — "retry all"
+    /// must still let the user see each repeated failure.
+    /// </summary>
+    internal static FileService.FileTransferItemAction? ResolveStickyItemAction(
+        bool applyToAll,
+        FileService.FileTransferItemAction action)
+    {
+        return applyToAll && action == FileService.FileTransferItemAction.Skip
+            ? action
+            : null;
+    }
+
     private void CompleteItemDecision(FileService.FileTransferItemAction action)
     {
-        if (_applyAllCheck.IsChecked == true &&
-            action != FileService.FileTransferItemAction.Abort)
-        {
-            _stickyItemAction = action;
-        }
+        _stickyItemAction = ResolveStickyItemAction(
+            _applyAllCheck.IsChecked == true, action);
 
         _errorView.Visibility = Visibility.Collapsed;
         _progressView.Visibility = Visibility.Visible;
