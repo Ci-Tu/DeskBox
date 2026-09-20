@@ -97,6 +97,7 @@ public partial class App : Application
     private DisplayAreaWatcherService? _displayAreaWatcher;
     private DisplayTopologyTransitionCoordinator? _displayTopologyTransitionCoordinator;
     private AppLifecycleRecoveryWatcher? _lifecycleRecoveryWatcher;
+    private HookHealthWatchdog? _hookHealthWatchdog;
     private EverythingSearchService? _everythingSearchService;
     private SearchEngineService? _searchEngineService;
     private FileMetaService? _fileMetaService;
@@ -1455,6 +1456,27 @@ public partial class App : Application
         {
             Log($"[Lifecycle] Recovery watcher initialization failed: {ex.Message}");
         }
+
+        // Silent hook removal produces no message at all, so liveness needs an
+        // active probe rather than another window message.
+        if (Environment.GetEnvironmentVariable("DESKBOX_DISABLE_HOOK_WATCHDOG") is null)
+        {
+            try
+            {
+                _hookHealthWatchdog = new HookHealthWatchdog(
+                    UiDispatcherQueue,
+                    static message => Log(message));
+                _hookHealthWatchdog.Watch(() => GlobalHotkeyService);
+                _hookHealthWatchdog.Watch(() => _searchHotkeyService);
+                _hookHealthWatchdog.Watch(() => DesktopDoubleClickActivationService);
+            }
+            catch (Exception ex)
+            {
+                Log($"[Lifecycle] Hook watchdog initialization failed: {ex.Message}");
+                _hookHealthWatchdog?.Dispose();
+                _hookHealthWatchdog = null;
+            }
+        }
     }
 
     private void OnLifecycleRecoveryRequested(string reason)
@@ -1468,13 +1490,15 @@ public partial class App : Application
         bool requiresExternalRecovery =
             reason.Contains("resume", StringComparison.OrdinalIgnoreCase) ||
             reason.Contains("session-", StringComparison.OrdinalIgnoreCase) ||
-            reason.Contains("explorer-restart", StringComparison.OrdinalIgnoreCase);
+            reason.Contains("explorer-restart", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("display-power-on", StringComparison.OrdinalIgnoreCase);
         if (requiresExternalRecovery)
         {
             try
             {
                 GlobalHotkeyService?.RefreshRegistration();
                 DesktopDoubleClickActivationService?.RefreshRegistration();
+                _searchHotkeyService?.RefreshRegistration();
             }
             catch (Exception ex)
             {
@@ -2874,14 +2898,8 @@ public partial class App : Application
 
     private void SettingsWindow_ClosedForApp(object sender, WindowEventArgs args)
     {
-        // The window cancelled its own close to hide-and-reuse; the instance
-        // stays registered in _settingsWindow, so no teardown may run here.
-        if (args.Handled)
-        {
-            ScheduleBackgroundMemoryCleanup("settings-hidden");
-            return;
-        }
-
+        // Hide-and-reuse cancels at AppWindow.Closing and never reaches this
+        // event; Closed only ever runs for real destruction (shutdown).
         if (sender is SettingsWindow settingsWindow)
         {
             settingsWindow.Closed -= SettingsWindow_ClosedForApp;
@@ -4474,6 +4492,10 @@ public partial class App : Application
         _displayTopologyTransitionCoordinator = null;
         _lifecycleRecoveryWatcher?.Dispose();
         _lifecycleRecoveryWatcher = null;
+        // Stop probing before the hook services go away; a late recovery
+        // callback on a disposed target would be noisy and pointless.
+        _hookHealthWatchdog?.Dispose();
+        _hookHealthWatchdog = null;
 
         _diagnosticsService?.Dispose();
         _diagnosticsService = null;

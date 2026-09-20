@@ -235,7 +235,9 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/AutoStartDefaultPolicy.cs"] = 1,
         ["src/DeskBox/Services/DataBackupSettingsPolicy.cs"] = 15,
         ["src/DeskBox/Services/DesktopAutoOrganizationWatcher.cs"] = 13,
-        ["src/DeskBox/Services/DesktopDoubleClickActivationService.cs"] = 4,
+        // 5 = legacy 4 + DesktopDoubleClickEnabled read backing the hook
+        // watchdog's HookProbeWanted gate (activation service line 122).
+        ["src/DeskBox/Services/DesktopDoubleClickActivationService.cs"] = 5,
         ["src/DeskBox/Services/DesktopOrganizationCoordinator.cs"] = 13,
         ["src/DeskBox/Services/DesktopOrganizationTransaction.Restore.cs"] = 3,
         ["src/DeskBox/Services/DesktopOrganizationTransaction.cs"] = 9,

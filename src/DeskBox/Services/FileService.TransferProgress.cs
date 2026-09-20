@@ -629,12 +629,19 @@ public sealed partial class FileService
             IntPtr.Zero);
         if (sourceHandle.IsInvalid)
         {
-            // A sharing violation here means another process is writing the
+            int openError = Marshal.GetLastWin32Error();
+            // ERROR_SHARING_VIOLATION means another process is writing the
             // source: refuse the move rather than copy a moving target.
+            // ERROR_ACCESS_DENIED (readable-but-not-deletable sources such as
+            // Public Desktop shortcuts under an unelevated host) is a
+            // permission failure and must not be reported as "in use".
+            string refusal = openError == ErrorSharingViolation
+                ? "is in use"
+                : $"is not accessible to this process (win32={openError})";
             throw new IOException(
-                $"The source '{sourceFilePath}' is in use and cannot be moved safely " +
-                $"(win32={Marshal.GetLastWin32Error()}).",
-                Marshal.GetLastWin32Error());
+                $"The source '{sourceFilePath}' {refusal} and cannot be " +
+                "moved safely.",
+                openError);
         }
 
         FileStream? destination = null;

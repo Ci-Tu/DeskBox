@@ -1506,9 +1506,15 @@ public sealed partial class FileService
                 progress,
                 cancellationToken);
 #else
-            // The staged Native AOT profile still uses the validated legacy
-            // move bridge. Copy operations fall through to the safe managed
-            // engine until a source-generated/native Shell bridge is gated.
+            // The Native AOT profile keeps the legacy SHFileOperation bridge
+            // for same-volume moves: its partial/cancel/late-return contract
+            // is pinned by the AOT managed-UI smoke matrix. Everything else —
+            // cross-volume moves and copies — uses the modern IFileOperation
+            // engine. Only that engine can surface the Shell's elevation and
+            // per-item error UI, which readable-but-not-deletable sources
+            // (e.g. Public Desktop shortcuts) need when the host runs
+            // unelevated; the managed engine instead fails with a raw
+            // access-denied error.
             if (move && CanUseLegacyShellMove(operations.Select(operation =>
                     new FileTransferPlan(
                         operation.SourcePath,
@@ -1519,12 +1525,12 @@ public sealed partial class FileService
                     ownerWindowHandle);
             }
 
-            if (move)
-            {
-                App.Log(
-                    "[FileTransfer] Legacy Shell move bypassed because one or " +
-                    "more items cross filesystem roots.");
-            }
+            return await ExecuteModernShellTransferPlanAsync(
+                operations,
+                move,
+                ownerWindowHandle,
+                progress,
+                cancellationToken);
 #endif
         }
 
@@ -3273,6 +3279,7 @@ public sealed partial class FileService
     private const uint FileFlagOverlapped = 0x40000000;
     private const int FileDispositionInfoClass = 4; // FILE_INFO_BY_HANDLE_CLASS.FileDispositionInfo
     private const int ErrorAccessDenied = 5;
+    private const int ErrorSharingViolation = 32;
     private const int ErrorAlreadyExists = 183;
 
     [StructLayout(LayoutKind.Sequential)]

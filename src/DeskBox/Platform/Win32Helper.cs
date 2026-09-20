@@ -581,6 +581,279 @@ public static partial class Win32Helper
         return false;
     }
 
+    /// <summary>
+    /// Tick count of the last user input anywhere in this session
+    /// (GetLastInputInfo). Returns false when the platform call fails.
+    /// </summary>
+    public static bool TryGetLastInputTickCount(out uint lastInputTickCount)
+    {
+        var info = new LASTINPUTINFO { Size = (uint)Marshal.SizeOf<LASTINPUTINFO>() };
+        if (GetLastInputInfo(ref info))
+        {
+            lastInputTickCount = info.Time;
+            return true;
+        }
+
+        lastInputTickCount = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Id of a named clipboard format (RegisterClipboardFormat). Zero means
+    /// the platform call failed and the format must be treated as
+    /// unavailable, never as a valid format id.
+    /// </summary>
+    public static ushort GetRegisteredClipboardFormat(string format) =>
+        (ushort)RegisterClipboardFormatW(format);
+
+    /// <summary>
+    /// True while the current thread is servicing a COM call that originated
+    /// in another process (CoGetCallerTID: S_OK = same-process caller,
+    /// S_FALSE = different-process caller). Not a security boundary: the OS
+    /// documents that the returned information can be spoofed and must never
+    /// drive security decisions — this is fit for UX-level filtering and
+    /// diagnostics only. Behavior when no COM call is in flight is pinned by
+    /// CoGetCallerTidProbeTests.
+    /// </summary>
+    public static bool IsComCallerOutOfProcess() =>
+        CoGetCallerTID(out _) == S_FALSE;
+
+    private const int S_FALSE = 1;
+
+    [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW",
+        StringMarshalling = StringMarshalling.Utf16)]
+    private static partial uint RegisterClipboardFormatW(string format);
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoGetCallerTID(out uint threadId);
+
+    /// <summary>
+    /// Runs the OLE drag loop on the calling STA thread. Synchronous: it does
+    /// not return until the user drops, cancels, or the drop source ends the
+    /// operation. The returned HRESULT is DRAGDROP_S_DROP/DRAGDROP_S_CANCEL
+    /// on normal endings (both non-negative), and finalEffect carries the
+    /// target's chosen effect.
+    /// </summary>
+    public static unsafe int RunOleDragDrop(
+        nint dataObject,
+        nint dropSource,
+        uint allowedEffects,
+        out uint finalEffect) =>
+        DoDragDrop(dataObject, dropSource, allowedEffects, out finalEffect);
+
+    /// <summary>
+    /// Initializes COM with OLE support on the current thread (drag-and-drop
+    /// requires the OLE apartment, not plain CoInitialize). Returns the
+    /// HRESULT; S_FALSE means already initialized (still balanced by
+    /// OleUninitialize).
+    /// </summary>
+    public static int InitializeOleOnCurrentThread() => OleInitialize(0);
+
+    /// <summary>
+    /// Releases the OLE apartment established by
+    /// <see cref="InitializeOleOnCurrentThread"/> on the current thread.
+    /// </summary>
+    public static void UninitializeOleOnCurrentThread() => OleUninitialize();
+
+    [LibraryImport("ole32.dll")]
+    private static partial int OleInitialize(nint reserved);
+
+    [LibraryImport("ole32.dll")]
+    private static partial void OleUninitialize();
+
+    /// <summary>
+    /// Releases the mouse capture held by any window on the calling thread.
+    /// Used before starting a native drag loop: a cancelled WinUI drag
+    /// gesture keeps the XAML input island's capture, which starves
+    /// DoDragDrop's own capture and freezes the system-wide drag lock.
+    /// </summary>
+    public static bool TryReleaseMouseCapture() => ReleaseCapture();
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ReleaseCapture();
+
+    [LibraryImport("ole32.dll", EntryPoint = "DoDragDrop")]
+    private static partial int DoDragDrop(
+        nint pDataObj,
+        nint pDropSource,
+        uint dwOKEffects,
+        out uint pdwEffect);
+
+    /// <summary>
+    /// Allocates movable global memory and copies <paramref name="data"/> into
+    /// it, ready to be handed to IDataObject::SetData as a TYMED_HGLOBAL
+    /// medium with ownership transfer. Returns false when allocation fails.
+    /// </summary>
+    public static unsafe bool TryCreateGlobalMemory(
+        ReadOnlySpan<byte> data,
+        out nint globalMemory)
+    {
+        globalMemory = GlobalAlloc(GmemMoveable | GmemZeroInit, (nuint)Math.Max(1, data.Length));
+        if (globalMemory == 0)
+        {
+            return false;
+        }
+
+        byte* locked = (byte*)GlobalLock(globalMemory);
+        if (locked == null)
+        {
+            GlobalFree(globalMemory);
+            globalMemory = 0;
+            return false;
+        }
+
+        try
+        {
+            data.CopyTo(new Span<byte>(locked, data.Length));
+        }
+        finally
+        {
+            _ = GlobalUnlock(globalMemory);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Frees global memory whose ownership did not transfer to a data object
+    /// (IDataObject::SetData rejected the medium).
+    /// </summary>
+    public static void FreeGlobalMemory(nint globalMemory)
+    {
+        if (globalMemory != 0)
+        {
+            GlobalFree(globalMemory);
+        }
+    }
+
+    /// <summary>
+    /// Reads a NUL-terminated UTF-16 string from global memory, bounded by
+    /// the allocation size so a malformed payload cannot run off the block.
+    /// </summary>
+    public static unsafe bool TryReadGlobalMemoryText(
+        nint globalMemory,
+        out string text)
+    {
+        text = string.Empty;
+        if (globalMemory == 0)
+        {
+            return false;
+        }
+
+        char* locked = (char*)GlobalLock(globalMemory);
+        if (locked == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            nuint bytes = GlobalSize(globalMemory);
+            int maxChars = (int)Math.Min(bytes / 2, 8192);
+            int length = 0;
+            while (length < maxChars && locked[length] != '\0')
+            {
+                length++;
+            }
+
+            if (length == 0)
+            {
+                return false;
+            }
+
+            text = new string(locked, 0, length);
+            return true;
+        }
+        finally
+        {
+            _ = GlobalUnlock(globalMemory);
+        }
+    }
+
+    /// <summary>
+    /// Releases a STGMEDIUM obtained from IDataObject::GetData; ownership of
+    /// the contained medium transfers back to OLE.
+    /// </summary>
+    internal static unsafe void ReleaseStorageMedium(
+        ref Helpers.NativeStorageMedium medium)
+    {
+        fixed (Helpers.NativeStorageMedium* pointer = &medium)
+        {
+            ReleaseStgMedium(pointer);
+        }
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nuint GlobalSize(nint memory);
+
+    [LibraryImport("ole32.dll")]
+    private static unsafe partial void ReleaseStgMedium(void* medium);
+
+    private const uint GmemMoveable = 0x0002;
+    private const uint GmemZeroInit = 0x0040;
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint GlobalAlloc(uint flags, nuint bytes);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint GlobalLock(nint memory);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GlobalUnlock(nint memory);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint GlobalFree(nint memory);
+
+    /// <summary>
+    /// Sends a tagged +1/-1 pixel mouse move pair whose net movement is zero.
+    /// A low-level mouse hook can recognize the ExtraInfo tag and treat the
+    /// delivered callback as a liveness echo.
+    /// </summary>
+    public static unsafe bool TrySendTaggedMouseMoveNudge(IntPtr extraInfo, out int errorCode)
+    {
+        var tag = new UIntPtr(unchecked((ulong)extraInfo.ToInt64()));
+        INPUT* inputs = stackalloc INPUT[2];
+        inputs[0] = CreateMouseMoveInput(1, 0, tag);
+        inputs[1] = CreateMouseMoveInput(-1, 0, tag);
+
+        uint sent = SendInput(2, inputs, sizeof(INPUT));
+        if (sent == 2)
+        {
+            errorCode = 0;
+            return true;
+        }
+
+        errorCode = Marshal.GetLastWin32Error();
+        if (errorCode == 0)
+        {
+            errorCode = 31; // ERROR_GEN_FAILURE
+        }
+
+        return false;
+    }
+
+    private static INPUT CreateMouseMoveInput(int dx, int dy, UIntPtr extraInfo)
+    {
+        return new INPUT
+        {
+            Type = 0, // INPUT_MOUSE
+            Data = new INPUTUNION
+            {
+                Mouse = new MOUSEINPUT
+                {
+                    X = dx,
+                    Y = dy,
+                    MouseData = 0,
+                    Flags = 0x0001, // MOUSEEVENTF_MOVE
+                    Time = 0,
+                    ExtraInfo = extraInfo
+                }
+            }
+        };
+    }
+
     private static unsafe bool TrySendKeyboardEvent(
         ushort virtualKey,
         uint flags,
@@ -796,6 +1069,117 @@ public static partial class Win32Helper
         uint inputCount,
         INPUT* inputs,
         int inputSize);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint Size;
+        public uint Time;
+    }
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    // Power setting notifications (display on/off etc.) delivered as
+    // WM_POWERBROADCAST/PBT_POWERSETTINGCHANGE to a window.
+    public const uint PbtPowerSettingChange = 0x8013;
+    public const uint DeviceNotifyWindowHandle = 0;
+
+    /// <summary>GUID_CONSOLE_DISPLAY_STATE — console display on/off/dimmed.</summary>
+    public static readonly Guid ConsoleDisplayStatePowerSetting =
+        new("6FE69556-704A-47A0-8F24-C28D936FDA47");
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PowerBroadcastSetting
+    {
+        public Guid PowerSetting;
+        public uint DataLength;
+        public byte Data;
+    }
+
+    [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "RegisterPowerSettingNotification")]
+    public static partial IntPtr RegisterPowerSettingNotification(
+        IntPtr hWnd,
+        ref Guid powerSettingGuid,
+        uint flags);
+
+    [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "UnregisterPowerSettingNotification")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool UnregisterPowerSettingNotification(IntPtr handle);
+
+    // System-wide visual effects (HKCU-scoped per-user parameters).
+    private const uint SpiGetDropShadow = 0x1024;
+    private const uint SpiSetDropShadow = 0x1025;
+    private const uint SpifUpdateIniFile = 0x0001;
+    private const uint SpifSendChange = 0x0002;
+
+    // pvParam is polymorphic: GET actions want a pointer to the receiving
+    // buffer; simple BOOL SET actions want the new value passed BY VALUE in
+    // the pvParam slot — a marshalled pointer is always nonzero, i.e. TRUE.
+    [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "SystemParametersInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SystemParametersInfo(
+        uint uiAction,
+        uint uiParam,
+        IntPtr pvParam,
+        uint fWinIni);
+
+    /// <summary>Reads the system-wide "show shadows under windows" effect.</summary>
+    public static bool TryGetWindowDropShadowEnabled(out bool enabled)
+    {
+        enabled = false;
+        try
+        {
+            unsafe
+            {
+                int value = 0;
+                if (!SystemParametersInfo(SpiGetDropShadow, 0, (IntPtr)(&value), 0))
+                {
+                    return false;
+                }
+
+                enabled = value != 0;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes the system-wide "show shadows under windows" effect the same way
+    /// the Performance Options dialog does: persist to the profile and broadcast
+    /// WM_SETTINGCHANGE. Affects every window with a non-client frame, not just
+    /// this app — callers must confirm with the user before invoking.
+    /// </summary>
+    public static bool TrySetWindowDropShadowEnabled(bool enabled, out int errorCode)
+    {
+        errorCode = 0;
+        var value = (IntPtr)(enabled ? 1 : 0);
+        try
+        {
+            if (SystemParametersInfo(
+                    SpiSetDropShadow,
+                    0,
+                    value,
+                    SpifUpdateIniFile | SpifSendChange))
+            {
+                return true;
+            }
+
+            errorCode = Marshal.GetLastWin32Error();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            errorCode = ex.HResult;
+            return false;
+        }
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct MSG
