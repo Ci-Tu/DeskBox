@@ -207,6 +207,10 @@ internal sealed class HookHealthWatchdog : IDisposable
         }
         else
         {
+            // Canary side effects (one synthetic keystroke/mouse nudge) are
+            // user-visible in principle — always log them so field logs show
+            // the probe cadence without flipping verbose flags.
+            _log($"[HookWatchdog] {target.ProbeName} silent while input flows; issuing tagged canary");
             dead = !await target.ProbeHookAliveAsync(CanaryEchoWaitMs).ConfigureAwait(false);
         }
 
