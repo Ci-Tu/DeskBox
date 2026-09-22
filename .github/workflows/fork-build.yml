@@ -115,9 +115,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         shell: pwsh
         run: |
-          gh release delete "v$env:VERSION" --yes --cleanup-tag 2>$null
-          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
-          Write-Host "Previous release v$env:VERSION removed (if any)."
+          gh release delete "v$env:VERSION" --yes --cleanup-tag
+          if ($LASTEXITCODE -ne 0) { Write-Host "No previous release v$env:VERSION (exit $LASTEXITCODE) - continuing."; $global:LASTEXITCODE = 0 }
 
       - name: Publish GitHub Release
         if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
@@ -128,7 +127,10 @@ jobs:
         run: |
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
           $notes = "Fork 自动构建`n`n- 基于 upstream Tianyu199509/DeskBox 最新 main`n- 附加补丁: 搜索支持双击 Ctrl 唤起、自动更新指向本仓库`n- 构建时间: $date`n`n安装包: DeskBox_Setup_${env:VERSION}_x64.exe(附同名 .sha256 校验文件)`n应用内更新会自动从本仓库 Releases 拉取。"
+          $assets = Get-ChildItem ".\.artifacts\fork-release" -File | ForEach-Object { $_.FullName }
+          if ($assets.Count -eq 0) { throw "No release assets were collected." }
           gh release create "v$env:VERSION" `
             --title "DeskBox v$env:VERSION (fork build)" `
             --notes $notes `
-            ".\.artifacts\fork-release\*"
+            @assets
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit $LASTEXITCODE." }
