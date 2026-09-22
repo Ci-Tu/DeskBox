@@ -13,7 +13,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void ProductionInventory_IsFrozenAtThirtyOneFilesAndSeventyTwoCalls()
+    public void ProductionInventory_IsFrozenAtThirtyFiveFilesAndEightyThreeCalls()
     {
         var expected = new Dictionary<string, int>(StringComparer.Ordinal)
         {
@@ -44,11 +44,14 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             ["src/DeskBox/Services/QuickCaptureStore.cs"] = 2,
             ["src/DeskBox/Services/SearchHistoryService.cs"] = 2,
             ["src/DeskBox/Services/SettingsMigrationService.cs"] = 2,
-            ["src/DeskBox/Services/SettingsService.cs"] = 2,
-            ["src/DeskBox/Services/TodoWidgetStore.cs"] = 2,
+            ["src/DeskBox/Services/SettingsService.cs"] = 3,
+            ["src/DeskBox/Services/SyncOutboxStore.cs"] = 2,
+            ["src/DeskBox/Services/SyncRevisionsStore.cs"] = 2,
+            ["src/DeskBox/Services/SyncStateStore.cs"] = 2,
+            ["src/DeskBox/Services/TodoWidgetStore.cs"] = 3,
             ["src/DeskBox/Services/WeatherService.cs"] = 5,
             ["src/DeskBox/Services/WidgetFileStackSettings.cs"] = 7,
-            ["src/DeskBox/Services/WidgetStyleBackupProjection.cs"] = 1
+            ["src/DeskBox/Services/WidgetLayoutStore.cs"] = 2
         };
 
         Dictionary<string, int> actual = ProductionSourceFiles()
@@ -68,8 +71,8 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             Assert.Equal(expectedCount, actual[path]);
         }
 
-        Assert.Equal(32, actual.Count);
-        Assert.Equal(74, actual.Values.Sum());
+        Assert.Equal(35, actual.Count);
+        Assert.Equal(83, actual.Values.Sum());
 
         string[] expectedContextOwners =
         [
@@ -98,9 +101,13 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             "src/DeskBox/Services/QuickCaptureStore.cs",
             "src/DeskBox/Services/SearchHistoryService.cs",
             "src/DeskBox/Services/SettingsService.cs",
+            "src/DeskBox/Services/SyncRevisionsStore.cs",
+            "src/DeskBox/Services/SyncStateStore.cs",
             "src/DeskBox/Services/TodoWidgetStore.cs",
             "src/DeskBox/Services/WeatherService.cs",
-            "src/DeskBox/Services/WidgetFileStackSettings.cs"
+            "src/DeskBox/Services/WidgetFileStackSettings.cs",
+            "src/DeskBox/Services/WidgetLayoutStore.cs",
+            "src/DeskBox/Sync/SyncJsonContext.cs"
         ];
         string[] actualContextOwners = ProductionSourceFiles()
             .Where(path => File.ReadAllText(path).Contains(
@@ -110,7 +117,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             .Order()
             .ToArray();
 
-        Assert.Equal(28, actualContextOwners.Length);
+        Assert.Equal(32, actualContextOwners.Length);
         Assert.Equal(expectedContextOwners, actualContextOwners);
     }
 
@@ -207,9 +214,9 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
 
         var expectedTypeInfoReferences = new Dictionary<string, int>(StringComparer.Ordinal)
         {
-            ["SettingsJsonContext.Default.AppSettings"] = 2,
+            ["SettingsJsonContext.Default.AppSettings"] = 3,
             ["QuickCaptureJsonContext.Default.StoreData"] = 2,
-            ["TodoJsonContext.Default.StoreData"] = 2,
+            ["TodoJsonContext.Default.StoreData"] = 3,
             ["GlancePreferencesJsonContext.Default.Preferences"] = 7,
             ["GlanceImageCatalogJsonContext.Default.ImageCatalog"] = 2,
             ["WidgetMetadataJsonContext.Default.StringMap"] = 2,
@@ -225,7 +232,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
                     Regex.Escape(reference) + @"\b").Count);
         }
 
-        Assert.Equal(22, expectedTypeInfoReferences.Values.Sum());
+        Assert.Equal(24, expectedTypeInfoReferences.Values.Sum());
         Assert.DoesNotContain("JsonSerializerOptions", allPhaseTwoSources, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "new JsonStringEnumConverter()",
@@ -316,11 +323,13 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         var expectedBackupTypeInfoReferences = new Dictionary<string, int>(StringComparer.Ordinal)
         {
             ["s_settingsDataJsonContext.AppSettings"] = 1,
-            // +2 each: ValidateScopedRestoreData validates the same store
-            // types for cloud-backup domain archives, and
-            // CountStagedDomainItems reuses them for the restore preview.
-            ["s_quickCaptureDataJsonContext.StoreData"] = 5,
-            ["s_todoDataJsonContext.StoreData"] = 5
+            // +3 each: ValidateScopedRestoreData validates the same store
+            // types for cloud-backup domain archives,
+            // CountStagedDomainItems reuses them for the restore preview,
+            // and CountStagedAttachmentReferences for the dangling-
+            // attachment warning count.
+            ["s_quickCaptureDataJsonContext.StoreData"] = 6,
+            ["s_todoDataJsonContext.StoreData"] = 6
         };
         foreach ((string reference, int expectedCount) in expectedAttachmentTypeInfoReferences)
         {
@@ -337,7 +346,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         }
 
         Assert.Equal(
-            13,
+            15,
             expectedAttachmentTypeInfoReferences.Values.Sum() +
             expectedBackupTypeInfoReferences.Values.Sum());
         foreach (string source in new[] { attachmentHealth, backup })
@@ -432,7 +441,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             ["QuickCaptureStoreData", "TodoWidgetData"],
             GenericTypeArguments(attachmentHealth, "ReadJson"));
         Assert.Equal(
-            ["AppSettings", "DesktopOrganizationHistoryData", "QuickCaptureStoreData", "TodoWidgetData"],
+            ["AppSettings", "DesktopOrganizationHistoryData", "QuickCaptureStoreData", "TodoWidgetData", "WidgetLayoutDocument"],
             GenericTypeArguments(backup, "ValidateJsonFileIfPresent"));
         Assert.Contains(
             "private static T ReadJson<T>(string path, JsonTypeInfo<T> jsonTypeInfo)",
@@ -445,10 +454,13 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             backup.ReplaceLineEndings("\r\n"),
             StringComparison.Ordinal);
 
-        // Two call sites: classic prepare + scoped cloud prepare. Both must
-        // still go through the same atomic-write helper.
+        // Five call sites: classic prepare + scoped cloud prepare + the
+        // pre-restore safety backup pin + the confirm-dialog item-merge
+        // mode update + the scoped-restore attempt-count persistence
+        // (part of the bounded-retry abandon cap). All must still go
+        // through the same atomic-write helper.
         Assert.Equal(
-            2,
+            5,
             Regex.Matches(
                 backup,
                 @"await\s+WritePendingRestoreMarkerAtomicallyAsync\s*\(").Cast<Match>().Count());

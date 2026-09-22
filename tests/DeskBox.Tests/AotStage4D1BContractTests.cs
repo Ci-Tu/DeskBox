@@ -59,8 +59,8 @@ public sealed class AotStage4D1BContractTests
         // containers have no Header/Description property.
         IReadOnlyDictionary<string, int> usages = ReadLocalizedXamlUsages();
         Assert.Equal(10, usages.Count);
-        Assert.Equal(180, usages["toolkit:SettingsCard|HeaderKey"]);
-        Assert.Equal(151, usages["toolkit:SettingsCard|DescriptionKey"]);
+        Assert.Equal(182, usages["toolkit:SettingsCard|HeaderKey"]);
+        Assert.Equal(153, usages["toolkit:SettingsCard|DescriptionKey"]);
         Assert.Equal(20, usages["toolkit:SettingsExpander|HeaderKey"]);
         Assert.Equal(7, usages["toolkit:SettingsExpander|DescriptionKey"]);
         Assert.Equal(2, usages["TextBox|HeaderKey"]);
@@ -69,7 +69,7 @@ public sealed class AotStage4D1BContractTests
         Assert.Equal(1, usages["StackPanel|HeaderKey"]);
         Assert.Equal(1, usages["Expander|HeaderKey"]);
         Assert.Equal(1, usages["Expander|DescriptionKey"]);
-        Assert.Equal(366, usages.Values.Sum());
+        Assert.Equal(370, usages.Values.Sum());
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class AotStage4D1BContractTests
     {
         string script = ReadRepositoryFile("scripts/publish-aot-audit.ps1");
 
-        Assert.Contains("$auditProfileVersion = 58", script, StringComparison.Ordinal);
+        Assert.Contains("$auditProfileVersion = 59", script, StringComparison.Ordinal);
         Assert.Contains("schemaVersion = 55", script, StringComparison.Ordinal);
         Assert.Contains("stage4D1BWarningMessages", script, StringComparison.Ordinal);
         Assert.Contains("QuickCaptureSurfaceContent.xaml.cs", script, StringComparison.Ordinal);
