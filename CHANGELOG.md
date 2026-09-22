@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.5.5 - 2026-09-21
+
+### English
+
+#### New features
+
+- Cloud backup now supports scoped restore: pick which data domains to bring back (todo, quick capture, widget style) and choose between merge — newer entries win, nothing on this device is deleted — or a full snapshot-faithful restore. Restores stage and validate first, then apply safely on the next launch.
+- Widgets can now trim idle memory after a few seconds of true quiet, not only when everything is hidden. Controlled by the new "Trim memory when idle" performance option.
+- A one-time hint now explains when Mica/Acrylic materials fall back to a solid color because Windows transparency effects or battery saver turned them off.
+- Compact widgets can override the expansion direction per widget (auto / down / up) from the collapse menu, and capsule bars can be reordered by dragging.
+
+#### Interface
+
+- Snap alignment feedback while resizing or dragging widgets is now a crisp accent edge band that settles once — the old looping breathing glow is gone, and the band dissolves cleanly around rounded corners.
+- New widget groups now default to the tab navigation style.
+- The material-fallback hint now also appears the moment transparency effects are switched off mid-session, not only at launch or when settings are saved.
+
+#### Performance and memory
+
+- Idle z-order normalization now reorders widgets as a peer group instead of flattening them to the desktop bottom, reducing visible reordering flicker.
+- Memory cleanup is better coordinated: immediate-hidden and idle trims no longer race each other.
+
+#### Fixes
+
+- Restored todo widgets adopt their orphaned on-disk store instead of starting empty.
+- Manual widget ordering survives restore and rearrange flows more reliably.
+- Merge restores no longer resurrect entries you deleted on this device: quick capture and todo deletions now leave tombstones that keep cloud snapshots from bringing them back.
+- A backup the server accepted but never listed is no longer mistaken for a plain success or a failure — it is stamped "awaiting server confirmation" in the backup status and notified once, so a laggy WebDAV listing cannot hide a silently-dropped snapshot.
+- Restore packages are now validated against the bytes actually extracted — per-file and total caps enforced on the real stream — instead of trusting sizes declared inside the archive.
+
+### 中文
+
+#### 新功能
+
+- 云备份支持域作用域还原：可选回哪些数据域（待办、快采、格子样式），并可选择"合并"（新者胜出、不删除本机数据）或"完全恢复"（严格按快照还原）。还原先暂存校验，下次启动时安全应用。
+- 格子现在可以在真正静默几秒后修剪空闲内存，不再要求全部隐藏。由新的"空闲时修剪内存"性能选项控制。
+- 当 Windows 透明效果或省电模式导致 Mica/亚克力材质降级为实色时，会给出一次性提示说明原因。
+- 紧凑格子可在收起菜单中单独覆盖展开方向（自动/向下/向上），胶囊条支持拖拽重排。
+
+#### 界面
+
+- 调整或拖动格子时的对齐吸附反馈改为锐利的 accent 边缘光带，落定一次后稳定常亮——移除了旧的循环呼吸辉光，光带在圆角处自然消融。
+- 新建格子组默认使用标签页导航样式。
+- 材质降级提示现在也会在会话中途关闭透明效果的瞬间出现，不再只在启动或保存设置时给出。
+
+#### 性能与内存
+
+- 空闲 Z 序归一化改为按同级窗口组重排，不再一股脑压到桌面底层，减少可见的重排闪烁。
+- 内存清理协调性更好：隐藏立即修剪与静默修剪不再相互竞争。
+
+#### 修复
+
+- 还原的待办格子会收编磁盘上的孤儿数据存储，不再从空白开始。
+- 手动排序在还原和重排流程中更可靠地保留。
+- 合并还原不再复活本机已删除的条目：快采和待办的删除现在会留下墓碑，云快照不会再把它们带回来。
+- 服务器已接收但迟迟未列入目录的备份不再被误当作普通成功或失败——备份状态会标注"等待服务器确认"并通知一次，列表延迟的 WebDAV 无法掩盖悄悄丢失的快照。
+- 还原包校验改为按实际解出的字节数执行——单文件与总量上限作用于真实数据流——不再采信归档内部声明的大小。
+
 ## 1.5.4 - 2026-09-18
 
 ### English

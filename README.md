@@ -7,7 +7,7 @@ English | [简体中文](README.zh-CN.md)
 > External pull requests are not being merged at this time — bug reports, ideas, and discussions are very welcome via Issues / Discussions. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [![CI](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml/badge.svg)](https://github.com/Tianyu199509/DeskBox/actions/workflows/ci.yml)
-[![Release 1.5.4](https://img.shields.io/badge/release-1.5.4-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.4)
+[![Release 1.5.5](https://img.shields.io/badge/release-1.5.5-2563EB.svg)](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.5)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4.svg)](#system-requirements)
 [![x64 and ARM64](https://img.shields.io/badge/architecture-x64%20%7C%20ARM64-5C2D91.svg)](#download)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
@@ -40,10 +40,10 @@ All twelve selectable languages share the same resource-key and formatting-place
 
 ## Download
 
-DeskBox 1.5.4 is prepared for release. The [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.4) download links below will become available after publication.
+DeskBox 1.5.5 is prepared for release. The [GitHub Releases](https://github.com/Tianyu199509/DeskBox/releases/tag/v1.5.5) download links below will become available after publication.
 
-- [DeskBox 1.5.4 for x64](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.4/DeskBox_Setup_1.5.4_x64.exe), recommended for most Intel and AMD PCs.
-- [DeskBox 1.5.4 for ARM64](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.4/DeskBox_Setup_1.5.4_arm64.exe), recommended for Snapdragon, Surface Pro X, and other Windows on ARM PCs.
+- [DeskBox 1.5.5 for x64](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.5/DeskBox_Setup_1.5.5_x64.exe), recommended for most Intel and AMD PCs.
+- [DeskBox 1.5.5 for ARM64](https://github.com/Tianyu199509/DeskBox/releases/download/v1.5.5/DeskBox_Setup_1.5.5_arm64.exe), recommended for Snapdragon, Surface Pro X, and other Windows on ARM PCs.
 
 Both packages are Full Native AOT builds with the matching private Windows App Runtime 2.4, so they can install offline without downloading a separate .NET 10 or Windows App Runtime package.
 
@@ -124,6 +124,16 @@ Every release also publishes a matching `.sha256` sidecar for each installer. Th
 - Start a visible installer after DeskBox closes; upgrades reuse and lock the existing installation path instead of creating a second copy.
 - Back up and restore settings, and export a privacy-filtered diagnostics package for troubleshooting.
 - Recover settings from resilient snapshots, flush pending changes during shutdown, and report save failures instead of silently reverting to defaults.
+
+## What's new in 1.5.5
+
+- **Restore only what you want from a cloud backup.** Pick the data domains to bring back — todo, quick capture, widget style — and choose merge (newer entries win, nothing on this device is deleted) or a full snapshot-faithful restore. Deletions now leave tombstones, so merged restores stop resurrecting items you removed locally.
+- **Widgets trim idle memory during true quiet.** After a few seconds of real inactivity — no longer only when everything is hidden — widgets can release memory back to Windows, gated by absolute working-set floors and ambient-animation awareness. Controlled by the new "Trim memory when idle" option.
+- **Snap feedback got a Fluent-grade makeover.** The looping breathing glow while resizing or dragging is replaced by a crisp accent edge band that settles once and dissolves cleanly around rounded corners.
+- **Compact widgets get directional control and capsule reordering.** Override the expansion direction per widget (auto / down / up) from the collapse menu, and reorder capsule bars by dragging — including across monitors.
+- **Backup honesty.** An upload the server accepted but never listed is marked "awaiting server confirmation" instead of looking like a clean success, and the material-fallback hint fires the moment transparency effects or battery saver degrade Mica mid-session.
+
+Read the complete [changelog](CHANGELOG.md) or the [1.5.5 release notes](docs/releases/v1.5.5.md).
 
 ## What's new in 1.5.4
 
