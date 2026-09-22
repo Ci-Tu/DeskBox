@@ -41,7 +41,7 @@ public sealed class WidgetLayoutSettingsSlice
     /// Legacy navigation style retained only so pre-title-switcher settings can
     /// be migrated without losing user intent.
     /// </summary>
-    public string WidgetGroupDefaultNavigationStyle { get; set; } = "Stack";
+    public string WidgetGroupDefaultNavigationStyle { get; set; } = "Tabs";
 
     /// <summary>
     /// Default identity layout used by the title-bar member selector.

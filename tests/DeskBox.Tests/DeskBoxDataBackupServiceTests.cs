@@ -932,8 +932,12 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task PrepareRestoreAsync_RejectsBackupFromNewerDeskBoxVersion()
+    public async Task PrepareRestoreAsync_AllowsBackupFromNewerDeskBoxVersion_WithWarningFlag()
     {
+        // The schema version is the compatibility gate, not the app version:
+        // a staggered rollout would otherwise strand every device that has
+        // not updated yet. The preparation flags the newer version so the
+        // confirm dialog can warn.
         string archivePath = Path.Combine(_exportRoot, "newer-version.zip");
         using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
         {
@@ -946,8 +950,11 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
 
         var service = new DeskBoxDataBackupService(_appDataRoot);
 
-        await Assert.ThrowsAsync<InvalidDataException>(() => service.PrepareRestoreAsync(archivePath));
-        Assert.False(File.Exists(service.PendingRestoreMarkerPath));
+        DeskBoxRestorePreparation preparation = await service.PrepareRestoreAsync(archivePath);
+        Assert.True(preparation.IsFromNewerAppVersion);
+        Assert.True(File.Exists(service.PendingRestoreMarkerPath));
+
+        await service.CancelPendingRestoreAsync();
     }
 
     [Fact]
@@ -1028,10 +1035,11 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
     [Fact]
     public async Task ScopedRestore_RepeatedFailuresKeepOriginalSafetyBackup()
     {
-        // A scoped restore retries on every launch until it converges.
-        // Each attempt must reuse the FIRST pre-restore snapshot — the only
-        // one holding pre-restore data — instead of stacking post-restore
-        // archives that eventually prune the original away.
+        // A scoped restore retries on every launch — but only
+        // MaxScopedRestoreApplyAttempts times. While it retries, each
+        // attempt must reuse the FIRST pre-restore snapshot — the only
+        // one holding pre-restore data — instead of stacking
+        // post-restore archives that eventually prune the original away.
         string dataDir = Directory.CreateDirectory(
             Path.Combine(_appDataRoot, "data")).FullName;
         await File.WriteAllTextAsync(
@@ -1039,7 +1047,7 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
             """{"language":"xx-ORIGINAL","widgetOpacity":0.9}""");
 
         // A layout stamped by a newer schema makes the style apply throw
-        // AFTER the safety net — every attempt fails, the marker stays.
+        // AFTER the safety net — every attempt fails deterministically.
         var slice = new WidgetLayoutSettingsSlice
         {
             Widgets = [new WidgetConfig { Id = "w1", WidgetKind = WidgetKind.Todo }]
@@ -1062,12 +1070,41 @@ public sealed class DeskBoxDataBackupServiceTests : IDisposable
         await service.PrepareScopedRestoreAsync(
             backupPath, CloudBackupDomain.WidgetStyle);
 
-        for (int attempt = 0; attempt < 7; attempt++)
+        // Attempts below the cap keep the marker (with a bumped counter)
+        // so the next launch retries.
+        for (int attempt = 1; attempt <= 2; attempt++)
         {
             DeskBoxRestoreApplyResult result = await service.ApplyPendingRestoreAsync();
             Assert.False(result.Succeeded, $"attempt {attempt} should keep failing");
+            Assert.DoesNotContain("abandoned", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(service.PendingRestoreMarkerPath));
+            using JsonDocument marker = JsonDocument.Parse(
+                await File.ReadAllTextAsync(service.PendingRestoreMarkerPath));
+            Assert.Equal(
+                attempt,
+                marker.RootElement.GetProperty("applyAttemptCount").GetInt32());
         }
 
+        // The third failed apply gives up: marker and staging are
+        // cleared so a deterministically broken archive cannot block
+        // scheduled uploads forever.
+        string stagingRoot;
+        using (JsonDocument marker = JsonDocument.Parse(
+            await File.ReadAllTextAsync(service.PendingRestoreMarkerPath)))
+        {
+            stagingRoot = marker.RootElement.GetProperty("stagingRoot").GetString()!;
+        }
+
+        DeskBoxRestoreApplyResult abandoned = await service.ApplyPendingRestoreAsync();
+
+        Assert.True(abandoned.HadPendingRestore);
+        Assert.False(abandoned.Succeeded);
+        Assert.Contains("abandoned", abandoned.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(service.PendingRestoreMarkerPath));
+        Assert.False(Directory.Exists(stagingRoot));
+
+        // The pre-restore safety net survives the whole retry cycle:
+        // exactly one archive, holding the ORIGINAL pre-restore state.
         string archive = Assert.Single(
             Directory.GetFiles(service.PreRestoreBackupDirectory, "DeskBox-PreRestore-*.zip"));
 

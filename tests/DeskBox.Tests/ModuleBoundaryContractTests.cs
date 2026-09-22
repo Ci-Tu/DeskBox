@@ -92,7 +92,7 @@ public sealed class ModuleBoundaryContractTests
         // a primary the same commit created — composite-save rollback inside
         // the store's owned surface.
         ["src/DeskBox/Services/ResilientJsonStore.cs"] = 9,
-        ["src/DeskBox/Services/TodoWidgetStore.cs"] = 3,
+        ["src/DeskBox/Services/TodoWidgetStore.cs"] = 5,
         ["src/DeskBox/Services/VirtualDropFileNameResolver.cs"] = 1,
         ["src/DeskBox/Services/WidgetManager.FeatureWidgets.cs"] = 1,
         // +1: orphan managed-storage restore deletes the emptied source

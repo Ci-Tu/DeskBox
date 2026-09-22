@@ -1945,9 +1945,16 @@ public static partial class Win32Helper
 
     /// <summary>
     /// Pages the whole working set out (same effect as minimizing a window).
-    /// Only safe to call while every widget is hidden and the user is idle:
-    /// touched pages fault back in afterwards, which would jitter interaction
-    /// or frame pacing if anything were visible at the time.
+    /// Historically only safe while every widget was hidden and the user was
+    /// idle: touched pages fault back in afterwards, which would jitter
+    /// interaction or frame pacing if anything were visible at the time.
+    /// The quiescence trim path may now also call this while widgets are
+    /// visible, but only behind its own gates: a 240 MB absolute working-set
+    /// floor, a per-tier quiet period (up to 15 s, escalated to the strictest
+    /// tier by looping ambient animation), hard blockers on interaction,
+    /// transient UI, and active visual work, plus a post-trim cooldown with a
+    /// regrowth gate. The immediate-hidden and visible-idle paths keep the
+    /// old hidden-or-user-away contract.
     /// </summary>
     public static bool TrimWorkingSet()
     {

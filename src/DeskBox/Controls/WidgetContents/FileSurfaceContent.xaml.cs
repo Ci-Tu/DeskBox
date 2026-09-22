@@ -4356,21 +4356,7 @@ public sealed partial class FileSurfaceContent :
 
     private Microsoft.UI.Xaml.Media.Brush? ResolveBrush(string key)
     {
-        for (DependencyObject? current = this;
-             current is not null;
-             current = VisualTreeHelper.GetParent(current))
-        {
-            if (current is FrameworkElement element &&
-                element.Resources.TryGetValue(key, out object? scopedValue) &&
-                scopedValue is Microsoft.UI.Xaml.Media.Brush scopedBrush)
-            {
-                return scopedBrush;
-            }
-        }
-
-        return Application.Current.Resources.TryGetValue(key, out object? value)
-            ? value as Microsoft.UI.Xaml.Media.Brush
-            : null;
+        return NeutralInteractionBrush.ResolveThemedResource(key, this);
     }
 
     private async void Root_KeyDown(object sender, KeyRoutedEventArgs e)

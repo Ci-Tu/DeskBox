@@ -382,6 +382,8 @@ public const int DefaultSearchMaxResults = 100;
                 [nameof(AppSettings.CloudBackupQuickCaptureDataEnabled)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.CloudBackupWidgetStyleEnabled)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.CloudBackupLastSuccessUtcTicks)] = DefaultPreferencePreservationReason.RuntimeState,
+                [nameof(AppSettings.CloudBackupLastFailureUtcTicks)] = DefaultPreferencePreservationReason.RuntimeState,
+                [nameof(AppSettings.CloudBackupLastUnverifiedUtcTicks)] = DefaultPreferencePreservationReason.RuntimeState,
                 [nameof(AppSettings.ManagedStorageDesktopShortcutEnabled)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.ManagedStorageDesktopShortcutPath)] = DefaultPreferencePreservationReason.SystemIntegration,
                 [nameof(AppSettings.HasCompletedOnboarding)] = DefaultPreferencePreservationReason.RuntimeState,
@@ -466,6 +468,8 @@ public const int DefaultSearchMaxResults = 100;
             PerformanceSettingsPolicy.DefaultIdleWorkingSetTrimEnabled;
         settings.ImmediateHiddenWorkingSetTrimEnabled =
             PerformanceSettingsPolicy.DefaultImmediateHiddenWorkingSetTrimEnabled;
+        settings.Performance.QuiescenceWorkingSetTrimEnabled =
+            PerformanceSettingsPolicy.DefaultQuiescenceWorkingSetTrimEnabled;
         settings.PerformanceCacheBudget =
             PerformanceSettingsPolicy.DefaultCacheBudget;
         settings.EnableContinuousDecorativeAnimations =
@@ -497,7 +501,7 @@ public const int DefaultSearchMaxResults = 100;
         settings.InteractiveWidgetChromeMode = WidgetChromeModeStandard;
         settings.WidgetCollapseBehavior = WidgetCollapseBehaviorExpanded;
         settings.WidgetGroupDefaultNavigationStyle =
-            WidgetGroupNavigationStyles.Stack;
+            WidgetGroupNavigationStyles.Tabs;
         settings.WidgetGroupDefaultTitleDisplayMode =
             WidgetGroupTitleDisplayModes.IconAndText;
         settings.WidgetGroupWheelSwitchEnabled = true;

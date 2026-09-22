@@ -135,6 +135,32 @@ internal static class CloudBackupDomains
         return scope;
     }
 
+    /// <summary>
+    /// Extracts the widget id from a TodoData path ("widgets/&lt;id&gt;/todo.json"),
+    /// or null when the path is not in the todo domain.
+    /// </summary>
+    internal static string? TryGetTodoWidgetId(string relativePath)
+    {
+        string normalized = relativePath.Replace('\\', '/');
+        const string prefix = "widgets/";
+        if (!normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        string rest = normalized[prefix.Length..];
+        int slash = rest.IndexOf('/');
+        if (slash <= 0)
+        {
+            return null;
+        }
+
+        string tail = rest[(slash + 1)..];
+        return tail.Equals("todo.json", StringComparison.OrdinalIgnoreCase)
+            ? rest[..slash]
+            : null;
+    }
+
     // widgets/<id>/todo.json — the todo store, keyed off the widget dir.
     // attachments/ stays out of the domain until upload size bounds land.
     private static bool IsTodoDataPath(string normalizedPath)

@@ -183,6 +183,7 @@ internal static class SettingsSearchCatalog
         new("PerformanceSettings", "Settings.Performance.CacheBudget.Title", "Settings.Performance.CacheBudget.Description"),
         new("PerformanceSettings", "Settings.Performance.IdleWorkingSetTrim.Title", "Settings.Performance.IdleWorkingSetTrim.Description"),
         new("PerformanceSettings", "Settings.Performance.ImmediateHiddenWorkingSetTrim.Title", "Settings.Performance.ImmediateHiddenWorkingSetTrim.Description"),
+        new("PerformanceSettings", "Settings.Performance.QuiescenceWorkingSetTrim.Title", "Settings.Performance.QuiescenceWorkingSetTrim.Description"),
         new("PerformanceSettings", "Settings.Performance.DecorativeAnimations.Title", "Settings.Performance.DecorativeAnimations.Description"),
         new("BackupRestoreSettings", "Settings.DataBackup.AutomaticBackup.Title", "Settings.DataBackup.AutomaticBackup.Description"),
         new("BackupRestoreSettings", "Settings.DataBackup.AutomaticBackupInterval.Title", "Settings.DataBackup.AutomaticBackupInterval.Description"),

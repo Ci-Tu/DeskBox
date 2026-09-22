@@ -124,6 +124,11 @@ public sealed partial class AppearanceSettingsSection : UserControl
             WindowShadowToggle.IsEnabled = true;
         }
 
+        // Turning shadows on gives the idle peer order a purpose again; the
+        // queue itself early-outs when shadows are off, so one call covers
+        // both directions of the toggle.
+        App.Current.WidgetManager?.QueueIdleWidgetZOrderNormalization(
+            "window-shadow-toggled");
         RefreshWindowShadowToggle();
     }
 

@@ -24,56 +24,48 @@ internal static class WidgetStyleBackupProjection
     private static readonly FileService s_fileService = new();
 
     /// <summary>
-    /// Flat settings.json keys carrying widget-shell style/display
-    /// preferences — the wire-name whitelist for both directions.
-    /// Excluded on purpose: widgetCapsuleBarOrder (ordering = layout),
-    /// widgetCapsuleFreePlacements (coordinates), widgetCompactSettingsVersion
-    /// (internal schema counter), and every WidgetLayoutSettingsSlice key.
+    /// Flat settings.json keys carrying widget-shell VISUAL style
+    /// preferences — the wire-name whitelist for both directions. Only
+    /// appearance syncs: material/opacity, colors, borders/corners,
+    /// animation, chrome/title display, and compact-state appearance.
+    /// Everything positional or behavioral stays device-local — default
+    /// widget size, density/spacing scales, icon/text size, capsule-bar
+    /// placement/arrangement, collapse policy and its hover delays, window
+    /// layer/raise behavior, snap geometry, widgetCapsuleBarOrder (ordering),
+    /// widgetCapsuleFreePlacements (coordinates),
+    /// widgetCompactSettingsVersion (internal schema counter), and every
+    /// WidgetLayoutSettingsSlice key.
     /// </summary>
     // internal (not private) so the drift ratchet in
     // WidgetStyleProjectionContractTests can enumerate the whitelist.
     internal static readonly HashSet<string> ShellKeys = new(StringComparer.Ordinal)
     {
-        "defaultWidgetWidth", "defaultWidgetHeight",
         "widgetOpacity", "widgetMaterialType", "widgetMaterialIntensity",
         "widgetForegroundMode", "widgetForegroundColor",
         "widgetBorderColorMode", "widgetBorderStyle",
         "widgetCornerPreference",
         "widgetAnimationEffect", "widgetAnimationSpeed",
         "widgetAnimationSlideDirection", "widgetAnimationEasingIntensity",
-        "widgetLayerMode",
-        "keepWidgetsVisibleOnShowDesktop",
         "displayWidgetChromeMode", "interactiveWidgetChromeMode",
-        "widgetCollapseBehavior",
-        // JsonPropertyName("widgetCapsuleModeEnabled") on the facade — the
-        // wire name differs from the slice property name.
-        "widgetCapsuleModeEnabled",
-        "widgetCompactWidthMode", "widgetCompactExpansionDirection",
-        "widgetCapsuleArrangementMode",
-        "widgetCapsuleBarSpacing", "widgetCapsuleBarPlacement",
-        "widgetCapsuleBarDirection",
-        "widgetCollapsedStyle", "widgetCompactContentMode",
-        "widgetCompactHideSensitiveContent",
-        "widgetCompactAnimationEffect", "widgetCompactAnimationDurationMs",
-        "widgetCompactExpandDelayMs", "widgetCompactCollapseDelayMs",
-        "widgetCompactMediaCornerMode",
         "widgetTitleIconMode", "showHoverButtons", "widgetHoverButtonActions",
-        "resizeSnapEnabled", "widgetSnapSpacing", "focusClickedWidgetOnRaise",
-        "iconSize", "textSize", "layoutDensity",
-        "layoutDensityScale", "horizontalSpacingScale", "verticalSpacingScale"
+        // Compact-state appearance only — never its geometry or triggers.
+        "widgetCollapsedStyle", "widgetCompactContentMode",
+        "widgetCompactHideSensitiveContent", "widgetCompactMediaCornerMode",
+        "widgetCompactAnimationEffect", "widgetCompactAnimationDurationMs"
     };
 
     /// <summary>
     /// Per-widget style fields whitelisted out of each WidgetConfig element:
-    /// display/title/sort preferences only. Geometry (x, y, width, height,
-    /// position*, compactPlacement), file bindings (mappedFolderPath, items,
-    /// fileAddedAt*), state (isVisible, isDisabled, *Locked) and metadata
-    /// never leave the device.
+    /// title and display/sort preferences only. Geometry (x, y, width,
+    /// height, position*, compactPlacement, compactWidth), compact/collapse
+    /// state (isCollapsed), per-widget density (iconSizeOverride), file
+    /// bindings (mappedFolderPath, items, fileAddedAt*), visibility/lock
+    /// state (isVisible, isDisabled, *Locked) and metadata never leave the
+    /// device.
     /// </summary>
     internal static readonly HashSet<string> WidgetKeys = new(StringComparer.Ordinal)
     {
-        "name", "isDefaultTitle", "viewMode", "iconSizeOverride",
-        "isCollapsed", "compactWidth", "sortMode", "sortDescending"
+        "name", "isDefaultTitle", "viewMode", "sortMode", "sortDescending"
     };
 
     internal sealed record ApplyResult(

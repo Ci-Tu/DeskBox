@@ -189,6 +189,7 @@ internal interface IDesktopWidgetWindow
     Windows.Graphics.RectInt32 CoordinatedMoveBounds { get; }
     Windows.Foundation.Rect AnimationBounds { get; }
     Windows.Foundation.Rect RestingAnimationBounds { get; }
+    bool IsBoundsTransitionActive { get; }
     void ApplyAppearancePreview();
     void ApplyPerformanceSettings();
     void BeginDisplayTopologyTransition(long generation);
@@ -274,6 +275,11 @@ public sealed partial class WidgetManager
         GetLoadedDesktopWindows()
             .OfType<WidgetWindowBase>()
             .Any(window => window.HasActiveVisualWork);
+
+    internal bool HasAmbientVisualWork =>
+        GetLoadedDesktopWindows()
+            .OfType<WidgetWindowBase>()
+            .Any(window => window.HasAmbientVisualWork);
 
     public bool HasVisibleWidgets =>
         GetLoadedDesktopWindows().Any(window => window.Visible);
