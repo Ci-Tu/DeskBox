@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Restore default hotkey",
     "Settings.Search.Hotkey.Recording": "Press a key combination...",
     "Settings.Search.Hotkey.Status.Active": "Hotkey enabled. Press it to open search.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Double Ctrl enabled. Press Ctrl twice to open search.",
     "Settings.Search.Hotkey.Status.Disabled": "Hotkey disabled",
     "Settings.Search.Hotkey.Status.Failed": "Failed to set hotkey. The combination may be reserved by the system.",
     "Settings.Search.Mode.Description": "Choose the search popup display style",

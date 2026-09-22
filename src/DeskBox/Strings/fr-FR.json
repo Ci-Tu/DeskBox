@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Restaurer le raccourci clavier par défaut",
     "Settings.Search.Hotkey.Recording": "Appuyez sur une combinaison de touches...",
     "Settings.Search.Hotkey.Status.Active": "Touche de raccourci activée. Appuyez dessus pour ouvrir la recherche.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Double Ctrl activé. Appuyez deux fois sur Ctrl pour ouvrir la recherche.",
     "Settings.Search.Hotkey.Status.Disabled": "Raccourci clavier désactivé",
     "Settings.Search.Hotkey.Status.Failed": "Échec de la définition du raccourci clavier. La combinaison peut être réservée par le système.",
     "Settings.Search.Mode.Description": "Choisissez le style d'affichage de la fenêtre contextuelle de recherche",

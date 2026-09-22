@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "डिफ़ॉल्ट हॉटकी पुनर्स्थापित करें",
     "Settings.Search.Hotkey.Recording": "एक कुंजी संयोजन दबाएँ...",
     "Settings.Search.Hotkey.Status.Active": "हॉटकी सक्षम. खोज खोलने के लिए इसे दबाएँ.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "डबल Ctrl सक्रिय है। सर्च खोलने के लिए Ctrl दो बार दबाएँ।",
     "Settings.Search.Hotkey.Status.Disabled": "हॉटकी अक्षम",
     "Settings.Search.Hotkey.Status.Failed": "हॉटकी सेट करने में विफल. संयोजन को सिस्टम द्वारा आरक्षित किया जा सकता है।",
     "Settings.Search.Mode.Description": "खोज पॉपअप प्रदर्शन शैली चुनें",

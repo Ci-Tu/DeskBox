@@ -1984,6 +1984,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "恢復預設快速鍵",
     "Settings.Search.Hotkey.Recording": "請按下組合鍵…",
     "Settings.Search.Hotkey.Status.Active": "快速鍵已啟用，按下即可開啟搜尋",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "雙擊 Ctrl 已啟用，連按兩次 Ctrl 即可開啟搜尋",
     "Settings.Search.Hotkey.Status.Disabled": "快速鍵已禁用",
     "Settings.Search.Hotkey.Status.Failed": "快速鍵設定失敗，該組合鍵可能已被系統佔用",
     "Settings.Search.Mode.Description": "選擇搜尋快顯視窗的顯示風格",

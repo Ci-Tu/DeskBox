@@ -646,6 +646,9 @@ public class AppSettings
     /// <inheritdoc cref="SearchSettingsSlice.SearchHotkeyKey"/>
     public int SearchHotkeyKey { get => Search.SearchHotkeyKey; set => Search.SearchHotkeyKey = value; }
 
+    /// <inheritdoc cref="SearchSettingsSlice.SearchHotkeyUseDoubleControl"/>
+    public bool SearchHotkeyUseDoubleControl { get => Search.SearchHotkeyUseDoubleControl; set => Search.SearchHotkeyUseDoubleControl = value; }
+
     /// <inheritdoc cref="SearchSettingsSlice.SearchDisplayMode"/>
     public string SearchDisplayMode { get => Search.SearchDisplayMode; set => Search.SearchDisplayMode = value; }
 

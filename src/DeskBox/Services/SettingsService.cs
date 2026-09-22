@@ -3048,6 +3048,17 @@ settings.FocusClickedWidgetOnRaise = false;
             changed = true;
         }
 
+        // The double-Control search preset rides the same low-level hook state
+        // machine as the main hotkey's DoubleControl mode, so it only survives
+        // while the main hotkey is not using that mode. The recorded chord is
+        // kept in settings and takes over again automatically.
+        if (settings.SearchHotkeyUseDoubleControl &&
+            settings.GlobalHotkeyActivationKind == Models.HotkeyActivationKind.DoubleControl)
+        {
+            settings.SearchHotkeyUseDoubleControl = false;
+            changed = true;
+        }
+
         // Alt+Space rides the opt-in reserved hook and can only belong to one
         // hotkey at a time. When the main hotkey owns it, reset a saved Alt+Space
         // search gesture to the working default (Alt+D) so search stays usable.

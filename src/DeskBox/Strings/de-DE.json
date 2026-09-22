@@ -1985,6 +1985,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Standard-Tastenkürzel wiederherstellen",
     "Settings.Search.Hotkey.Recording": "Tastenkombination drücken...",
     "Settings.Search.Hotkey.Status.Active": "Tastenkombination aktiviert. Drücken, um Suche zu öffnen.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Doppel-Strg aktiviert. Strg zweimal drücken, um die Suche zu öffnen.",
     "Settings.Search.Hotkey.Status.Disabled": "Tastenkombination deaktiviert",
     "Settings.Search.Hotkey.Status.Failed": "Tastenkombination konnte nicht gesetzt werden. Eventuell vom System reserviert.",
     "Settings.Search.Mode.Description": "Anzeigestil des Such-Popups wählen",

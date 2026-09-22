@@ -20,6 +20,13 @@ public sealed class SearchSettingsSlice
     public int SearchHotkeyKey { get; set; } = 0x44;
 
     /// <summary>
+    /// Whether the search hotkey uses the double-Control-tap preset instead of
+    /// the recorded chord. The chord fields are kept so switching back restores
+    /// the previous combination. Excludes the main hotkey's DoubleControl mode.
+    /// </summary>
+    public bool SearchHotkeyUseDoubleControl { get; set; }
+
+    /// <summary>
     /// Search popup display mode. Valid values: "Spotlight", "Home", "Palette".
     /// </summary>
     public string SearchDisplayMode { get; set; } = "Spotlight";

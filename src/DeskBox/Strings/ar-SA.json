@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "استعادة مفتاح التشغيل السريع الافتراضي",
     "Settings.Search.Hotkey.Recording": "اضغط على مجموعة المفاتيح...",
     "Settings.Search.Hotkey.Status.Active": "تم تمكين مفتاح التشغيل السريع. اضغط عليه لفتح البحث.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "تم تمكين النقر المزدوج على Ctrl. اضغط Ctrl مرتين لفتح البحث.",
     "Settings.Search.Hotkey.Status.Disabled": "تم تعطيل مفتاح التشغيل السريع",
     "Settings.Search.Hotkey.Status.Failed": "فشل في تعيين مفتاح التشغيل السريع. قد يتم حجز المجموعة بواسطة النظام.",
     "Settings.Search.Mode.Description": "اختر نمط عرض نافذة البحث المنبثقة",

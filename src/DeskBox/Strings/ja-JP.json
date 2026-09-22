@@ -1985,6 +1985,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "デフォルトのホットキーを復元",
     "Settings.Search.Hotkey.Recording": "キーの組み合わせを押してください...",
     "Settings.Search.Hotkey.Status.Active": "ホットキーが有効です。押すと検索を開けます。",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "ダブル Ctrl が有効です。Ctrl を2回押すと検索が開きます",
     "Settings.Search.Hotkey.Status.Disabled": "ホットキー無効",
     "Settings.Search.Hotkey.Status.Failed": "ホットキーの設定に失敗しました。システムで予約されている可能性があります。",
     "Settings.Search.Mode.Description": "検索ポップアップの表示スタイルを選択",

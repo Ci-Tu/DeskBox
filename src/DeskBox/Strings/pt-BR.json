@@ -1985,6 +1985,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Restaurar atalho padrão",
     "Settings.Search.Hotkey.Recording": "Pressione uma combinação de teclas...",
     "Settings.Search.Hotkey.Status.Active": "Atalho ativado. Pressione para abrir a busca.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Ctrl duplo ativado. Pressione Ctrl duas vezes para abrir a pesquisa.",
     "Settings.Search.Hotkey.Status.Disabled": "Atalho desativado",
     "Settings.Search.Hotkey.Status.Failed": "Falha ao definir o atalho. A combinação pode estar reservada pelo sistema.",
     "Settings.Search.Mode.Description": "Escolha o estilo de exibição do popup de busca",

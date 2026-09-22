@@ -170,6 +170,14 @@
                                     Tag="AltSpace">
                                     <TextBlock svc:Localized.Key="Settings.GlobalHotkey.Preset.AltSpace" />
                                 </ToggleButton>
+                                <ToggleButton
+                                    x:Name="SearchHotkeyPresetDoubleControlButton"
+                                    MinWidth="0"
+                                    Padding="12,6"
+                                    Click="SearchHotkeyPresetButton_Click"
+                                    Tag="DoubleControl">
+                                    <TextBlock svc:Localized.Key="Settings.GlobalHotkey.Preset.DoubleControl" />
+                                </ToggleButton>
                             </StackPanel>
                         </ScrollViewer>
                     </toolkit:SettingsCard>

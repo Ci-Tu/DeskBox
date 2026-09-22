@@ -13,7 +13,7 @@ namespace DeskBox.Services;
 public sealed partial class AppUpdateService : IAppUpdateService
 {
     public const string DefaultManifestUrl = "https://deskbox.fun/update/stable.json";
-    public const string DefaultGitHubLatestReleaseApiUrl = "https://api.github.com/repos/Tianyu199509/DeskBox/releases/latest";
+    public const string DefaultGitHubLatestReleaseApiUrl = "https://api.github.com/repos/Ci-Tu/DeskBox/releases/latest";
     public const string DefaultManualDownloadUrl = "https://deskbox.fun/download";
 
     private readonly HttpClient _httpClient;
@@ -471,7 +471,7 @@ public sealed partial class AppUpdateService : IAppUpdateService
         // which therefore must never be trusted as a manifest origin itself.
         return string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) &&
             uri.AbsolutePath.StartsWith(
-                "/Tianyu199509/DeskBox/releases/download/",
+                "/Ci-Tu/DeskBox/releases/download/",
                 StringComparison.OrdinalIgnoreCase);
     }
 

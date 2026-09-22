@@ -48,7 +48,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private const string ShowDesktopBehaviorHideWithWindows = "HideWithWindows";
     private const string WeatherLocationModeAuto = "Auto";
     private const string WeatherLocationModeManual = "Manual";
-    private const string RepositoryUrl = "https://github.com/Tianyu199509/DeskBox";
+    private const string RepositoryUrl = "https://github.com/Ci-Tu/DeskBox";
     private const string OfficialWebsiteUrl = "https://deskbox.fun";
     private const string MicrosoftStoreProductId = "9PBZSNB4D69H";
     private const string MicrosoftStoreCampaignId = "deskbox_about_support";

@@ -51,6 +51,15 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
         _subclassProc = WindowSubclassProc;
     }
 
+    /// <summary>
+    /// The DoubleControl preset rides the reserved low-level hook. It is
+    /// exclusive with the main hotkey's own DoubleControl mode because a hook
+    /// instance can only run one state machine at a time.
+    /// </summary>
+    public bool UsesDoubleControl =>
+        _settingsService.Settings.SearchHotkeyUseDoubleControl &&
+        !MainHotkeyUsesDoubleControl();
+
     public bool IsRegistered => _isRegistered &&
         (!_usesReservedHook || _reservedHotkeyHook.IsActive);
     public bool UsesReservedHook => _usesReservedHook && IsRegistered;
@@ -106,6 +115,12 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
         }
 
         var gesture = CurrentGesture;
+        if (UsesDoubleControl)
+        {
+            ApplyReservedDoubleControlGesture();
+            return;
+        }
+
         if (gesture.Equals(AltSpaceGesture))
         {
             ApplyReservedAltSpaceGesture();
@@ -171,6 +186,54 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
         App.Log($"[SearchHotkey] Reserved hook registration failed error={hookError}");
     }
 
+    private void ApplyReservedDoubleControlGesture()
+    {
+        if (MainHotkeyUsesDoubleControl())
+        {
+            App.Log("[SearchHotkey] Double Ctrl is owned by the main hotkey; staying unregistered");
+            return;
+        }
+
+        if (IsReservedHookDisabledByEnvironment())
+        {
+            App.Log("[SearchHotkey] Reserved hotkey hook disabled by environment");
+            return;
+        }
+
+        bool hookStarted;
+        int hookError;
+        try
+        {
+            hookStarted = _reservedHotkeyHook.TryStart(
+                _windowHandle,
+                WmReservedSearchHotkey,
+                ReservedHotkeyMode.DoubleControl,
+                out hookError);
+        }
+        catch (Exception ex)
+        {
+            hookStarted = false;
+            hookError = Marshal.GetHRForException(ex);
+            App.Log($"[SearchHotkey] Reserved hook startup threw: {ex}");
+        }
+
+        if (hookStarted)
+        {
+            _isRegistered = true;
+            _usesReservedHook = true;
+            App.Log("[SearchHotkey] Registered reserved gesture=Double Ctrl mode=hook");
+            return;
+        }
+
+        App.Log($"[SearchHotkey] Reserved hook registration failed error={hookError}");
+    }
+
+    internal bool MainHotkeyUsesDoubleControl()
+    {
+        return App.Current?.GlobalHotkeyService is { } global &&
+               global.CurrentActivation is { Kind: HotkeyActivationKind.DoubleControl };
+    }
+
     internal bool IsGestureOwnedByMainHotkey()
     {
         return App.Current?.GlobalHotkeyService?.CurrentActivation is
@@ -192,12 +255,32 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
 
     public bool TryApplyGesture(GlobalHotkeyGesture gesture, out string? error)
     {
+        return TryApplyGesture(gesture, useDoubleControl: false, out error);
+    }
+
+    public bool TryApplyDoubleControl(out string? error)
+    {
+        return TryApplyGesture(
+            CurrentGesture,
+            useDoubleControl: true,
+            out error);
+    }
+
+    public bool TryApplyGesture(GlobalHotkeyGesture gesture, bool useDoubleControl, out string? error)
+    {
         error = null;
         gesture = GlobalHotkeyService.NormalizeGesture((int)gesture.Modifiers, gesture.VirtualKey);
-        if (gesture.Modifiers.HasFlag(HotkeyModifierKeys.Windows) ||
-            !GlobalHotkeyService.IsValidGesture(gesture))
+        if (!useDoubleControl &&
+            (gesture.Modifiers.HasFlag(HotkeyModifierKeys.Windows) ||
+             !GlobalHotkeyService.IsValidGesture(gesture)))
         {
             error = _localizationService.T("Settings.GlobalHotkey.Status.Invalid");
+            return false;
+        }
+
+        if (useDoubleControl && MainHotkeyUsesDoubleControl())
+        {
+            error = _localizationService.T("Settings.Search.Hotkey.Status.GlobalHotkeyConflict");
             return false;
         }
 
@@ -208,12 +291,14 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
         }
 
         var settings = _settingsService.Settings;
+        bool previousUseDoubleControl = settings.SearchHotkeyUseDoubleControl;
         int previousModifiers = settings.SearchHotkeyModifiers;
         int previousVirtualKey = settings.SearchHotkeyKey;
         var previousGesture = GlobalHotkeyService.NormalizeGesture(
             previousModifiers,
             previousVirtualKey);
-        bool isCurrentGesture = gesture.Equals(previousGesture);
+        bool isCurrentGesture = !useDoubleControl && !previousUseDoubleControl &&
+            gesture.Equals(previousGesture);
         bool shouldBeActive = _windowHandle != IntPtr.Zero && settings.SearchHotkeyEnabled;
 
         if (isCurrentGesture)
@@ -227,6 +312,7 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
             return true;
         }
 
+        settings.SearchHotkeyUseDoubleControl = false;
         settings.SearchHotkeyModifiers = (int)gesture.Modifiers;
         settings.SearchHotkeyKey = gesture.VirtualKey;
 
@@ -246,6 +332,7 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
             return true;
         }
 
+        settings.SearchHotkeyUseDoubleControl = previousUseDoubleControl;
         settings.SearchHotkeyModifiers = previousModifiers;
         settings.SearchHotkeyKey = previousVirtualKey;
         RefreshRegistration();

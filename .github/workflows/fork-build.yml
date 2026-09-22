@@ -1,0 +1,134 @@
+name: Fork Build
+
+# 每日定时检查上游(Tianyu199509/DeskBox)是否有新提交;
+# 有则同步到 fork 的 main 分支,然后用上游自带的分发脚本
+# (审计构建 + Full Native AOT 零售载荷 + Inno 安装包)构建,
+# 并发布 DeskBox_Setup_<版本>_x64.exe 到本 fork 的 Releases。
+# 应用内置更新器读取的正是 releases/latest 下的 DeskBox_Setup_*_x64.exe。
+
+on:
+  schedule:
+    - cron: "20 1 * * *" # 每天 01:20 UTC(北京 09:20)
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync-and-build:
+    name: Sync upstream and build installer
+    runs-on: windows-latest
+    timeout-minutes: 120
+
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync from upstream
+        shell: pwsh
+        env:
+          UPSTREAM_REPO: https://github.com/Tianyu199509/DeskBox.git
+        run: |
+          git remote add upstream $env:UPSTREAM_REPO
+          git fetch upstream main
+          $behind = git rev-list --count HEAD..upstream/main
+          Write-Host "Commits behind upstream: $behind"
+          if ([int]$behind -gt 0) {
+            git config user.name "Ci-Tu"
+            git config user.email "Ci-Tu@users.noreply.github.com"
+            git merge --no-edit upstream/main
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::Upstream merge conflicts with the fork patch. Resolve manually."
+              exit 1
+            }
+            git push origin main
+            Write-Host "Fork main advanced to upstream/main."
+          }
+          "UPSTREAM_CHANGED=$([int]$behind -gt 0)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Setup Rust
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.96.0"
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup .NET
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.303
+
+      - name: Build distribution (AOT audit + retail + Inno installer)
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        shell: pwsh
+        run: >-
+          .\scripts\build-stage-7c1-distribution.ps1
+          -Platform x64
+          -OutputDirectory .\.artifacts\fork-distribution
+
+      - name: Collect installer artifact
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path ".\.artifacts\fork-distribution\direct-installer" `
+            -Filter "DeskBox_Setup_*_x64.exe" -File | Select-Object -First 1
+          if ($null -eq $installer) {
+            Write-Host "::error::No DeskBox_Setup_*_x64.exe was produced."
+            exit 1
+          }
+          $sha = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$($installer.Name) $sha" | Out-File -FilePath "$($installer.FullName).sha256" -Encoding ascii
+          New-Item -ItemType Directory -Path ".\.artifacts\fork-release" -Force | Out-Null
+          Copy-Item -LiteralPath $installer.FullName -Destination ".\.artifacts\fork-release\"
+          Copy-Item -LiteralPath "$($installer.FullName).sha256" -Destination ".\.artifacts\fork-release\"
+          Write-Host "Installer: $($installer.Name)"
+
+      - name: Resolve release version
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        id: version
+        shell: pwsh
+        run: |
+          $iss = Get-Content "installer\DeskBox.iss" -Raw
+          $m = [regex]::Match($iss, '(?m)^\s*#define\s+MyAppVersion\s+"([^"]+)"')
+          if (-not $m.Success) { throw "MyAppVersion not found in installer\DeskBox.iss." }
+          "VERSION=$($m.Groups[1].Value)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $($m.Groups[1].Value)"
+
+      - name: Delete existing release for this version
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        shell: pwsh
+        run: |
+          gh release delete "v$env:VERSION" --yes --cleanup-tag 2>$null
+          if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+          Write-Host "Previous release v$env:VERSION removed (if any)."
+
+      - name: Publish GitHub Release
+        if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        shell: pwsh
+        run: |
+          $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
+          $notes = "Fork 自动构建`n`n- 基于 upstream Tianyu199509/DeskBox 最新 main`n- 附加补丁: 搜索支持双击 Ctrl 唤起、自动更新指向本仓库`n- 构建时间: $date`n`n安装包: DeskBox_Setup_${env:VERSION}_x64.exe(附同名 .sha256 校验文件)`n应用内更新会自动从本仓库 Releases 拉取。"
+          gh release create "v$env:VERSION" `
+            --title "DeskBox v$env:VERSION (fork build)" `
+            --notes $notes `
+            ".\.artifacts\fork-release\*"

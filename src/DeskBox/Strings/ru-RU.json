@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Восстановить горячую клавишу по умолчанию",
     "Settings.Search.Hotkey.Recording": "Нажмите комбинацию клавиш...",
     "Settings.Search.Hotkey.Status.Active": "Горячая клавиша включена. Нажмите ее, чтобы открыть поиск.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Двойной Ctrl включён. Нажмите Ctrl дважды, чтобы открыть поиск.",
     "Settings.Search.Hotkey.Status.Disabled": "Горячая клавиша отключена",
     "Settings.Search.Hotkey.Status.Failed": "Не удалось установить горячую клавишу. Комбинация может быть зарезервирована системой.",
     "Settings.Search.Mode.Description": "Выберите стиль отображения всплывающего окна поиска",

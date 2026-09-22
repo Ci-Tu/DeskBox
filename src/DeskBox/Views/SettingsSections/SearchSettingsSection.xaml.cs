@@ -442,10 +442,15 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
         }
 
         SearchHotkeyPresetAltSpaceButton.IsChecked =
+            !settings.SearchHotkeyUseDoubleControl &&
             gesture.Equals(SearchHotkeyService.AltSpaceGesture);
+        SearchHotkeyPresetDoubleControlButton.IsChecked =
+            settings.SearchHotkeyUseDoubleControl;
 
         SearchHotkeyStatusText.Text = settings.SearchHotkeyEnabled && hotkeyAvailable
-            ? Localization.T("Settings.Search.Hotkey.Status.Active")
+            ? settings.SearchHotkeyUseDoubleControl
+                ? Localization.T("Settings.Search.Hotkey.Status.ActiveDoubleControl")
+                : Localization.T("Settings.Search.Hotkey.Status.Active")
             : Localization.T("Settings.Search.Hotkey.Status.Disabled");
     }
 
@@ -501,12 +506,46 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
 
     private async void SearchHotkeyPresetButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isLoading || sender is not ToggleButton { Tag: "AltSpace" })
+        if (_isLoading || sender is not ToggleButton { Tag: string preset })
         {
             return;
         }
 
-        await ApplySearchHotkeyGestureAsync(SearchHotkeyService.AltSpaceGesture);
+        if (preset == "DoubleControl")
+        {
+            await ApplySearchHotkeyDoubleControlAsync();
+            return;
+        }
+
+        if (preset == "AltSpace")
+        {
+            await ApplySearchHotkeyGestureAsync(SearchHotkeyService.AltSpaceGesture);
+        }
+    }
+
+    private async Task ApplySearchHotkeyDoubleControlAsync()
+    {
+        if (App.Current.SearchHotkeyService is not { } service)
+        {
+            RefreshSearchHotkeyControls();
+            return;
+        }
+
+        if (Settings.Settings.SearchHotkeyUseDoubleControl)
+        {
+            RefreshSearchHotkeyControls();
+            return;
+        }
+
+        if (!service.TryApplyDoubleControl(out string? error))
+        {
+            SearchHotkeyStatusText.Text = error ??
+                Localization.T("Settings.Search.Hotkey.Status.Failed");
+            RefreshSearchHotkeyControls();
+            return;
+        }
+
+        RefreshSearchHotkeyControls();
     }
 
     private async Task ApplySearchHotkeyGestureAsync(GlobalHotkeyGesture gesture)
@@ -576,6 +615,7 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
     private void ResetSearchHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
         var settings = Settings.Settings;
+        settings.SearchHotkeyUseDoubleControl = false;
         settings.SearchHotkeyModifiers = (int)HotkeyModifierKeys.Alt;
         settings.SearchHotkeyKey = 0x44; // Alt+D default
         Settings.SaveDebounced();

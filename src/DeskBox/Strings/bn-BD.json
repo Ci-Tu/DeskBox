@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "ডিফল্ট হটকি পুনরুদ্ধার করুন",
     "Settings.Search.Hotkey.Recording": "একটি কী সমন্বয় টিপুন...",
     "Settings.Search.Hotkey.Status.Active": "হটকি সক্ষম। অনুসন্ধান খুলতে এটি টিপুন।",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "ডাবল Ctrl সক্রিয়। সার্চ খুলতে Ctrl দুইবার চাপুন।",
     "Settings.Search.Hotkey.Status.Disabled": "হটকি নিষ্ক্রিয়",
     "Settings.Search.Hotkey.Status.Failed": "হটকি সেট করতে ব্যর্থ হয়েছে৷ সমন্বয় সিস্টেম দ্বারা সংরক্ষিত হতে পারে.",
     "Settings.Search.Mode.Description": "অনুসন্ধান পপআপ প্রদর্শন শৈলী চয়ন করুন",

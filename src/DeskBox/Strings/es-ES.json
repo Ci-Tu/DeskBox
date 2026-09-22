@@ -1997,6 +1997,7 @@
     "Settings.Search.Hotkey.ResetTooltip": "Restaurar tecla de acceso rápido predeterminada",
     "Settings.Search.Hotkey.Recording": "Presione una combinación de teclas...",
     "Settings.Search.Hotkey.Status.Active": "Tecla de acceso rápido habilitada. Presiónelo para abrir la búsqueda.",
+    "Settings.Search.Hotkey.Status.ActiveDoubleControl": "Doble Ctrl activado. Pulsa Ctrl dos veces para abrir la búsqueda.",
     "Settings.Search.Hotkey.Status.Disabled": "Tecla de acceso rápido deshabilitada",
     "Settings.Search.Hotkey.Status.Failed": "No se pudo configurar la tecla de acceso rápido. La combinación podrá ser reservada por el sistema.",
     "Settings.Search.Mode.Description": "Elija el estilo de visualización de la ventana emergente de búsqueda",
