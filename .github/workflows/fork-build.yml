@@ -111,18 +111,36 @@ jobs:
       - name: Delete existing release for this version
         if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.FORK_RELEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           VERSION: ${{ steps.version.outputs.VERSION }}
         shell: pwsh
         run: |
-          gh release delete "v$env:VERSION" --yes --cleanup-tag
-          if ($LASTEXITCODE -ne 0) { Write-Host "No previous release v$env:VERSION (exit $LASTEXITCODE) - continuing."; $global:LASTEXITCODE = 0 }
+          # Idempotent cleanup: a previous failed run can leave a draft/partial
+          # release or a dangling tag, both of which make `gh release create`
+          # fail with "tag already exists".
+          $release = gh release view "v$env:VERSION" --json id 2>$null | ConvertFrom-Json
+          if ($release -and $release.id) {
+            gh release delete "v$env:VERSION" --yes
+            Write-Host "Deleted existing release v$env:VERSION."
+          } else {
+            Write-Host "No existing release v$env:VERSION."
+          }
+          $tag = gh api "repos/$env:GH_REPO/git/ref/tags/v$env:VERSION" 2>$null | ConvertFrom-Json
+          if ($tag -and $tag.ref) {
+            gh api -X DELETE "repos/$env:GH_REPO/git/refs/tags/v$env:VERSION"
+            Write-Host "Deleted existing tag v$env:VERSION."
+          } else {
+            Write-Host "No existing tag v$env:VERSION."
+          }
 
       - name: Publish GitHub Release
         if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.FORK_RELEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           VERSION: ${{ steps.version.outputs.VERSION }}
+          SHA: ${{ github.sha }}
         shell: pwsh
         run: |
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
@@ -130,6 +148,7 @@ jobs:
           $assets = Get-ChildItem ".\.artifacts\fork-release" -File | ForEach-Object { $_.FullName }
           if ($assets.Count -eq 0) { throw "No release assets were collected." }
           gh release create "v$env:VERSION" `
+            --target "$env:SHA" `
             --title "DeskBox v$env:VERSION (fork build)" `
             --notes $notes `
             @assets
