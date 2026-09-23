@@ -39,7 +39,7 @@ public sealed class SettingsSliceOwnershipContractTests
     [Fact]
     public void EveryFacadeProperty_MapsToExactlyOneSliceProperty()
     {
-        Assert.Equal(220, FacadeProperties.Length);
+        Assert.Equal(221, FacadeProperties.Length);
 
         foreach (PropertyInfo facade in FacadeProperties)
         {
@@ -255,11 +255,11 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/PerformanceSettingsPolicy.cs"] = 78,
         ["src/DeskBox/Services/QuickCaptureClipboardService.cs"] = 6,
         ["src/DeskBox/Services/SearchEngineService.cs"] = 7,
-        ["src/DeskBox/Services/SearchHotkeyService.cs"] = 12,
+        ["src/DeskBox/Services/SearchHotkeyService.cs"] = 16,
         ["src/DeskBox/Services/SearchResultActionService.cs"] = 2,
         ["src/DeskBox/Services/SettingsMigrationService.cs"] = 35,
         ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 20,
-        ["src/DeskBox/Services/SettingsService.cs"] = 605,
+        ["src/DeskBox/Services/SettingsService.cs"] = 608,
         ["src/DeskBox/Services/ThemeService.cs"] = 11,
         ["src/DeskBox/Services/TodoReminderService.cs"] = 8,
         ["src/DeskBox/Services/WeatherService.cs"] = 1,
@@ -344,7 +344,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.xaml.cs"] = 12,
         ["src/DeskBox/Views/SearchPopupWindow.xaml.cs"] = 22,
         ["src/DeskBox/Views/SettingsSections/DesktopOrganizationSettingsSection.xaml.cs"] = 22,
-        ["src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml.cs"] = 24,
+        ["src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml.cs"] = 29,
         ["src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs"] = 4,
         ["src/DeskBox/Views/SettingsWindow.Maintenance.cs"] = 3,
         ["src/DeskBox/Views/SettingsWindow.Navigation.cs"] = 3,

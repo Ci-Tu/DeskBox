@@ -116,6 +116,9 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         shell: pwsh
         run: |
+          # GitHub Actions sets ErrorActionPreference=Stop. Keep expected
+          # `gh` 404 lookups non-terminating so we can inspect LASTEXITCODE.
+          $PSNativeCommandUseErrorActionPreference = $false
           # Idempotent cleanup: a previous failed run can leave a draft/partial
           # release or a dangling tag, both of which make `gh release create`
           # fail with "tag already exists".
@@ -123,6 +126,7 @@ jobs:
           $releaseFound = ($LASTEXITCODE -eq 0) -and $release -and $release.id
           if ($releaseFound) {
             gh release delete "v$env:VERSION" --yes
+            if ($LASTEXITCODE -ne 0) { throw "gh release delete failed with exit $LASTEXITCODE." }
             Write-Host "Deleted existing release v$env:VERSION."
           } else {
             Write-Host "No existing release v$env:VERSION."
@@ -131,10 +135,12 @@ jobs:
           $tagFound = ($LASTEXITCODE -eq 0) -and $tag -and $tag.ref
           if ($tagFound) {
             gh api -X DELETE "repos/$env:GH_REPO/git/refs/tags/v$env:VERSION"
+            if ($LASTEXITCODE -ne 0) { throw "gh tag delete failed with exit $LASTEXITCODE." }
             Write-Host "Deleted existing tag v$env:VERSION."
           } else {
             Write-Host "No existing tag v$env:VERSION."
           }
+          $global:LASTEXITCODE = 0
 
       - name: Publish GitHub Release
         if: env.UPSTREAM_CHANGED == 'true' || github.event_name != 'schedule'

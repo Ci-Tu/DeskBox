@@ -444,6 +444,7 @@ public sealed class SettingsSliceContractBaselineTests
         "searchHotkeyEnabled",
         "searchHotkeyModifiers",
         "searchHotkeyKey",
+        "searchHotkeyUseDoubleControl",
         "searchDisplayMode",
         "searchIncludeDeskBoxContent",
         "searchEverythingEnabled",
