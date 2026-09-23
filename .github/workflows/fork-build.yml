@@ -151,13 +151,27 @@ jobs:
           SHA: ${{ github.sha }}
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
           $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'")
           $notes = "Fork 自动构建`n`n- 基于 upstream Tianyu199509/DeskBox 最新 main`n- 附加补丁: 搜索支持双击 Ctrl 唤起、自动更新指向本仓库`n- 构建时间: $date`n`n安装包: DeskBox_Setup_${env:VERSION}_x64.exe(附同名 .sha256 校验文件)`n应用内更新会自动从本仓库 Releases 拉取。"
-          $assets = Get-ChildItem ".\.artifacts\fork-release" -File | ForEach-Object { $_.FullName }
+          $assets = @(Get-ChildItem ".\.artifacts\fork-release" -File | ForEach-Object { $_.FullName })
           if ($assets.Count -eq 0) { throw "No release assets were collected." }
           gh release create "v$env:VERSION" `
             --target "$env:SHA" `
             --title "DeskBox v$env:VERSION (fork build)" `
-            --notes $notes `
-            @assets
+            --notes $notes
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed with exit $LASTEXITCODE." }
+          foreach ($asset in $assets) {
+            Write-Host "Uploading $([System.IO.Path]::GetFileName($asset))..."
+            gh release upload "v$env:VERSION" "$asset"
+            if ($LASTEXITCODE -ne 0) { throw "gh release upload failed for '$asset' with exit $LASTEXITCODE." }
+          }
+          $published = gh release view "v$env:VERSION" --json assets | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify release assets (exit $LASTEXITCODE)." }
+          $publishedNames = @($published.assets | ForEach-Object { $_.name })
+          $missingAssets = @($assets | Where-Object {
+            $publishedNames -notcontains [System.IO.Path]::GetFileName($_)
+          })
+          if ($missingAssets.Count -gt 0) {
+            throw "Release is missing assets: $($missingAssets -join ', ')"
+          }
