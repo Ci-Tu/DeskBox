@@ -91,8 +91,6 @@ public sealed partial class SettingsWindow
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.StackPanel>("InteractionWindowSettings", "GlobalHotkeyPresetButtonsPanel")!;
     private global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton GlobalHotkeyPresetF7Button =>
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>("InteractionWindowSettings", "GlobalHotkeyPresetF7Button")!;
-    private global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton GlobalHotkeyPresetDoubleControlButton =>
-        FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>("InteractionWindowSettings", "GlobalHotkeyPresetDoubleControlButton")!;
     private global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton GlobalHotkeyPresetAltSpaceButton =>
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton>("InteractionWindowSettings", "GlobalHotkeyPresetAltSpaceButton")!;
     private global::Microsoft.UI.Xaml.Controls.Primitives.ToggleButton GlobalHotkeyPresetWinSpaceButton =>

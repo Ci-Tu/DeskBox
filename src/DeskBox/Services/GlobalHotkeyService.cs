@@ -373,8 +373,12 @@ public sealed class GlobalHotkeyService : IDisposable, IHookHealthProbeTarget
             return false;
         }
 
-        return activation.Kind != HotkeyActivationKind.Chord ||
-               IsValidGesture(activation.Gesture);
+        return activation.Kind switch
+        {
+            HotkeyActivationKind.Chord => IsValidGesture(activation.Gesture),
+            HotkeyActivationKind.WindowsTap => true,
+            _ => false
+        };
     }
 
     public static bool IsValidGesture(GlobalHotkeyGesture gesture)
@@ -417,8 +421,6 @@ public sealed class GlobalHotkeyService : IDisposable, IHookHealthProbeTarget
     {
         return activation.Kind switch
         {
-            HotkeyActivationKind.DoubleControl =>
-                localization.T("Settings.GlobalHotkey.Preset.DoubleControl"),
             HotkeyActivationKind.WindowsTap =>
                 localization.T("Settings.GlobalHotkey.Preset.WindowsTap"),
             _ => FormatGesture(activation.Gesture, localization)
@@ -571,12 +573,6 @@ public sealed class GlobalHotkeyService : IDisposable, IHookHealthProbeTarget
         GlobalHotkeyActivation activation,
         out ReservedHotkeyMode mode)
     {
-        if (activation.Kind == HotkeyActivationKind.DoubleControl)
-        {
-            mode = ReservedHotkeyMode.DoubleControl;
-            return true;
-        }
-
         if (activation.Kind == HotkeyActivationKind.WindowsTap)
         {
             mode = ReservedHotkeyMode.WindowsTap;

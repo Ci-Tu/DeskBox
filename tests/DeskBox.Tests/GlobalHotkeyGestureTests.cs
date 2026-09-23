@@ -46,7 +46,6 @@ public sealed class GlobalHotkeyGestureTests
     }
 
     [Theory]
-    [InlineData(HotkeyActivationKind.DoubleControl)]
     [InlineData(HotkeyActivationKind.WindowsTap)]
     public void SpecialActivationKinds_DoNotDependOnTheStoredFallbackChord(
         HotkeyActivationKind kind)
@@ -56,6 +55,16 @@ public sealed class GlobalHotkeyGestureTests
             new GlobalHotkeyGesture(HotkeyModifierKeys.None, 0));
 
         Assert.True(GlobalHotkeyService.IsValidActivation(activation));
+    }
+
+    [Fact]
+    public void LegacyDoubleControlActivation_IsNotValidForTheMainHotkey()
+    {
+        var activation = new GlobalHotkeyActivation(
+            HotkeyActivationKind.DoubleControl,
+            new GlobalHotkeyGesture(HotkeyModifierKeys.None, 0));
+
+        Assert.False(GlobalHotkeyService.IsValidActivation(activation));
     }
 
     [Fact]

@@ -7,7 +7,7 @@ public sealed class SearchSettingsSlice
 {
     // ─── Search Settings ───────────────────────────────────────────────
     /// <summary>Whether the search global hotkey is enabled.</summary>
-    public bool SearchHotkeyEnabled { get; set; }
+    public bool SearchHotkeyEnabled { get; set; } = true;
 
     /// <summary>Search hotkey modifier bit flags.</summary>
     public int SearchHotkeyModifiers { get; set; } = (int)HotkeyModifierKeys.Alt;
@@ -22,9 +22,10 @@ public sealed class SearchSettingsSlice
     /// <summary>
     /// Whether the search hotkey uses the double-Control-tap preset instead of
     /// the recorded chord. The chord fields are kept so switching back restores
-    /// the previous combination. Excludes the main hotkey's DoubleControl mode.
+    /// the previous combination. Double-Control is reserved for this search
+    /// hotkey and is not available to the main application hotkey.
     /// </summary>
-    public bool SearchHotkeyUseDoubleControl { get; set; }
+    public bool SearchHotkeyUseDoubleControl { get; set; } = true;
 
     /// <summary>
     /// Search popup display mode. Valid values: "Spotlight", "Home", "Palette".

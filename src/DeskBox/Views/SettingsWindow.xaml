@@ -1537,14 +1537,6 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                                     <TextBlock svc:Localized.Key="Settings.GlobalHotkey.Preset.F7" />
                                                 </ToggleButton>
                                                 <ToggleButton
-                                                    x:Name="GlobalHotkeyPresetDoubleControlButton"
-                                                    MinWidth="0"
-                                                    Padding="12,6"
-                                                    Click="GlobalHotkeyPresetButton_Click"
-                                                    Tag="DoubleControl">
-                                                    <TextBlock svc:Localized.Key="Settings.GlobalHotkey.Preset.DoubleControl" />
-                                                </ToggleButton>
-                                                <ToggleButton
                                                     x:Name="GlobalHotkeyPresetAltSpaceButton"
                                                     MinWidth="0"
                                                     Padding="12,6"

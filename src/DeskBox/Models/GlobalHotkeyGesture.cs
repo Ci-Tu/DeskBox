@@ -15,6 +15,7 @@ public readonly record struct GlobalHotkeyGesture(HotkeyModifierKeys Modifiers, 
 public enum HotkeyActivationKind
 {
     Chord = 0,
+    // Kept for deserializing old settings; SettingsService migrates it to Chord.
     DoubleControl = 1,
     WindowsTap = 2
 }

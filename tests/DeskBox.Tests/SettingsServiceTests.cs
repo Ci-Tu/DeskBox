@@ -42,6 +42,31 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAsync_MigratesLegacyMainDoubleControlToSearch()
+    {
+        var settings = new AppSettings
+        {
+            GlobalHotkeyActivationKind = HotkeyActivationKind.DoubleControl,
+            GlobalHotkeyModifiers = (int)HotkeyModifierKeys.Control,
+            GlobalHotkeyKey = (int)Windows.System.VirtualKey.A,
+            SearchHotkeyEnabled = false,
+            SearchHotkeyUseDoubleControl = false
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(_settingsRoot, "settings.json"),
+            JsonSerializer.Serialize(settings, s_jsonOptions));
+
+        var service = new SettingsService(_settingsRoot);
+        await service.LoadAsync();
+
+        Assert.Equal(HotkeyActivationKind.Chord, service.Settings.GlobalHotkeyActivationKind);
+        Assert.Equal((int)HotkeyModifierKeys.Control, service.Settings.GlobalHotkeyModifiers);
+        Assert.Equal((int)Windows.System.VirtualKey.A, service.Settings.GlobalHotkeyKey);
+        Assert.True(service.Settings.SearchHotkeyEnabled);
+        Assert.True(service.Settings.SearchHotkeyUseDoubleControl);
+    }
+
+    [Fact]
     public async Task SaveAsync_StreamsLockedSnapshotAndStaysReloadable()
     {
         // The streamed persistence path (serialize straight into the store
@@ -1193,8 +1218,12 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Null(newUserDefaults.LegacyWidgetCapsuleModeEnabled);
         Assert.Null(restoredDefaults.LegacyWidgetCapsuleModeEnabled);
         Assert.True(newUserDefaults.WidgetGroupsEnabled);
-        Assert.False(newUserDefaults.SearchHotkeyEnabled);
+        Assert.True(newUserDefaults.SearchHotkeyEnabled);
         Assert.Equal(newUserDefaults.SearchHotkeyEnabled, restoredDefaults.SearchHotkeyEnabled);
+        Assert.True(newUserDefaults.SearchHotkeyUseDoubleControl);
+        Assert.Equal(
+            newUserDefaults.SearchHotkeyUseDoubleControl,
+            restoredDefaults.SearchHotkeyUseDoubleControl);
         Assert.Equal(SettingsService.WidgetCompactWidthModeAligned, newUserDefaults.WidgetCompactWidthMode);
         Assert.Equal(newUserDefaults.WidgetCompactWidthMode, restoredDefaults.WidgetCompactWidthMode);
         Assert.Equal(

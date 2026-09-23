@@ -203,9 +203,10 @@ public sealed class SettingsSliceContractBaselineTests
         Assert.True(s.WeatherShowWind);
         Assert.False(s.WeatherShowPressure);
         Assert.Equal(60, s.WeatherRefreshIntervalMinutes);
-        Assert.False(s.SearchHotkeyEnabled);
+        Assert.True(s.SearchHotkeyEnabled);
         Assert.Equal((int)HotkeyModifierKeys.Alt, s.SearchHotkeyModifiers);
         Assert.Equal(0x44, s.SearchHotkeyKey);
+        Assert.True(s.SearchHotkeyUseDoubleControl);
         Assert.Equal("Spotlight", s.SearchDisplayMode);
         Assert.True(s.SearchIncludeDeskBoxContent);
         Assert.False(s.SearchEverythingEnabled);

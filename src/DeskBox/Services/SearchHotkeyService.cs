@@ -52,13 +52,11 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
     }
 
     /// <summary>
-    /// The DoubleControl preset rides the reserved low-level hook. It is
-    /// exclusive with the main hotkey's own DoubleControl mode because a hook
-    /// instance can only run one state machine at a time.
+    /// The DoubleControl preset rides the reserved low-level hook. The main
+    /// hotkey does not own this gesture; it is reserved for search.
     /// </summary>
     public bool UsesDoubleControl =>
-        _settingsService.Settings.SearchHotkeyUseDoubleControl &&
-        !MainHotkeyUsesDoubleControl();
+        _settingsService.Settings.SearchHotkeyUseDoubleControl;
 
     public bool IsRegistered => _isRegistered &&
         (!_usesReservedHook || _reservedHotkeyHook.IsActive);
@@ -188,12 +186,6 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
 
     private void ApplyReservedDoubleControlGesture()
     {
-        if (MainHotkeyUsesDoubleControl())
-        {
-            App.Log("[SearchHotkey] Double Ctrl is owned by the main hotkey; staying unregistered");
-            return;
-        }
-
         if (IsReservedHookDisabledByEnvironment())
         {
             App.Log("[SearchHotkey] Reserved hotkey hook disabled by environment");
@@ -226,12 +218,6 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
         }
 
         App.Log($"[SearchHotkey] Reserved hook registration failed error={hookError}");
-    }
-
-    internal bool MainHotkeyUsesDoubleControl()
-    {
-        return App.Current?.GlobalHotkeyService is { } global &&
-               global.CurrentActivation is { Kind: HotkeyActivationKind.DoubleControl };
     }
 
     internal bool IsGestureOwnedByMainHotkey()
@@ -275,12 +261,6 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget
              !GlobalHotkeyService.IsValidGesture(gesture)))
         {
             error = _localizationService.T("Settings.GlobalHotkey.Status.Invalid");
-            return false;
-        }
-
-        if (useDoubleControl && MainHotkeyUsesDoubleControl())
-        {
-            error = _localizationService.T("Settings.Search.Hotkey.Status.GlobalHotkeyConflict");
             return false;
         }
 

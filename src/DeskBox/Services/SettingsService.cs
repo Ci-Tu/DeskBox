@@ -600,9 +600,10 @@ settings.WeatherShowHumidity = true;
 settings.WeatherShowWind = true;
 settings.WeatherShowPressure = false;
 settings.WeatherRefreshIntervalMinutes = 60;
-        settings.SearchHotkeyEnabled = false;
+        settings.SearchHotkeyEnabled = true;
         settings.SearchHotkeyModifiers = (int)HotkeyModifierKeys.Alt;
         settings.SearchHotkeyKey = 0x44;
+        settings.SearchHotkeyUseDoubleControl = true;
         settings.SearchDisplayMode = "Spotlight";
         settings.SearchIncludeDeskBoxContent = true;
         settings.SearchEverythingEnabled = false;
@@ -3012,7 +3013,16 @@ settings.FocusClickedWidgetOnRaise = false;
     private static bool NormalizeHotkeySettings(AppSettings settings)
     {
         bool changed = false;
-        if (!Enum.IsDefined(settings.GlobalHotkeyActivationKind))
+        if (settings.GlobalHotkeyActivationKind == Models.HotkeyActivationKind.DoubleControl)
+        {
+            // Double-Control belongs to search now. Move the old main-hotkey
+            // choice to search and keep the saved main chord as its fallback.
+            settings.GlobalHotkeyActivationKind = Models.HotkeyActivationKind.Chord;
+            settings.SearchHotkeyEnabled = true;
+            settings.SearchHotkeyUseDoubleControl = true;
+            changed = true;
+        }
+        else if (!Enum.IsDefined(settings.GlobalHotkeyActivationKind))
         {
             settings.GlobalHotkeyActivationKind = DefaultGlobalHotkeyActivationKind;
             changed = true;
@@ -3045,17 +3055,6 @@ settings.FocusClickedWidgetOnRaise = false;
         if (settings.SearchHotkeyModifiers != searchNormalizedModifiers)
         {
             settings.SearchHotkeyModifiers = searchNormalizedModifiers;
-            changed = true;
-        }
-
-        // The double-Control search preset rides the same low-level hook state
-        // machine as the main hotkey's DoubleControl mode, so it only survives
-        // while the main hotkey is not using that mode. The recorded chord is
-        // kept in settings and takes over again automatically.
-        if (settings.SearchHotkeyUseDoubleControl &&
-            settings.GlobalHotkeyActivationKind == Models.HotkeyActivationKind.DoubleControl)
-        {
-            settings.SearchHotkeyUseDoubleControl = false;
             changed = true;
         }
 

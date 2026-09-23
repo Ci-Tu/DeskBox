@@ -117,9 +117,6 @@ public sealed partial class SettingsWindow
             "F7" => GlobalHotkeyActivation.FromChord(new GlobalHotkeyGesture(
                 HotkeyModifierKeys.None,
                 (int)VirtualKey.F7)),
-            "DoubleControl" => new GlobalHotkeyActivation(
-                HotkeyActivationKind.DoubleControl,
-                fallbackGesture),
             "AltSpace" => GlobalHotkeyActivation.FromChord(new GlobalHotkeyGesture(
                 HotkeyModifierKeys.Alt,
                 (int)VirtualKey.Space)),
@@ -401,8 +398,6 @@ public sealed partial class SettingsWindow
                 activation.Kind == HotkeyActivationKind.Chord &&
                 activation.Gesture.Modifiers == HotkeyModifierKeys.None &&
                 activation.Gesture.VirtualKey == (int)VirtualKey.F7;
-            GlobalHotkeyPresetDoubleControlButton.IsChecked =
-                activation.Kind == HotkeyActivationKind.DoubleControl;
             GlobalHotkeyPresetAltSpaceButton.IsChecked =
                 activation.Kind == HotkeyActivationKind.Chord &&
                 activation.Gesture.Modifiers == HotkeyModifierKeys.Alt &&

@@ -18,11 +18,12 @@ public sealed class GlobalHotkeySafetyContractTests
         Assert.Contains("x:Name=\"GlobalHotkeyCaptureButton\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetButtonsPanel\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetF7Button\"", presetButtons, StringComparison.Ordinal);
-        Assert.Contains("x:Name=\"GlobalHotkeyPresetDoubleControlButton\"", presetButtons, StringComparison.Ordinal);
+        Assert.DoesNotContain("GlobalHotkeyPresetDoubleControlButton", presetButtons, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetAltSpaceButton\"", presetButtons, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetWinSpaceButton\"", presetButtons, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetWindowsTapButton\"", presetButtons, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"GlobalHotkeyPresetCopilotKeyButton\"", presetButtons, StringComparison.Ordinal);
+        Assert.Contains("SearchHotkeyPresetDoubleControlButton", Read("src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml"), StringComparison.Ordinal);
         Assert.Contains("Settings.GlobalHotkey.PresetsTitle", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Settings.GlobalHotkey.PresetsDescription", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Settings.GlobalHotkey.RecommendedTitle", xaml, StringComparison.Ordinal);
@@ -72,6 +73,7 @@ public sealed class GlobalHotkeySafetyContractTests
             "private static bool NormalizeHotkeySettings",
             "private static bool NormalizeSearchSettings");
         Assert.Contains("GlobalHotkeyActivationKind", normalize, StringComparison.Ordinal);
+        Assert.Contains("settings.GlobalHotkeyActivationKind == Models.HotkeyActivationKind.DoubleControl", normalize, StringComparison.Ordinal);
 
         Assert.Contains(
             "x:Name=\"SearchHotkeyPresetAltSpaceButton\"",
@@ -79,6 +81,21 @@ public sealed class GlobalHotkeySafetyContractTests
             StringComparison.Ordinal);
         Assert.Contains("Settings.GlobalHotkey.AltSpaceWarning", sectionCode, StringComparison.Ordinal);
         Assert.Contains("ConfirmSearchReservedHotkeyOverrideAsync", sectionCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DoubleControlPreset_IsOwnedBySearchAndNotTheMainHotkey()
+    {
+        string mainSettings = Read("src/DeskBox/Views/SettingsWindow.xaml");
+        string searchSettings = Read("src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml");
+        string searchService = Read("src/DeskBox/Services/SearchHotkeyService.cs");
+        string globalService = Read("src/DeskBox/Services/GlobalHotkeyService.cs");
+
+        Assert.DoesNotContain("GlobalHotkeyPresetDoubleControlButton", mainSettings, StringComparison.Ordinal);
+        Assert.Contains("SearchHotkeyPresetDoubleControlButton", searchSettings, StringComparison.Ordinal);
+        Assert.Contains("ReservedHotkeyMode.DoubleControl", searchService, StringComparison.Ordinal);
+        Assert.DoesNotContain("HotkeyActivationKind.DoubleControl", globalService, StringComparison.Ordinal);
+        Assert.DoesNotContain("MainHotkeyUsesDoubleControl", searchService, StringComparison.Ordinal);
     }
 
     [Fact]
