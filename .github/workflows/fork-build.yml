@@ -119,15 +119,17 @@ jobs:
           # Idempotent cleanup: a previous failed run can leave a draft/partial
           # release or a dangling tag, both of which make `gh release create`
           # fail with "tag already exists".
-          $release = gh release view "v$env:VERSION" --json id 2>$null | ConvertFrom-Json
-          if ($release -and $release.id) {
+          $release = (gh release view "v$env:VERSION" --json id 2>$null) 2>$null | ConvertFrom-Json
+          $releaseFound = ($LASTEXITCODE -eq 0) -and $release -and $release.id
+          if ($releaseFound) {
             gh release delete "v$env:VERSION" --yes
             Write-Host "Deleted existing release v$env:VERSION."
           } else {
             Write-Host "No existing release v$env:VERSION."
           }
-          $tag = gh api "repos/$env:GH_REPO/git/ref/tags/v$env:VERSION" 2>$null | ConvertFrom-Json
-          if ($tag -and $tag.ref) {
+          $tag = (gh api "repos/$env:GH_REPO/git/ref/tags/v$env:VERSION" 2>$null) 2>$null | ConvertFrom-Json
+          $tagFound = ($LASTEXITCODE -eq 0) -and $tag -and $tag.ref
+          if ($tagFound) {
             gh api -X DELETE "repos/$env:GH_REPO/git/refs/tags/v$env:VERSION"
             Write-Host "Deleted existing tag v$env:VERSION."
           } else {
