@@ -1,4 +1,4 @@
-using DeskBox.Controls;
+﻿using DeskBox.Controls;
 using DeskBox.Helpers;
 using DeskBox.Models;
 using DeskBox.Services;
@@ -887,95 +887,6 @@ public sealed partial class SettingsWindow
         DragItemsCompletedEventArgs args)
     {
         ViewModel.CommitFileStackCustomRuleOrder();
-    }
-
-    private void SettingsDropDownButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not DropDownButton button || button.Tag is not string menuKind)
-        {
-            return;
-        }
-
-        string selectedValue;
-        IReadOnlyList<string> values;
-        Action<string> applyValue;
-        Func<string, string> displayValue;
-
-        switch (menuKind)
-        {
-            case "Theme":
-                selectedValue = ViewModel.SelectedTheme;
-                values = ViewModel.AvailableThemes;
-                applyValue = value => ViewModel.SelectedTheme = value;
-                displayValue = ViewModel.GetThemeDisplayName;
-                break;
-
-            case "Language":
-                selectedValue = ViewModel.SelectedLanguage;
-                values = ViewModel.AvailableLanguages;
-                applyValue = value => ViewModel.SelectedLanguage = value;
-                displayValue = ViewModel.GetLanguageDisplayName;
-                break;
-
-            case "WidgetCorner":
-                selectedValue = ViewModel.SelectedWidgetCornerPreference;
-                values = ViewModel.AvailableWidgetCornerPreferences;
-                applyValue = value => ViewModel.SelectedWidgetCornerPreference = value;
-                displayValue = ViewModel.GetCornerDisplayName;
-                break;
-
-            case "WidgetAnimationEffect":
-                selectedValue = ViewModel.SelectedWidgetAnimationEffect;
-                values = ViewModel.AvailableWidgetAnimationEffects;
-                applyValue = value => ViewModel.SelectedWidgetAnimationEffect = value;
-                displayValue = ViewModel.GetWidgetAnimationEffectDisplayName;
-                break;
-
-            case "WidgetAnimationSpeed":
-                selectedValue = ViewModel.SelectedWidgetAnimationSpeed;
-                values = ViewModel.AvailableWidgetAnimationSpeeds;
-                applyValue = value => ViewModel.SelectedWidgetAnimationSpeed = value;
-                displayValue = ViewModel.GetWidgetAnimationSpeedDisplayName;
-                break;
-
-            case "WidgetAnimationSlideDirection":
-                selectedValue = ViewModel.SelectedWidgetAnimationSlideDirection;
-                values = ViewModel.AvailableWidgetAnimationSlideDirections;
-                applyValue = value => ViewModel.SelectedWidgetAnimationSlideDirection = value;
-                displayValue = ViewModel.GetWidgetAnimationSlideDirectionDisplayName;
-                break;
-
-            case "WidgetAnimationEasingIntensity":
-                selectedValue = ViewModel.SelectedWidgetAnimationEasingIntensity;
-                values = ViewModel.AvailableWidgetAnimationEasingIntensities;
-                applyValue = value => ViewModel.SelectedWidgetAnimationEasingIntensity = value;
-                displayValue = ViewModel.GetWidgetAnimationEasingIntensityDisplayName;
-                break;
-
-            default:
-                return;
-        }
-
-        var flyout = new MenuFlyout
-        {
-            ShouldConstrainToRootBounds = false
-        };
-
-        foreach (string value in values)
-        {
-            var item = new MenuFlyoutItem
-            {
-                Text = displayValue(value),
-                MinWidth = button.ActualWidth > 0 ? button.ActualWidth : button.MinWidth,
-                Icon = string.Equals(value, selectedValue, StringComparison.Ordinal)
-                    ? new FontIcon { Glyph = "\uE73E" }
-                    : null
-            };
-            item.Click += (_, _) => applyValue(value);
-            flyout.Items.Add(item);
-        }
-
-        flyout.ShowAt(button);
     }
 
     private void FeatureSettingsExpander_Loaded(object sender, RoutedEventArgs e)

@@ -67,11 +67,11 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.DoesNotContain("IsWidgetGroupsEnabled", appearanceXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsWidgetGroupsEnabled", windowXaml, StringComparison.Ordinal);
         Assert.Contains(
-            "ItemsSource=\"{Binding AvailableWidgetGroupNavigationStyleOptions}\"",
+            "ItemsSource=\"{Binding AvailableGroupNavigationStyleOptions}\"",
             appearanceXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "controls:SettingsComboBox.Value=\"{Binding SelectedWidgetGroupDefaultNavigationStyle, Mode=TwoWay}\"",
+            "controls:SettingsComboBox.Value=\"{Binding GroupNavigationStyle, Mode=TwoWay}\"",
             appearanceXaml,
             StringComparison.Ordinal);
         Assert.Contains("x:Key=\"SettingValueTextStyle\"", overviewResources, StringComparison.Ordinal);
@@ -128,7 +128,7 @@ public sealed class SettingsCopyAndHierarchyTests
             root,
             "src/DeskBox/Views/SettingsWindow.xaml.cs"));
 
-        Assert.Contains("SelectedAccentColorSource", appearanceXaml, StringComparison.Ordinal);
+        Assert.Contains("AccentColorSource", appearanceXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding UseSystemAccentColor", appearanceXaml, StringComparison.Ordinal);
 
         Assert.Contains("{Binding FileOpenMethod, Mode=TwoWay}", windowXaml, StringComparison.Ordinal);
@@ -273,15 +273,15 @@ public sealed class SettingsCopyAndHierarchyTests
             "src/DeskBox/Views/SettingsSections/AppearanceSettingsSection.xaml"));
 
         Assert.Contains(
-            "Text=\"{Binding SelectedWidgetTitleIconModeText}\"",
+            "Text=\"{Binding TitleIconModeText}\"",
             appearanceXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ItemsSource=\"{Binding AvailableWidgetTitleIconModeOptions}\"",
+            "ItemsSource=\"{Binding AvailableTitleIconModeOptions}\"",
             appearanceXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "controls:SettingsComboBox.Value=\"{Binding SelectedWidgetTitleIconMode, Mode=TwoWay}\"",
+            "controls:SettingsComboBox.Value=\"{Binding TitleIconMode, Mode=TwoWay}\"",
             appearanceXaml,
             StringComparison.Ordinal);
     }

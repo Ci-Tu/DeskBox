@@ -1,4 +1,4 @@
-// Copyright (c) DeskBox. All rights reserved.
+﻿// Copyright (c) DeskBox. All rights reserved.
 
 using CommunityToolkit.Mvvm.Input;
 using DeskBox.Controls.WidgetContents;
@@ -2938,7 +2938,8 @@ public partial class App : Application
             _searchSettings ?? throw new InvalidOperationException("Search settings are not initialized."),
             _backupRuntime ?? throw new InvalidOperationException("Backup runtime is not initialized."),
             new DeskBox.Features.Appearance.AppearanceSettingsViewModel(
-                _appearanceSettings ?? throw new InvalidOperationException("Appearance settings are not initialized.")),
+                _appearanceSettings ?? throw new InvalidOperationException("Appearance settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.Capsule.CapsuleSettingsViewModel(
                 _capsuleSettings ?? throw new InvalidOperationException("Capsule settings are not initialized.")),
             new DeskBox.Features.Interaction.InteractionSettingsViewModel(

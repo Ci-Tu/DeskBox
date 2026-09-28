@@ -1,4 +1,4 @@
-using DeskBox.Controls;
+﻿using DeskBox.Controls;
 using DeskBox.Features.Todo;
 using DeskBox.Features.Search;
 using DeskBox.Features.Backup;
@@ -140,6 +140,7 @@ public sealed partial class SettingsWindow : Window
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
     private readonly DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel _fileDisplaySettingsViewModel;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettingsViewModel;
+    private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettingsViewModel;
 
     /// <summary>
     /// The file-display section's editor. Exposed for the AOT managed-UI
@@ -148,6 +149,15 @@ public sealed partial class SettingsWindow : Window
     /// </summary>
     public DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel FileDisplaySettings =>
         _fileDisplaySettingsViewModel;
+
+    /// <summary>
+    /// The appearance-section editor. Exposed for the AOT managed-UI
+    /// persistence smoke, which drives the section family's real binding
+    /// surface; the sections themselves reach the editor through their
+    /// DataContext.
+    /// </summary>
+    public DeskBox.Features.Appearance.AppearanceSettingsViewModel AppearanceSettings =>
+        _appearanceSettingsViewModel;
 
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
         TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
@@ -187,6 +197,7 @@ public sealed partial class SettingsWindow : Window
         _interactionSettingsViewModel = interactionSettings;
         _fileDisplaySettingsViewModel = fileDisplaySettings;
         _managedStorageSettingsViewModel = managedStorageSettings;
+        _appearanceSettingsViewModel = appearanceSettings;
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,

@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using CommunityToolkit.WinUI.Controls;
 using DeskBox.Services;
 using DeskBox.Views.SettingsSections;
@@ -116,6 +116,19 @@ public sealed partial class SettingsWindow
             section.DataContext = _managedStorageSettingsViewModel;
             RefreshManagedStoragePathWarning();
             RefreshManagedStorageDesktopShortcutState();
+        }
+
+        // The appearance family (main section plus the material, density,
+        // window and animation subsections) binds through the appearance
+        // editor; {Binding} markup resolves through its generated custom
+        // property provider under Native AOT.
+        if (sectionTag is "Appearance" or
+            "AppearanceMaterialSettings" or
+            "AppearanceDensitySettings" or
+            "AppearanceWindowSettings" or
+            "AppearanceAnimationSettings")
+        {
+            section.DataContext = _appearanceSettingsViewModel;
         }
         if (sectionTag == "InteractionWindowSettings")
         {
