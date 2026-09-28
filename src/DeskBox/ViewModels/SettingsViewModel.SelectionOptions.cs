@@ -131,9 +131,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions =>
         CreateSelectionOptions(AvailableAttachmentStorageModes, AvailableAttachmentStorageModeDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableManagedDropActionOptions =>
-        CreateSelectionOptions(AvailableManagedDropActions, AvailableManagedDropActionDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableTodoDefaultFilterOptions =>
         CreateSelectionOptions(AvailableTodoDefaultFilters, AvailableTodoDefaultFilterDisplayNames);
 
@@ -253,7 +250,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(AvailableTodoNewTaskPositionOptions));
         OnPropertyChanged(nameof(AvailableTodoLayoutModeOptions));
         OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
-        OnPropertyChanged(nameof(AvailableManagedDropActionOptions));
         OnPropertyChanged(nameof(AvailableTodoDefaultFilterOptions));
         OnPropertyChanged(nameof(AvailableTodoTabStyleOptions));
         OnPropertyChanged(nameof(AvailableTodoReminderOffsetOptions));

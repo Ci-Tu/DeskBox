@@ -99,7 +99,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string _selectedInteractiveWidgetChromeMode = SettingsService.WidgetChromeModeStandard;
     private string _selectedWidgetTitleIconMode = SettingsService.WidgetTitleIconModeColor;
     private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
-    private string _selectedManagedDropAction = SettingsService.ManagedDropActionMove;
     private string _selectedFileWidgetFolderOpenBehavior =
         FileWidgetFolderOpenBehaviorNames.Explorer;
     private string _selectedWeatherTemperatureUnit = SettingsService.WeatherTemperatureUnitCelsius;
@@ -149,7 +148,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string[]? _cachedQuickCaptureTabStyleDisplayNames;
     private string[]? _cachedTodoNewTaskPositionDisplayNames;
     private string[]? _cachedAttachmentStorageModeDisplayNames;
-    private string[]? _cachedManagedDropActionDisplayNames;
     private string[]? _cachedTodoDefaultFilterDisplayNames;
     private string[]? _cachedTodoLayoutModeDisplayNames;
     private string[]? _cachedTodoTabStyleDisplayNames;
@@ -202,16 +200,12 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool FileItemSystemContextMenuEnabled { get; set; }
     [ObservableProperty] public partial double DefaultWidth { get; set; }
     [ObservableProperty] public partial double DefaultHeight { get; set; }
-    [ObservableProperty] public partial bool HideShortcutArrowOverlay { get; set; }
-    [ObservableProperty] public partial bool ShowImageFilesAsIcons { get; set; }
     [ObservableProperty] public partial bool ShowHoverButtons { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionLockPosition { get; set; }
     [ObservableProperty] public partial bool ShowHoverActionLockSize { get; set; }
     [ObservableProperty] public partial bool ShowHoverActionAdd { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionMore { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionDelete { get; set; } = true;
-    [ObservableProperty] public partial bool ShowListItemDetails { get; set; }
-    [ObservableProperty] public partial bool ShowFileItemPathTooltips { get; set; } = true;
     [ObservableProperty] public partial double WidgetOpacity { get; set; } = SettingsService.DefaultWidgetOpacity;
     [ObservableProperty] public partial double WidgetMaterialIntensity { get; set; } = SettingsService.DefaultWidgetMaterialIntensity;
     [ObservableProperty] public partial double IconSize { get; set; } = SettingsService.DefaultIconSize;
@@ -221,8 +215,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial double VerticalSpacingScale { get; set; } = SettingsService.DefaultVerticalSpacingScale;
     [ObservableProperty] public partial double FileNameWidthScale { get; set; } = SettingsService.DefaultFileNameWidthScale;
     private int _fileNameLineCount = SettingsService.DefaultFileNameLineCount;
-    [ObservableProperty] public partial bool ShowFileExtensions { get; set; }
-    [ObservableProperty] public partial bool HideShortcutExtensionWhenShowingFileExtensions { get; set; } = true;
     [ObservableProperty] public partial bool IdleWorkingSetTrimEnabled { get; set; } = true;
     [ObservableProperty] public partial bool ImmediateHiddenWorkingSetTrimEnabled { get; set; }
     [ObservableProperty] public partial bool QuiescenceWorkingSetTrimEnabled { get; set; } = true;
@@ -338,12 +330,8 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
                 settings.FileWidgetFolderOpenBehavior);
         DefaultWidth = settings.DefaultWidgetWidth;
         DefaultHeight = settings.DefaultWidgetHeight;
-        HideShortcutArrowOverlay = settings.HideShortcutArrowOverlay;
-        ShowImageFilesAsIcons = settings.ShowImageFilesAsIcons;
         ShowHoverButtons = settings.ShowHoverButtons;
         ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
-        ShowListItemDetails = settings.ShowListItemDetails;
-        ShowFileItemPathTooltips = settings.ShowFileItemPathTooltips;
         InitializeFileStackSettings(settings);
         InitializeContentEditorSettings(settings);
         WidgetOpacity = settings.WidgetOpacity;
@@ -403,8 +391,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         FileNameWidthScale = settings.FileNameWidthScale;
         _fileNameLineCount = SettingsService.NormalizeFileNameLineCount(settings.FileNameLineCount);
         _selectedLayoutDensity = SettingsService.ResolveLayoutDensityPreset(settings);
-        ShowFileExtensions = settings.ShowFileExtensions;
-        HideShortcutExtensionWhenShowingFileExtensions = settings.HideShortcutExtensionWhenShowingFileExtensions;
         IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
         ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
         QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
@@ -413,14 +399,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         SyncQuickCaptureRecentLimitFacade();
         SyncQuickCaptureTextSizeFacade();
         _selectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
-        _selectedManagedDropAction = settings.ManagedDropAction switch
-        {
-            SettingsService.ManagedDropActionMove =>
-                SettingsService.ManagedDropActionMove,
-            SettingsService.ManagedDropActionFollowWindows =>
-                SettingsService.ManagedDropActionFollowWindows,
-            _ => SettingsService.ManagedDropActionCopy
-        };
         SyncQuickCaptureTabsFacade();
         SyncTodoTabFacade();
         SyncTodoDisplayFacade();
@@ -460,6 +438,9 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         ApplyCachedUpdateResult();
         RefreshAccentPreview();
         RefreshDragDropPermissionDiagnostic();
+// The managed-storage editor shows the quick-access card; project the initial
+// unknown state now and let the async refresh push the live pin state.
+PushQuickAccessPresentation();
 _ = PopulateNearbyPopularCitiesAsync();
 _ = RefreshQuickAccessStateAsync();
         _settingsService.SettingsChanged += OnSettingsChanged;

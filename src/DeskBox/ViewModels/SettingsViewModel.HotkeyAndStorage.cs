@@ -89,11 +89,6 @@ public partial class SettingsViewModel
             canShowWarning));
     }
 
-    public void RefreshQuickAccessState()
-    {
-        ManagedStorageQuickAccessPinState = ExplorerQuickAccessHelper.GetQuickAccessPinState(ManagedStorageRootPath, out _);
-    }
-
     public async Task RefreshQuickAccessStateAsync(bool showBusy = false, CancellationToken cancellationToken = default)
     {
         cancellationToken = cancellationToken.CanBeCanceled ? cancellationToken : _lifetimeCts.Token;

@@ -224,9 +224,9 @@ public sealed class SettingsService
             WidgetHoverActionMore,
             WidgetHoverActionDelete
         });
-    public const string ManagedDropActionMove = "Move";
-    public const string ManagedDropActionCopy = "Copy";
-    public const string ManagedDropActionFollowWindows = "FollowWindows";
+    public const string ManagedDropActionMove = Contracts.ManagedDropActions.Move;
+    public const string ManagedDropActionCopy = Contracts.ManagedDropActions.Copy;
+    public const string ManagedDropActionFollowWindows = Contracts.ManagedDropActions.FollowWindows;
 
     public const string AttachmentStorageModeLink = "Link";
     public const string AttachmentStorageModeCopy = "Copy";

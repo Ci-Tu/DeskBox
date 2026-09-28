@@ -21,6 +21,10 @@ public partial class SettingsViewModel
         _interactionSettings.RefreshLocalization();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
         RefreshGlobalHotkeyState();
+        // The managed-storage editor's option list re-localizes itself and
+        // the quick-access card is re-pushed in the new language.
+        _managedStorageSettings.RefreshLocalization();
+        PushQuickAccessPresentation();
     }
 
     private void OnSettingsChanged()
@@ -60,11 +64,7 @@ public partial class SettingsViewModel
                     settings.FileWidgetFolderOpenBehavior);
             DefaultWidth = settings.DefaultWidgetWidth;
             DefaultHeight = settings.DefaultWidgetHeight;
-            HideShortcutArrowOverlay = settings.HideShortcutArrowOverlay;
-            ShowImageFilesAsIcons = settings.ShowImageFilesAsIcons;
             ShowHoverButtons = settings.ShowHoverButtons;
-            ShowListItemDetails = settings.ShowListItemDetails;
-            ShowFileItemPathTooltips = settings.ShowFileItemPathTooltips;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
 
             WidgetOpacity = settings.WidgetOpacity;
@@ -128,8 +128,6 @@ public partial class SettingsViewModel
             FileNameWidthScale = settings.FileNameWidthScale;
             FileNameLineCount = SettingsService.NormalizeFileNameLineCount(settings.FileNameLineCount);
             SelectedLayoutDensity = SettingsService.ResolveLayoutDensityPreset(settings);
-            ShowFileExtensions = settings.ShowFileExtensions;
-            HideShortcutExtensionWhenShowingFileExtensions = settings.HideShortcutExtensionWhenShowingFileExtensions;
             IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
             ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
             QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
@@ -143,14 +141,6 @@ public partial class SettingsViewModel
             SyncQuickCaptureTextSizeFacade();
             SelectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
             ApplyPerformanceSettingsSnapshot(settings);
-            SelectedManagedDropAction = settings.ManagedDropAction switch
-            {
-                SettingsService.ManagedDropActionMove =>
-                    SettingsService.ManagedDropActionMove,
-                SettingsService.ManagedDropActionFollowWindows =>
-                    SettingsService.ManagedDropActionFollowWindows,
-                _ => SettingsService.ManagedDropActionCopy
-            };
             SyncQuickCaptureTabsFacade();
 
             _todoSettings.Refresh();
@@ -170,6 +160,14 @@ public partial class SettingsViewModel
             // re-projection above.
             _interactionSettings.SyncPresentation();
             _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
+
+            // File-display and managed-storage presentation live on their
+            // section editors now: refresh the editor projections instead of
+            // assigning shell facade properties. The root-path working state
+            // below still feeds the shell's picker / migration /
+            // quick-access chains.
+            _fileDisplaySettings.SyncPresentation();
+            _managedStorageSettings.SyncPresentation();
 
             WeatherAutoLocation = settings.WeatherAutoLocation;
             WeatherCityName = settings.WeatherCityName;
@@ -245,9 +243,6 @@ public partial class SettingsViewModel
                 UpdateDetailText = GetReadyUpdateDetailText();
             }
         }
-        OnPropertyChanged(nameof(QuickAccessStatusText));
-        OnPropertyChanged(nameof(PinQuickAccessButtonText));
-        OnPropertyChanged(nameof(PinQuickAccessToolTipText));
         OnPropertyChanged(nameof(AutoStartStatusText));
         OnPropertyChanged(nameof(AvailableAutoStartModeOptions));
         // The global-hotkey card text lives on the interaction editor now;
@@ -314,7 +309,6 @@ public partial class SettingsViewModel
             _cachedWeatherDefaultViewDisplayNames = null;
             _cachedWeatherSkinDisplayNames = null;
             _cachedWeatherRefreshIntervalDisplayNames = null;
-            _cachedManagedDropActionDisplayNames = null;
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableThemeDisplayNames));
@@ -347,7 +341,6 @@ public partial class SettingsViewModel
             OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
             OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableManagedDropActionDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoDefaultFilterDisplayNames));

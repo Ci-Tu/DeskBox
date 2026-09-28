@@ -49,8 +49,10 @@ public partial class SettingsViewModel
         // The coordinator owns the raw-path normalization, the stored write
         // and the debounced save; the file migration that moved widget
         // content to the new root already ran on the host's existing
-        // WidgetManager chain before this commit step.
-        string normalizedPath = _managedStorageSettings.SetDefaultRootPath(path);
+        // WidgetManager chain before this commit step. The editor owns the
+        // section's read-only path display, so the committed path is pushed
+        // onto its binding surface by the commit itself.
+        string normalizedPath = _managedStorageSettings.CommitRootPath(path);
         ManagedStorageRootPath = normalizedPath;
         _ = RefreshQuickAccessStateAsync(showBusy: true);
     }

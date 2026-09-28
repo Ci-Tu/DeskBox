@@ -1190,6 +1190,8 @@ public partial class App
         SettingsWindow settingsWindow = _settingsWindow ??
             throw new InvalidOperationException("The settings window is unavailable.");
         SettingsViewModel settingsViewModel = settingsWindow.ViewModel;
+        DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel fileDisplaySettings =
+            settingsWindow.FileDisplaySettings;
         WidgetManager manager = WidgetManager ??
             throw new InvalidOperationException("WidgetManager is unavailable.");
         AotManagedUiPersistenceEvidence evidence = result.Persistence ??
@@ -1198,7 +1200,8 @@ public partial class App
 
         evidence.Before = CaptureAotManagedUiPersistenceState(
             manager,
-            settingsViewModel);
+            settingsViewModel,
+            fileDisplaySettings);
         RequireAotManagedUiPersistenceLiveState(evidence.Before);
 
         switch (phase)
@@ -1209,7 +1212,7 @@ public partial class App
                     IsAotManagedUiPersistenceBaseline(evidence.Before),
                     "PersistenceBaselineCaptured",
                     "The first process did not start from the seeded persistence baseline.");
-                settingsViewModel.ShowFileExtensions = true;
+                fileDisplaySettings.ShowFileExtensions = true;
                 settingsViewModel.FileNameLineCount = SettingsService.MinFileNameLineCount;
                 settingsViewModel.TextSize = AotManagedUiMutatedTextSize;
                 settingsViewModel.SelectedTrayIconStyle =
@@ -1228,7 +1231,7 @@ public partial class App
                     IsAotManagedUiPersistenceMutation(evidence.Before),
                     "PersistenceRestartVerified",
                     "The second process did not reload every mutated settings and widget field.");
-                settingsViewModel.ShowFileExtensions = false;
+                fileDisplaySettings.ShowFileExtensions = false;
                 settingsViewModel.FileNameLineCount = SettingsService.DefaultFileNameLineCount;
                 settingsViewModel.TextSize = AotManagedUiBaselineTextSize;
                 settingsViewModel.SelectedTrayIconStyle =
@@ -1264,7 +1267,8 @@ public partial class App
         await Task.Delay(150);
         evidence.After = CaptureAotManagedUiPersistenceState(
             manager,
-            settingsViewModel);
+            settingsViewModel,
+            fileDisplaySettings);
         RequireAotManagedUiPersistenceLiveState(evidence.After);
 
         bool expectedAfterState = phase switch
@@ -1284,7 +1288,8 @@ public partial class App
 
     private AotManagedUiPersistenceStateEvidence CaptureAotManagedUiPersistenceState(
         WidgetManager manager,
-        SettingsViewModel settingsViewModel)
+        SettingsViewModel settingsViewModel,
+        DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel fileDisplaySettings)
     {
         AppSettings settings = SettingsService.Settings;
         return new AotManagedUiPersistenceStateEvidence
@@ -1293,7 +1298,7 @@ public partial class App
             FileNameLineCount = settings.FileNameLineCount,
             TextSize = settings.TextSize,
             TrayIconStyle = settings.TrayIconStyle ?? string.Empty,
-            ViewModelShowFileExtensions = settingsViewModel.ShowFileExtensions,
+            ViewModelShowFileExtensions = fileDisplaySettings.ShowFileExtensions,
             ViewModelFileNameLineCount = settingsViewModel.FileNameLineCount,
             ViewModelTextSize = settingsViewModel.TextSize,
             ViewModelTrayIconStyle = settingsViewModel.SelectedTrayIconStyle,
