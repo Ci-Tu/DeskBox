@@ -265,7 +265,12 @@ public sealed class ModuleBoundaryContractTests
             "src/DeskBox/Features/Todo/TodoSettingsViewModel.cs",
             // Batch 48: the Weather section's binding surface (incl. the
             // pushed city-search projection) lives on the section editor.
-            "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs"
+            "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs",
+            // Batch 50: the performance section's binding surface (incl. the
+            // three working-set trim switches whose change handlers replaced
+            // the old On*Changed partials) lives on the section editor.
+            "src/DeskBox/Features/Performance/PerformanceSettingsViewModel.cs",
+            "src/DeskBox/Services/PerformanceSettingsCoordinator.cs"
         })
         {
             string source = ProductionSource().Single(item => item.Path == path).Source;

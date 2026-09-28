@@ -222,8 +222,11 @@ public sealed class SettingsService
     public const string ManagedDropActionCopy = Contracts.ManagedDropActions.Copy;
     public const string ManagedDropActionFollowWindows = Contracts.ManagedDropActions.FollowWindows;
 
-    public const string AttachmentStorageModeLink = "Link";
-    public const string AttachmentStorageModeCopy = "Copy";
+    // Canonical attachment storage modes live in Contracts
+    // (AttachmentStorageModes, batch 50); these historical constants are
+    // aliases so existing consumers keep compiling unchanged.
+    public const string AttachmentStorageModeLink = Contracts.AttachmentStorageModes.Link;
+    public const string AttachmentStorageModeCopy = Contracts.AttachmentStorageModes.Copy;
     // Canonical file-stack option values and caps live in Contracts
     // (FileStackOptionKinds, batch 45); these historical constants are
     // aliases so existing consumers keep compiling unchanged.

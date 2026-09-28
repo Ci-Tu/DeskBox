@@ -148,6 +148,7 @@ public sealed partial class SettingsWindow : Window
     private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettingsViewModel;
     private readonly DeskBox.Features.Capsule.CapsuleSettingsViewModel _capsuleSettingsViewModel;
     private readonly DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel _groupNavigationSettingsViewModel;
+    private readonly DeskBox.Features.Performance.PerformanceSettingsViewModel _performanceSettingsViewModel;
 
     /// <summary>
     /// The file-display section's editor. Exposed for the AOT managed-UI
@@ -192,7 +193,8 @@ public sealed partial class SettingsWindow : Window
         DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel featureWidgetsSettings,
         DeskBox.Features.Music.MusicSettingsViewModel musicSettings,
         DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel managedStorageSettings,
-        DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings)
+        DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings,
+        DeskBox.Features.Performance.PerformanceSettingsViewModel performanceSettings)
     {
         var constructionStopwatch = Stopwatch.StartNew();
         long previousCheckpointMilliseconds = 0;
@@ -223,13 +225,14 @@ public sealed partial class SettingsWindow : Window
         _appearanceSettingsViewModel = appearanceSettings;
         _capsuleSettingsViewModel = capsuleSettings;
         _groupNavigationSettingsViewModel = groupNavigationSettings;
+        _performanceSettingsViewModel = performanceSettings;
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings, weatherSettings,
             backupSettings, quickCaptureSettings, quickCaptureSettingsEditor, searchFeatureSettings, appearanceSettings,
             capsuleSettings, interactionSettings, fileDisplaySettings, fileStackSettings,
             groupNavigationSettings, featureWidgetsSettings, musicSettings,
-            managedStorageSettings, maintenanceSettings, localizationService,
+            managedStorageSettings, maintenanceSettings, performanceSettings, localizationService,
             App.Current.AppUpdateService);
         LogConstructionCheckpoint("view-model");
         _settingsRootPointerPressedHandler = SettingsRoot_PointerPressedHandled;
@@ -244,6 +247,15 @@ public sealed partial class SettingsWindow : Window
         LogConstructionCheckpoint("section-registry");
 
         SettingsRoot.DataContext = ViewModel;
+        // The General section stays on the shell (language and startup are
+        // host-lifeline surfaces, batch 50 adjudication), but its two
+        // cross-domain combos reach their section editors through
+        // element-level DataContexts: the inline performance preset combo
+        // and the attachment-storage combo resolve their {Binding} paths
+        // against the performance / feature-widgets editors exactly like
+        // the migrated sections do.
+        PerformanceModeInlineComboBox.DataContext = _performanceSettingsViewModel;
+        AttachmentStorageModeComboBox.DataContext = _featureWidgetsSettingsViewModel;
         Bindings.Initialize();
         SettingsRoot.AddHandler(
             UIElement.PointerPressedEvent,

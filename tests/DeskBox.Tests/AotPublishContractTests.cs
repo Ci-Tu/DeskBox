@@ -543,7 +543,7 @@ public sealed class AotPublishContractTests
 
     [Theory]
     [InlineData("src/DeskBox/ViewModels/SearchPopupViewModel.cs", 15)]
-    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 17)]
+    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 14)]
     public void AotSensitiveViewModels_UseObservablePartialProperties(
         string relativePath,
         int expectedCount)
@@ -624,8 +624,11 @@ public sealed class AotPublishContractTests
         Assert.True(suppressionStart >= 0);
 
         int firstMigratedAssignment = source.IndexOf("AutoStart = StartupService.IsEnabled();", constructorStart, StringComparison.Ordinal);
+        // Batch 50 moved the performance trim toggles to the performance
+        // editor; the hover-button selection remains the last facade
+        // assignment covered by the constructor's suppression window.
         int lastMigratedAssignment = source.IndexOf(
-            "IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;",
+            "ShowHoverButtons = settings.ShowHoverButtons;",
             constructorStart,
             StringComparison.Ordinal);
         int suppressionEnd = source.IndexOf("_isRestoringDefaults = false;", suppressionStart, StringComparison.Ordinal);

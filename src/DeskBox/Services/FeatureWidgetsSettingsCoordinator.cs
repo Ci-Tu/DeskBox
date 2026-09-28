@@ -359,6 +359,10 @@ public sealed class FeatureWidgetsSettingsCoordinator : IFeatureWidgetsSettings
         FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
             _settings.Settings.FileWidget.FileWidgetFolderOpenBehavior);
 
+    public string ReadAttachmentStorageMode() =>
+        Contracts.AttachmentStorageModes.Normalize(
+            _settings.Settings.QuickCapture.AttachmentStorageMode);
+
     public bool SetFileWidgetFolderOpenBehavior(string? behavior)
     {
         ThrowIfStopped();

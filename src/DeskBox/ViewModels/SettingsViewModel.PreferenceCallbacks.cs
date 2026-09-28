@@ -170,34 +170,8 @@ public partial class SettingsViewModel
         OnHoverButtonActionSelectionChanged(SettingsService.WidgetHoverActionDelete, value);
     }
 
-    partial void OnIdleWorkingSetTrimEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _interactionSettings.SetIdleWorkingSetTrimEnabled(value);
-    }
-
-    partial void OnImmediateHiddenWorkingSetTrimEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _interactionSettings.SetImmediateHiddenWorkingSetTrimEnabled(value);
-    }
-
-    partial void OnQuiescenceWorkingSetTrimEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _settingsService.Settings.Performance.QuiescenceWorkingSetTrimEnabled = value;
-        _settingsService.SaveDebounced();
-    }
+    // The three working-set trim switches render in the performance section;
+    // their binding surface moved to the performance editor (batch 50) and
+    // writes go through the interaction / performance coordinators from the
+    // editor's change handlers.
 }

@@ -337,7 +337,6 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs"] = 20,
         ["src/DeskBox/ViewModels/SettingsViewModel.DesktopOrganization.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.DisplayNames.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FeatureOptions.cs"] = 2,
         ["src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs"] = 22,
         // Batch 37 moved the group-navigation default writes (wheel switch,
         // hover switch, default title display mode, default navigation style)
@@ -346,7 +345,6 @@ public sealed class SettingsSliceOwnershipContractTests
         // setters no longer compare or write through the facade).
         ["src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs"] = 20,
         ["src/DeskBox/ViewModels/SettingsViewModel.HotkeyAndStorage.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.Performance.cs"] = 11,
         ["src/DeskBox/ViewModels/SettingsViewModel.PreferenceCommands.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.RuntimeDiagnostics.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 133,

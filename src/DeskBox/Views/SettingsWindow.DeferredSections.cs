@@ -160,6 +160,18 @@ public sealed partial class SettingsWindow
             section.DataContext = _backupSettingsViewModel;
         }
 
+        // The performance section binds through the performance editor
+        // (batch 50): {Binding} markup resolves through its generated custom
+        // property provider under Native AOT. The section's writes (the
+        // legacy eleven custom-mode lambda facade writes, the preset write
+        // and the quiescence trim switch) go through the performance
+        // coordinator; the idle and immediate-hidden trim switches persist
+        // through the interaction coordinator from the editor's handlers.
+        if (sectionTag == "PerformanceSettings")
+        {
+            section.DataContext = _performanceSettingsViewModel;
+        }
+
         // The file-stack section binds through the file-stack editor
         // (batch 45): {Binding} markup resolves through its generated custom
         // property provider under Native AOT, and the template's compiled
