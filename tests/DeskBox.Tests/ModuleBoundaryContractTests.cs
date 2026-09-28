@@ -256,7 +256,11 @@ public sealed class ModuleBoundaryContractTests
             "src/DeskBox/ViewModels/SettingsViewModel.QuickCaptureSettings.cs",
             // Batch 46: the enablement/recording switch chain (the old
             // OnQuickCapture*Changed partials) lives on the section editor.
-            "src/DeskBox/Features/QuickCapture/QuickCaptureSettingsViewModel.cs"
+            "src/DeskBox/Features/QuickCapture/QuickCaptureSettingsViewModel.cs",
+            // Batch 47: the Todo switch chain (the old OnTodo*Changed
+            // partials) lives on the Todo section editor as well.
+            "src/DeskBox/Services/TodoSettingsCoordinator.cs",
+            "src/DeskBox/Features/Todo/TodoSettingsViewModel.cs"
         })
         {
             string source = ProductionSource().Single(item => item.Path == path).Source;
@@ -264,9 +268,16 @@ public sealed class ModuleBoundaryContractTests
             Assert.DoesNotContain("IServiceProvider", source, StringComparison.Ordinal);
         }
 
-        string callbacks = ProductionSource().Single(item =>
-            item.Path == "src/DeskBox/ViewModels/SettingsViewModel.FeatureCallbacks.cs").Source;
-        Assert.DoesNotContain("partial void OnQuickCapture", callbacks, StringComparison.Ordinal);
+        // Batch 47 deleted the shell callback partials entirely (both the
+        // Quick Capture and the Todo chains now live on their editors).
+        Assert.DoesNotContain(
+            "src/DeskBox/ViewModels/SettingsViewModel.FeatureCallbacks.cs",
+            ProductionSource().Select(item => item.Path),
+            StringComparer.Ordinal);
+        Assert.DoesNotContain("partial void OnTodo",
+            ProductionSource().Single(item =>
+                item.Path == "src/DeskBox/ViewModels/SettingsViewModel.FeatureOptions.cs").Source,
+            StringComparison.Ordinal);
     }
 
     [Fact]

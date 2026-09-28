@@ -56,7 +56,10 @@ public sealed class SettingsViewModelQuickCaptureTextSizeTests
             var quickCapture = new QuickCaptureSettingsCoordinator(settings, clipboard,
                 (_, _) => Task.CompletedTask, action => { action(); return true; }, _ => { });
             using var todo = new TodoSettingsViewModel(
-                new TodoSettingsCoordinator(settings), _ => { });
+                new TodoSettingsCoordinator(settings),
+                _ => string.Empty,
+                (key, args) => key,
+                _ => { });
             var quickCaptureEditor = CreateEditor(quickCapture);
             var editor = new DeskBox.Features.Appearance.AppearanceSettingsViewModel(
                 new AppearanceSettingsCoordinator(settings),

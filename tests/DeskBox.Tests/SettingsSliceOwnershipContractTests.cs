@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DeskBox.Models;
@@ -319,7 +319,10 @@ public sealed class SettingsSliceOwnershipContractTests
         // group into the existing QuickCaptureSettingsCoordinator
         // (FeatureCallbacks 25->0 and lost its entry; WeatherOptions 2->1,
         // only the city-name restore read remains; ContentEditorOptions
-        // 24->10, only the constructor/snapshot reads remain). FeatureOptions
+        // 24->10, only the constructor/snapshot reads remain; batch 47 then
+        // deleted ContentEditorOptions/FeatureTextSize whole when the Todo
+        // section moved to its editor, and both lost their entries).
+        // FeatureOptions
         // 68->2: both remaining matches are localization-key string literals
         // ("Settings.AttachmentStorageMode.Copy"/".Link"), not facade
         // accesses. Batch 39 moved the storage/diagnostics tail writes into
@@ -329,11 +332,9 @@ public sealed class SettingsSliceOwnershipContractTests
         // guide-overlay sync remains).
         ["src/DeskBox/ViewModels/SettingsViewModel.AppearanceOptions.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs"] = 20,
-        ["src/DeskBox/ViewModels/SettingsViewModel.ContentEditorOptions.cs"] = 10,
         ["src/DeskBox/ViewModels/SettingsViewModel.DesktopOrganization.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.DisplayNames.cs"] = 6,
         ["src/DeskBox/ViewModels/SettingsViewModel.FeatureOptions.cs"] = 2,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FeatureTextSize.cs"] = 5,
         ["src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs"] = 22,
         // Batch 37 moved the group-navigation default writes (wheel switch,
         // hover switch, default title display mode, default navigation style)

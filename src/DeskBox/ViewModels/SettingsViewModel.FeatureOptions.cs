@@ -15,34 +15,6 @@ namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    public string SelectedTodoLayoutMode
-    {
-        get => _todoSettings.LayoutMode;
-        set
-        {
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-            _todoSettings.LayoutMode = value;
-        }
-    }
-
-    public string SelectedTodoNewTaskPosition
-    {
-        get => _todoSettings.NewTaskPosition;
-        set
-        {
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-            _todoSettings.NewTaskPosition = value;
-        }
-    }
-
-    public string SelectedTodoNewTaskPositionText => GetTodoNewTaskPositionDisplayName(SelectedTodoNewTaskPosition);
-
     public string SelectedAttachmentStorageMode
     {
         get => _selectedAttachmentStorageMode;
@@ -62,52 +34,6 @@ public partial class SettingsViewModel
         }
     }
 
-
-    public string SelectedTodoDefaultFilter
-    {
-        get => _todoSettings.DefaultFilter;
-        set
-        {
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-            _todoSettings.DefaultFilter = value;
-        }
-    }
-
-    public string SelectedTodoDefaultFilterText => GetTodoDefaultFilterDisplayName(SelectedTodoDefaultFilter);
-
-    public string SelectedTodoTabStyle
-    {
-        get => _todoSettings.TabStyle;
-        set
-        {
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-            _todoSettings.TabStyle = value;
-        }
-    }
-
-    public string SelectedTodoTabStyleText => GetWidgetTabStyleDisplayName(SelectedTodoTabStyle);
-
-    public int SelectedTodoReminderOffsetMinutes
-    {
-        get => _todoSettings.DefaultOffsetMinutes;
-        set
-        {
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-
-            _todoSettings.DefaultOffsetMinutes = value;
-        }
-    }
-
-    public string SelectedTodoReminderOffsetMinutesText => GetTodoReminderOffsetDisplayName(SelectedTodoReminderOffsetMinutes);
 
     public string[] AvailableLanguages { get; } =
     [
@@ -218,7 +144,9 @@ public partial class SettingsViewModel
 
     public bool IsWidgetEnabled(WidgetKind kind)
     {
-        if (kind == WidgetKind.Todo) return TodoEnabled;
+        // The Todo switch's state (incl. its pending async transition) is
+        // the section editor's projection (batch 47).
+        if (kind == WidgetKind.Todo) return _todoSettings.Enabled;
         if (kind == WidgetKind.Search) return _searchFeatureSettings.Enabled;
         return App.Current?.WidgetManager?.IsFeatureWidgetEnabled(kind) ??
                FeatureWidgetSettings.IsEnabled(_settingsService.Settings, kind);
@@ -234,7 +162,9 @@ public partial class SettingsViewModel
                 _quickCaptureSettingsEditor.SetFeatureEnabled(enabled);
                 return;
             case WidgetKind.Todo:
-                TodoEnabled = enabled;
+                // The Todo switch's write chain (persist + host widget
+                // apply) lives on the section editor (batch 47).
+                _todoSettings.SetFeatureEnabled(enabled);
                 return;
             case WidgetKind.Search:
                 TrackSearchFeatureAction(_searchFeatureSettings.SetEnabledAsync(enabled, reveal: enabled));
@@ -350,10 +280,11 @@ public partial class SettingsViewModel
                 _quickCaptureSettingsEditor.RefreshClipboardDiagnostics();
                 break;
             case WidgetKind.Todo:
-                OnPropertyChanged(nameof(TodoEnabled));
-                OnPropertyChanged(nameof(SelectedTodoNewTaskPositionText));
-                OnPropertyChanged(nameof(SelectedTodoDefaultFilterText));
-                OnPropertyChanged(nameof(SelectedTodoTabStyleText));
+                // The section editor re-projects the whole Todo surface
+                // (the old per-property notifications are its own
+                // PropertyChanged broadcasts now).
+                _todoSettings.Refresh();
+                OnPropertyChanged(nameof(FeatureWidgetEntries));
                 break;
             case WidgetKind.Music:
                 break;
@@ -384,20 +315,6 @@ public partial class SettingsViewModel
         }
     }
 
-    public string[] AvailableWidgetTabStyles { get; } =
-    [
-        SettingsService.WidgetTabStylePivot,
-        SettingsService.WidgetTabStyleButton
-    ];
-
-    public string[] AvailableTodoNewTaskPositions { get; } =
-    [
-        SettingsService.TodoNewTaskPositionTop,
-        SettingsService.TodoNewTaskPositionBottom
-    ];
-
-    public string[] AvailableTodoNewTaskPositionDisplayNames => _cachedTodoNewTaskPositionDisplayNames ??= AvailableTodoNewTaskPositions.Select(GetTodoNewTaskPositionDisplayName).ToArray();
-
     public string[] AvailableAttachmentStorageModes { get; } =
     [
         SettingsService.AttachmentStorageModeLink,
@@ -414,46 +331,6 @@ public partial class SettingsViewModel
             ? _localizationService.T("Settings.AttachmentStorageMode.Copy")
             : _localizationService.T("Settings.AttachmentStorageMode.Link");
     }
-
-    public string[] AvailableTodoDefaultFilters { get; } =
-    [
-        SettingsService.TodoDefaultFilterAll,
-        SettingsService.TodoDefaultFilterActive,
-        SettingsService.TodoDefaultFilterToday,
-        SettingsService.TodoDefaultFilterThisWeek,
-        SettingsService.TodoDefaultFilterThisMonth,
-        SettingsService.TodoDefaultFilterImportant,
-        SettingsService.TodoDefaultFilterCompleted
-    ];
-
-    public string[] AvailableTodoDefaultFilterDisplayNames => _cachedTodoDefaultFilterDisplayNames ??= AvailableTodoDefaultFilters.Select(GetTodoDefaultFilterDisplayName).ToArray();
-
-    public string[] AvailableTodoLayoutModes { get; } =
-    [
-        SettingsService.TodoLayoutModeAuto,
-        SettingsService.TodoLayoutModeSinglePane,
-        SettingsService.TodoLayoutModeDualPane
-    ];
-
-    public string[] AvailableTodoLayoutModeDisplayNames =>
-        _cachedTodoLayoutModeDisplayNames ??= AvailableTodoLayoutModes
-            .Select(GetTodoLayoutModeDisplayName)
-            .ToArray();
-
-    public string[] AvailableTodoTabStyleDisplayNames => _cachedTodoTabStyleDisplayNames ??= AvailableWidgetTabStyles.Select(GetWidgetTabStyleDisplayName).ToArray();
-
-    public int[] AvailableTodoReminderOffsetMinutes { get; } =
-    [
-        0,
-        5,
-        10,
-        15,
-        30,
-        60,
-        1440
-    ];
-
-    public string[] AvailableTodoReminderOffsetDisplayNames => _cachedTodoReminderOffsetDisplayNames ??= AvailableTodoReminderOffsetMinutes.Select(GetTodoReminderOffsetDisplayName).ToArray();
 
 // ─── Weather Settings Properties ──────────────────────────────
 }

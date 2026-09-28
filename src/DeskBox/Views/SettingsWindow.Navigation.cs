@@ -976,13 +976,16 @@ public sealed partial class SettingsWindow
             return;
         }
 
+        // The tab-visibility flyout state machine lives on the Todo section
+        // editor (batch 47); the section reaches it through its DataContext.
+        var todoSettings = _todoSettingsViewModel;
         SettingsMultiSelectMenu.Show(
             button,
-            ViewModel.AvailableTodoDefaultFilters,
-            ViewModel.GetTodoTabDisplayName,
-            ViewModel.IsTodoTabSelected,
-            ViewModel.CanToggleTodoTab,
-            ViewModel.ToggleTodoTab);
+            todoSettings.AvailableDefaultFilters,
+            todoSettings.GetTabDisplayName,
+            todoSettings.IsTabSelected,
+            todoSettings.CanToggleTab,
+            todoSettings.ToggleTab);
     }
 
     private void TodoFooterDisplayDropDown_Click(object sender, RoutedEventArgs e)
@@ -992,13 +995,14 @@ public sealed partial class SettingsWindow
             return;
         }
 
+        var todoSettings = _todoSettingsViewModel;
         SettingsMultiSelectMenu.Show(
             button,
-            ["Stats", "ClearCompleted"],
-            ViewModel.GetTodoFooterDisplayOptionName,
-            ViewModel.IsTodoFooterDisplayOptionSelected,
+            todoSettings.AvailableFooterDisplayOptions,
+            todoSettings.GetFooterDisplayOptionName,
+            todoSettings.IsFooterDisplayOptionSelected,
             _ => true,
-            ViewModel.ToggleTodoFooterDisplayOption);
+            todoSettings.ToggleFooterDisplayOption);
     }
 
     private void WeatherDisplayOptionsDropDown_Click(object sender, RoutedEventArgs e)

@@ -8,29 +8,8 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableLanguageOptions =>
         CreateSelectionOptions(AvailableLanguages, AvailableLanguageDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableItemPreviewLineCountOptions =>
-        CreateSelectionOptions(AvailableItemPreviewLineCounts, AvailableItemPreviewLineCountDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableEditorEnterBehaviorOptions =>
-        CreateSelectionOptions(AvailableEditorEnterBehaviors, AvailableEditorEnterBehaviorDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTodoNewTaskPositionOptions =>
-        CreateSelectionOptions(AvailableTodoNewTaskPositions, AvailableTodoNewTaskPositionDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTodoLayoutModeOptions =>
-        CreateSelectionOptions(AvailableTodoLayoutModes, AvailableTodoLayoutModeDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions =>
         CreateSelectionOptions(AvailableAttachmentStorageModes, AvailableAttachmentStorageModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTodoDefaultFilterOptions =>
-        CreateSelectionOptions(AvailableTodoDefaultFilters, AvailableTodoDefaultFilterDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTodoTabStyleOptions =>
-        CreateSelectionOptions(AvailableWidgetTabStyles, AvailableTodoTabStyleDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTodoReminderOffsetOptions =>
-        CreateSelectionOptions(AvailableTodoReminderOffsetMinutes, AvailableTodoReminderOffsetDisplayNames);
 
     public IReadOnlyList<SettingsOption> AvailableWeatherTemperatureUnitOptions =>
         CreateSelectionOptions(AvailableWeatherTemperatureUnits, AvailableWeatherTemperatureUnitDisplayNames);
@@ -91,14 +70,7 @@ public partial class SettingsViewModel
     {
         OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
-        OnPropertyChanged(nameof(AvailableItemPreviewLineCountOptions));
-        OnPropertyChanged(nameof(AvailableEditorEnterBehaviorOptions));
-        OnPropertyChanged(nameof(AvailableTodoNewTaskPositionOptions));
-        OnPropertyChanged(nameof(AvailableTodoLayoutModeOptions));
         OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
-        OnPropertyChanged(nameof(AvailableTodoDefaultFilterOptions));
-        OnPropertyChanged(nameof(AvailableTodoTabStyleOptions));
-        OnPropertyChanged(nameof(AvailableTodoReminderOffsetOptions));
         OnPropertyChanged(nameof(AvailableWeatherTemperatureUnitOptions));
         OnPropertyChanged(nameof(AvailableWeatherWindSpeedUnitOptions));
         OnPropertyChanged(nameof(AvailableWeatherDefaultViewOptions));

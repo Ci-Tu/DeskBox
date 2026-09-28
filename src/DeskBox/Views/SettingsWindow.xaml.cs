@@ -138,6 +138,7 @@ public sealed partial class SettingsWindow : Window
     private readonly IBackupCommands _backupCommands;
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
     private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsViewModel;
+    private readonly TodoSettingsViewModel _todoSettingsViewModel;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
     private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettingsViewModel;
     private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettingsViewModel;
@@ -209,6 +210,7 @@ public sealed partial class SettingsWindow : Window
         _backupRestoreActions = backupRestoreActions;
         _musicSettingsViewModel = musicSettings;
         _quickCaptureSettingsViewModel = quickCaptureSettingsEditor;
+        _todoSettingsViewModel = todoSettings;
         _interactionSettingsViewModel = interactionSettings;
         _fileStackSettingsViewModel = fileStackSettings;
         _featureWidgetsSettingsViewModel = featureWidgetsSettings;
