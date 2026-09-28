@@ -1034,13 +1034,17 @@ public sealed partial class SettingsWindow
             return;
         }
 
+        // The decorative-animation flyout's selection surface lives on the
+        // performance editor (batch 50); the section reaches it through its
+        // DataContext.
+        var performanceSettings = _performanceSettingsViewModel;
         SettingsMultiSelectMenu.Show(
             button,
-            ViewModel.AvailableContinuousDecorativeAnimationOptions,
-            ViewModel.GetContinuousDecorativeAnimationDisplayName,
-            ViewModel.IsContinuousDecorativeAnimationSelected,
+            performanceSettings.AvailableContinuousDecorativeAnimationOptions,
+            performanceSettings.GetContinuousDecorativeAnimationDisplayName,
+            performanceSettings.IsContinuousDecorativeAnimationSelected,
             _ => true,
-            ViewModel.ToggleContinuousDecorativeAnimation);
+            performanceSettings.ToggleContinuousDecorativeAnimation);
     }
 
     private void HoverButtonActionsDropDown_Click(object sender, RoutedEventArgs e)

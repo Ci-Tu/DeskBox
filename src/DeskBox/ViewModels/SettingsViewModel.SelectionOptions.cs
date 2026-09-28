@@ -8,9 +8,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableLanguageOptions =>
         CreateSelectionOptions(AvailableLanguages, AvailableLanguageDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions =>
-        CreateSelectionOptions(AvailableAttachmentStorageModes, AvailableAttachmentStorageModeDisplayNames);
-
     internal static IReadOnlyList<SettingsOption> CreateSelectionOptions<T>(
         IReadOnlyList<T> values,
         IReadOnlyList<string> displayNames)
@@ -41,6 +38,5 @@ public partial class SettingsViewModel
     private void NotifySelectionOptionsChanged()
     {
         OnPropertyChanged(nameof(AvailableLanguageOptions));
-        OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
     }
 }

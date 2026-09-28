@@ -3401,9 +3401,10 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <FontIcon Glyph="&#xE723;" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
+                                x:Name="AttachmentStorageModeComboBox"
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
                                 ItemsSource="{Binding AvailableAttachmentStorageModeOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedAttachmentStorageMode, Mode=TwoWay}" />
+                                controls:SettingsComboBox.Value="{Binding AttachmentStorageMode, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <Border Style="{StaticResource SettingsGroupStyle}">
@@ -3422,6 +3423,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     </Grid>
                                 </Button>
                                 <ComboBox
+                                    x:Name="PerformanceModeInlineComboBox"
                                     Grid.Column="1"
                                     MinWidth="176"
                                     VerticalAlignment="Center"

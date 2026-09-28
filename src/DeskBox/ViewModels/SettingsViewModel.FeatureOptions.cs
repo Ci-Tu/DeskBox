@@ -15,26 +15,6 @@ namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    public string SelectedAttachmentStorageMode
-    {
-        get => _selectedAttachmentStorageMode;
-        set
-        {
-            string normalized = SettingsService.NormalizeAttachmentStorageMode(value);
-            if (!SetProperty(ref _selectedAttachmentStorageMode, normalized))
-            {
-                return;
-            }
-
-            if (!_isRestoringDefaults && !_isApplyingSettingsSnapshot)
-            {
-                _featureWidgetsSettings.SetAttachmentStorageMode(normalized);
-            }
-
-        }
-    }
-
-
     public string[] AvailableLanguages { get; } =
     [
         SettingsService.LanguageSystem,
@@ -307,23 +287,6 @@ public partial class SettingsViewModel
         {
             OnPropertyChanged(nameof(FeatureWidgetEntries));
         }
-    }
-
-    public string[] AvailableAttachmentStorageModes { get; } =
-    [
-        SettingsService.AttachmentStorageModeLink,
-        SettingsService.AttachmentStorageModeCopy
-    ];
-
-    public string[] AvailableAttachmentStorageModeDisplayNames =>
-        _cachedAttachmentStorageModeDisplayNames ??=
-            AvailableAttachmentStorageModes.Select(GetAttachmentStorageModeDisplayName).ToArray();
-
-    public string GetAttachmentStorageModeDisplayName(string storageMode)
-    {
-        return SettingsService.NormalizeAttachmentStorageMode(storageMode) == SettingsService.AttachmentStorageModeCopy
-            ? _localizationService.T("Settings.AttachmentStorageMode.Copy")
-            : _localizationService.T("Settings.AttachmentStorageMode.Link");
     }
 
 // ─── Weather Settings Properties ──────────────────────────────

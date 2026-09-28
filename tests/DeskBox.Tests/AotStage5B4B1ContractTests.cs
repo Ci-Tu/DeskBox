@@ -208,9 +208,27 @@ public sealed class AotStage5B4B1ContractTests
             "ItemsSource=\"{x:Bind CustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(49, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(33, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
-        Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
+        // Batch 50: the performance section (and the General section's
+        // inline preset combo + attachment-storage combo) bind through the
+        // performance / feature-widgets editors; the shell bridge keeps only
+        // the General host-lifeline and About update-card surfaces.
+        Assert.DoesNotContain("nameof(SelectedPerformanceMode)", bindableViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("nameof(IdleWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("nameof(SelectedAttachmentStorageMode)", bindableViewModel, StringComparison.Ordinal);
+        Assert.Contains(
+            "PerformanceModeInlineComboBox.DataContext = _performanceSettingsViewModel;",
+            ReadRepositoryFile("src/DeskBox/Views/SettingsWindow.xaml.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AttachmentStorageModeComboBox.DataContext = _featureWidgetsSettingsViewModel;",
+            ReadRepositoryFile("src/DeskBox/Views/SettingsWindow.xaml.cs"),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "section.DataContext = _performanceSettingsViewModel;",
+            ReadRepositoryFile("src/DeskBox/Views/SettingsWindow.DeferredSections.cs"),
+            StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(SelectedWidgetCapsuleBarPlacement)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(ResetAllCapsuleOverridesCommand)", bindableViewModel, StringComparison.Ordinal);
@@ -375,7 +393,7 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 49", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 33", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);

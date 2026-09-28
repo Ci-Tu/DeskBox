@@ -120,6 +120,7 @@ public partial class App : Application
     private FeatureWidgetsSettingsCoordinator? _featureWidgetsSettings;
     private ManagedStorageSettingsCoordinator? _managedStorageSettings;
     private MaintenanceSettingsCoordinator? _maintenanceSettings;
+    private PerformanceSettingsCoordinator? _performanceSettings;
     private QuickCaptureClipboardRuntime? _quickCaptureClipboardRuntime;
     private BackupRuntime? _backupRuntime;
     private readonly ShutdownSequence _shutdownSequence = new(Log);
@@ -1033,6 +1034,7 @@ public partial class App : Application
             _featureWidgetsSettings = new FeatureWidgetsSettingsCoordinator(SettingsService);
             _managedStorageSettings = new ManagedStorageSettingsCoordinator(SettingsService);
             _maintenanceSettings = new MaintenanceSettingsCoordinator(SettingsService);
+            _performanceSettings = new PerformanceSettingsCoordinator(SettingsService);
             _quickCaptureClipboardRuntime = _featureRuntimes.Register(QuickCaptureFeatureRuntimeId,
                 new QuickCaptureClipboardRuntime(
                     () => !IsShuttingDown &&
@@ -2981,7 +2983,12 @@ public partial class App : Application
                 _managedStorageSettings ?? throw new InvalidOperationException("Managed storage settings are not initialized."),
                 LocalizationService.T),
             new DeskBox.Features.Maintenance.MaintenanceSettingsViewModel(
-                _maintenanceSettings ?? throw new InvalidOperationException("Maintenance settings are not initialized.")));
+                _maintenanceSettings ?? throw new InvalidOperationException("Maintenance settings are not initialized.")),
+            new DeskBox.Features.Performance.PerformanceSettingsViewModel(
+                _performanceSettings ?? throw new InvalidOperationException("Performance settings are not initialized."),
+                _interactionSettings ?? throw new InvalidOperationException("Interaction settings are not initialized."),
+                LocalizationService.T,
+                () => LocalizationService.IsChinese));
         _settingsWindow.Closed += SettingsWindow_ClosedForApp;
         return _settingsWindow;
     }

@@ -147,4 +147,12 @@ public interface IFeatureWidgetsSettings
     /// the file-widget overview combo).
     /// </summary>
     string ReadFileWidgetFolderOpenBehavior();
+
+    /// <summary>
+    /// Reads the persisted attachment storage mode, normalized through
+    /// <see cref="AttachmentStorageModes"/> (batch 50 read port for the
+    /// General section's attachment-storage combo, whose binding surface
+    /// lives on the feature-widgets editor).
+    /// </summary>
+    string ReadAttachmentStorageMode();
 }

@@ -43,6 +43,9 @@ private void OnLanguageChanged()
     _todoSettings.RefreshLocalization();
     _weatherSettings.RefreshLocalization();
     _weatherSettings.ClearCitySuggestions();
+    // The performance editor's option tables and the decorative-animation
+    // summary re-localize themselves (batch 50).
+    _performanceSettings.RefreshLocalization();
 }
 
 
@@ -71,10 +74,6 @@ private void OnLanguageChanged()
             ShowHoverButtons = settings.ShowHoverButtons;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
 
-            IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
-            ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
-            QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
-
             // The file-stack section (including its custom-rule collection)
             // and the file-widget overview's folder-open combo live on their
             // section editors now: re-project from the coordinator snapshots
@@ -85,8 +84,11 @@ private void OnLanguageChanged()
             // The Quick Capture section's whole presentation lives on its
             // editor (batch 46): re-project from the coordinator snapshots.
             _quickCaptureSettingsEditor.SyncPresentation();
-            SelectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
-            ApplyPerformanceSettingsSnapshot(settings);
+            // The performance section's whole presentation (incl. the three
+            // working-set trim switches) and the General section's
+            // attachment-storage combo live on their editors now (batch 50):
+            // re-project from the coordinator read snapshots.
+            _performanceSettings.SyncPresentation();
 
             // The Todo section's whole presentation lives on its editor
             // (batch 47); the Weather section's whole presentation lives on
@@ -206,13 +208,9 @@ private void OnLanguageChanged()
             // the display-name caches and re-projects the pushed texts.
             _backupSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
-            _cachedAttachmentStorageModeDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
-            OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
             NotifySelectionOptionsChanged();
         }
-
-        RefreshPerformanceSelectionProperties(refreshLocalizedOptions);
 
         OnPropertyChanged(nameof(SelectedLanguageText));
         NotifyHoverButtonActionPropertiesChanged();

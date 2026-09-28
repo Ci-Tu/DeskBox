@@ -96,3 +96,20 @@ public static class QuickCaptureOptionKinds
             MaxTextSize);
     }
 }
+
+/// <summary>
+/// Canonical attachment storage modes, owned here so the feature-widgets
+/// editor can normalize its General-section combo without referencing the
+/// settings adapter. <see cref="Services.SettingsService"/> keeps its
+/// historical constants as aliases of these.
+/// </summary>
+public static class AttachmentStorageModes
+{
+    public const string Link = "Link";
+    public const string Copy = "Copy";
+
+    public static string Normalize(string? storageMode) =>
+        string.Equals(storageMode, Copy, StringComparison.OrdinalIgnoreCase)
+            ? Copy
+            : Link;
+}

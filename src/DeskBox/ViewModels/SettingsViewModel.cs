@@ -67,6 +67,11 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettings;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettings;
     private readonly DeskBox.Features.Maintenance.MaintenanceSettingsViewModel _maintenanceSettings;
+    // The performance section's binding surface (incl. the General
+    // section's inline preset combo) lives on the performance editor
+    // (batch 50); the shell keeps it for the settings-broadcast refresh
+    // and the language-change relocalization below.
+    private readonly DeskBox.Features.Performance.PerformanceSettingsViewModel _performanceSettings;
     // The backup family's binding surface and visit state machine live on
     // the backup editor (batch 49); the shell keeps it for the settings-
     // broadcast refresh and the diagnostics pushes below.
@@ -86,7 +91,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private long? _updateTotalBytes;
     private Color _currentAccentColor;
     private string _selectedLanguage = SettingsService.LanguageSystem;
-    private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
     private bool _useSystemAccentColor;
     private string _managedStorageRootPath = SettingsService.GetDefaultManagedStorageRootPath();
     private QuickAccessPinState _quickAccessPinState = QuickAccessPinState.Unknown;
@@ -99,7 +103,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _isUpdatingHoverButtonActionSelection;
 
     private string[]? _cachedLanguageDisplayNames;
-    private string[]? _cachedAttachmentStorageModeDisplayNames;
 
     [ObservableProperty] public partial bool AutoStart { get; set; }
     private bool _autoStartUsedFallback;
@@ -145,10 +148,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] public partial bool ShowHoverActionAdd { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionMore { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionDelete { get; set; } = true;
-    [ObservableProperty] public partial bool IdleWorkingSetTrimEnabled { get; set; } = true;
-    [ObservableProperty] public partial bool ImmediateHiddenWorkingSetTrimEnabled { get; set; }
-    [ObservableProperty] public partial bool QuiescenceWorkingSetTrimEnabled { get; set; } = true;
-
     [ObservableProperty] public partial bool IsCheckingForUpdates { get; set; }
     [ObservableProperty] public partial bool IsDownloadingUpdate { get; set; }
     [ObservableProperty] public partial string UpdateStatusText { get; set; } = string.Empty;
@@ -174,6 +173,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         DeskBox.Features.Music.MusicSettingsViewModel musicSettings,
         DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel managedStorageSettings,
         DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings,
+        DeskBox.Features.Performance.PerformanceSettingsViewModel performanceSettings,
         LocalizationService? localizationService = null,
         IAppUpdateService? appUpdateService = null)
     {
@@ -195,6 +195,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _musicSettings = musicSettings;
         _managedStorageSettings = managedStorageSettings;
         _maintenanceSettings = maintenanceSettings;
+        _performanceSettings = performanceSettings;
         _themeService = themeService;
         _localizationService = localizationService ?? new LocalizationService(settingsService);
         _widgetContentFactory = new WidgetContentFactory(_localizationService);
@@ -224,15 +225,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         // section is entered.
         _fileStackPreviewEntries = BuildFileStackPreviewEntries(includeMappedFolders: false);
         _fileStackSettings.UpdatePreviewEntries(_fileStackPreviewEntries);
-        InitializePerformanceSettings(settings);
         // The capsule family's presentation lives on the capsule editor now
         // (batch 44); its constructor syncs itself from the coordinator
         // snapshots, and the widget/group override projection is pushed in
         // right after the editor fields are wired below.
-        IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
-        ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
-        QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
-        _selectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
         // The Todo section's presentation (layout, tabs, content editor,
         // reminders, footer display) and the Weather section's presentation
         // (location mode, city search, units, view, skin, data source,

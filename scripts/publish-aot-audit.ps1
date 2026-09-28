@@ -3493,6 +3493,11 @@ $stage5B4B1SourceFiles = @(
     # computation.
     "src/DeskBox/Features/Backup/BackupSettingsViewModel.cs",
     "src/DeskBox/Features/Backup/BackupSettingsViewModel.SettingsSurface.cs",
+    # Batch 50 moved the performance section's binding surface (and the
+    # General section's inline preset combo / attachment-storage combo)
+    # onto the performance / feature-widgets editors.
+    "src/DeskBox/Features/Performance/PerformanceSettingsViewModel.cs",
+    "src/DeskBox/Features/FeatureWidgets/FeatureWidgetsSettingsViewModel.cs",
     "src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs",
     # Deferred-section host owns the lazy typed-ViewModel bridges that used to
     # live eagerly in SettingsWindow.xaml.cs.
@@ -3653,7 +3658,7 @@ $stage5B4B1MissingBindableTypePatterns = @(
         }
     }
 )
-$stage5B4B1ExpectedBindableViewModelPropertyCount = 49
+$stage5B4B1ExpectedBindableViewModelPropertyCount = 33
 $stage5B4B1ActualBindableViewModelPropertyCount = [regex]::Matches(
     $stage5B4B1Sources[$stage5B4B1SourceFiles[9]],
     [regex]::Escape('nameof(')).Count
@@ -3777,7 +3782,11 @@ $stage5B4B1RequiredWeatherProjectionPatterns = @(
             'SelectCity(_citySuggestions[0])')
     },
     [ordered]@{
-        file = $stage5B4B1SourceFiles[21]
+        # Name-based lookup: batch 49 inserted the backup editor files into
+        # the source list after the weather editor and silently shifted this
+        # positional reference onto the backup editor (the pattern lives in
+        # the hotkey-and-appearance code-behind). Batch 50 pins it by path.
+        file = "src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs"
         patterns = @(
             '_weatherSettingsViewModel.TrySelectFirstCitySuggestion()')
     },
@@ -3886,7 +3895,7 @@ $stage5B4B1SourceWarningMessages = @(
         Where-Object {
             $line = $_
             $warningCodeRegex.IsMatch($line) -and
-                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|Features\.Weather\.WeatherSettingsViewModel|Features\.Backup\.BackupSettingsViewModel(?:\.\w+)?|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
+                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|Features\.Weather\.WeatherSettingsViewModel|Features\.Backup\.BackupSettingsViewModel(?:\.\w+)?|Features\.Performance\.PerformanceSettingsViewModel(?:\.\w+)?|Features\.FeatureWidgets\.FeatureWidgetsSettingsViewModel(?:\.\w+)?|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
         } |
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique

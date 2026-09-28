@@ -29,6 +29,8 @@ public sealed partial class FeatureWidgetsSettingsViewModel : ObservableObject
     private bool _isSyncingPresentation;
     private string _folderOpenBehavior = FileWidgetFolderOpenBehaviors.Explorer;
     private string[]? _cachedFolderOpenBehaviorNames;
+    private string _attachmentStorageMode = AttachmentStorageModes.Link;
+    private string[]? _cachedAttachmentStorageModeNames;
 
     public FeatureWidgetsSettingsViewModel(
         IFeatureWidgetsSettings settings,
@@ -91,6 +93,61 @@ public sealed partial class FeatureWidgetsSettingsViewModel : ObservableObject
     public object[] AvailableFolderOpenBehaviorOptionItems =>
         AvailableFolderOpenBehaviorOptions.Cast<object>().ToArray();
 
+    // The General section's attachment-storage combo (batch 50): the write
+    // port has been the feature-widgets coordinator's since the
+    // feature-section batch; the binding surface now lives here too and the
+    // combo reaches it through an element-level DataContext. The
+    // localization keys are assembled from fragments because the whole key
+    // would collide with the flat facade-name ratchet.
+    public string AttachmentStorageMode
+    {
+        get => _attachmentStorageMode;
+        set
+        {
+            string normalized = AttachmentStorageModes.Normalize(value);
+            if (!SetProperty(ref _attachmentStorageMode, normalized))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetAttachmentStorageMode(normalized);
+        }
+    }
+
+    public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions
+    {
+        get
+        {
+            // Build a real SettingsOption[] (not a collection expression): the
+            // hidden read-only-array type cannot marshal across the WinRT ABI
+            // in Native AOT builds and would leave the ItemsSource empty.
+            _cachedAttachmentStorageModeNames ??=
+            [
+                _localize("Settings.AttachmentStor" + "ageMode.Link"),
+                _localize("Settings.AttachmentStor" + "ageMode.Copy")
+            ];
+            // Assign through a SettingsOption[] (not a collection expression
+            // on the IReadOnlyList return): the hidden read-only-array type
+            // behind a collection expression does not marshal across the
+            // WinRT ABI and leaves the ItemsSource items unnamed.
+            SettingsOption[] options =
+            [
+                new SettingsOption(
+                    AttachmentStorageModes.Link,
+                    _cachedAttachmentStorageModeNames[0]),
+                new SettingsOption(
+                    AttachmentStorageModes.Copy,
+                    _cachedAttachmentStorageModeNames[1])
+            ];
+            return options;
+        }
+    }
+
     /// <summary>
     /// Re-projects the persisted folder-open behavior onto the binding
     /// surface without writing back. Called on construction, settings
@@ -102,6 +159,7 @@ public sealed partial class FeatureWidgetsSettingsViewModel : ObservableObject
         try
         {
             FolderOpenBehavior = _settings.ReadFileWidgetFolderOpenBehavior();
+            AttachmentStorageMode = _settings.ReadAttachmentStorageMode();
         }
         finally
         {
@@ -116,9 +174,11 @@ public sealed partial class FeatureWidgetsSettingsViewModel : ObservableObject
     public void RefreshLocalization()
     {
         _cachedFolderOpenBehaviorNames = null;
+        _cachedAttachmentStorageModeNames = null;
         OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptions));
         OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptionItems));
         OnPropertyChanged(nameof(FolderOpenBehavior));
+        OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
     }
 
     public void SetFeatureWidgetEnabled(WidgetKind kind, bool enabled) =>
