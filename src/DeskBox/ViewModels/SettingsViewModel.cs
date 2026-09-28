@@ -82,8 +82,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private Color _currentAccentColor;
     private string _selectedLanguage = SettingsService.LanguageSystem;
     private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
-    private string _selectedFileWidgetFolderOpenBehavior =
-        FileWidgetFolderOpenBehaviorNames.Explorer;
     private string _selectedWeatherTemperatureUnit = SettingsService.WeatherTemperatureUnitCelsius;
     private string _selectedWeatherWindSpeedUnit = SettingsService.WeatherWindSpeedUnitKmh;
     private string _selectedWeatherDefaultView = SettingsService.WeatherDefaultViewToday;
@@ -160,7 +158,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
             ? Visibility.Visible
             : Visibility.Collapsed;
     [ObservableProperty] public partial bool AutoCheckForUpdates { get; set; } = true;
-    [ObservableProperty] public partial bool FileItemSystemContextMenuEnabled { get; set; }
     [ObservableProperty] public partial bool ShowHoverButtons { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionLockPosition { get; set; }
     [ObservableProperty] public partial bool ShowHoverActionLockSize { get; set; }
@@ -272,13 +269,16 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         if (StartupService.Current is DirectStartupService directStartup)
             SelectedAutoStartMode = directStartup.Mode.ToString();
         AutoCheckForUpdates = settings.AutoCheckForUpdates;
-        FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;
-        _selectedFileWidgetFolderOpenBehavior =
-            FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
-                settings.FileWidgetFolderOpenBehavior);
         ShowHoverButtons = settings.ShowHoverButtons;
         ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
-        InitializeFileStackSettings(settings);
+        // The file-stack section's presentation (including the custom-rule
+        // collection and its aggregation) lives on the file-stack editor now
+        // (batch 45); its constructor syncs itself from the coordinator
+        // snapshot. The rule-preview entries are widget items at first, and
+        // the shell pushes the freshly scanned disk entries whenever the
+        // section is entered.
+        _fileStackPreviewEntries = BuildFileStackPreviewEntries(includeMappedFolders: false);
+        _fileStackSettings.UpdatePreviewEntries(_fileStackPreviewEntries);
         InitializeContentEditorSettings(settings);
         InitializePerformanceSettings(settings);
         // The capsule family's presentation lives on the capsule editor now
@@ -354,6 +354,7 @@ _ = RefreshQuickAccessStateAsync();
         _interactionSettings.SnapEnabledUserChanged += OnInteractionSnapEnabledUserChanged;
         _interactionSettings.SnapSpacingUserChanged += OnInteractionSnapSpacingUserChanged;
         _interactionSettings.HotkeyEnabledUserChanged += OnInteractionHotkeyEnabledUserChanged;
+        _interactionSettings.FileItemContextMenuEnabledUserChanged += OnInteractionFileItemContextMenuUserChanged;
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
 
         // Appearance-section host linkages: the editor owns the section
@@ -408,7 +409,6 @@ _ = RefreshQuickAccessStateAsync();
         _settingsService.SettingsChanged -= OnSettingsChanged;
         _themeService.AppearanceChanged -= OnAppearanceChanged;
         _localizationService.LanguageChanged -= OnLanguageChanged;
-        DisposeFileStackSettings();
         _citySearchCts?.Cancel();
         _citySearchCts?.Dispose();
         _citySearchService?.Dispose();

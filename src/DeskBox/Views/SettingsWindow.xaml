@@ -7,6 +7,7 @@
     xmlns:controls="using:DeskBox.Controls"
     xmlns:sections="using:DeskBox.Views.SettingsSections"
     xmlns:viewModels="using:DeskBox.ViewModels"
+    xmlns:fileStack="using:DeskBox.Features.FileStack"
     xmlns:svc="using:DeskBox.Services"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -1198,7 +1199,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                     </StackPanel>
                 </StackPanel>
                     </DataTemplate>
-                    <DataTemplate x:Key="FileStackSettingsSectionTemplate" x:DataType="viewModels:SettingsViewModel">
+                    <DataTemplate x:Key="FileStackSettingsSectionTemplate" x:DataType="fileStack:FileStackSettingsViewModel">
                         <StackPanel
                     x:Name="FileStackSettingsSection"
                     Visibility="Collapsed"
@@ -1211,23 +1212,23 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE81E;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding FileStacksEnabled, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding StacksEnabled, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.Auto.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.Auto.Title">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8B7;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding FileStackAutoStacking, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding AutoStacking, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.GroupBy.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.GroupBy.Title">
                             <toolkit:SettingsCard.HeaderIcon>
@@ -1235,12 +1236,12 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableFileStackGroupByOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedFileStackGroupBy, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableGroupByOptions}"
+                                controls:SettingsComboBox.Value="{Binding GroupBy, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             HorizontalContentAlignment="Right"
                             svc:Localized.DescriptionKey="Settings.FileStacks.OpenMode.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.OpenMode.Title">
@@ -1249,13 +1250,13 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{x:Bind AvailableFileStackOpenModeOptions, Mode=OneWay}"
-                                controls:SettingsComboBox.Value="{x:Bind SelectedFileStackOpenMode, Mode=TwoWay}" />
+                                ItemsSource="{x:Bind AvailableOpenModeOptions, Mode=OneWay}"
+                                controls:SettingsComboBox.Value="{x:Bind OpenMode, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.PopoverLayout.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.PopoverLayout.Title">
                             <toolkit:SettingsCard.HeaderIcon>
@@ -1263,13 +1264,13 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableFileStackPopoverLayoutOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedFileStackPopoverLayout, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailablePopoverLayoutOptions}"
+                                controls:SettingsComboBox.Value="{Binding PopoverLayout, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.PopoverStyle.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.PopoverStyle.Title">
                             <toolkit:SettingsCard.HeaderIcon>
@@ -1277,44 +1278,44 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableFileStackPopoverStyleOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedFileStackPopoverStyle, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailablePopoverStyleOptions}"
+                                controls:SettingsComboBox.Value="{Binding PopoverStyle, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.Threshold.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.Threshold.Title">
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableFileStackThresholdOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedFileStackThreshold, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableThresholdOptions}"
+                                controls:SettingsComboBox.Value="{Binding Threshold, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
-                            IsEnabled="{Binding FileStacksEnabled}"
+                            IsEnabled="{Binding StacksEnabled}"
                             svc:Localized.DescriptionKey="Settings.FileStacks.OrderBy.Description"
                             svc:Localized.HeaderKey="Settings.FileStacks.OrderBy.Title">
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableFileStackOrderByOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedFileStackOrderBy, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableOrderByOptions}"
+                                controls:SettingsComboBox.Value="{Binding OrderBy, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <StackPanel
                             Spacing="4"
-                            Visibility="{Binding FileStackCustomRulesVisibility}">
+                            Visibility="{Binding ShowCustomRules, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard
                                 HorizontalContentAlignment="Right"
-                                IsEnabled="{Binding FileStacksEnabled}"
+                                IsEnabled="{Binding StacksEnabled}"
                                 svc:Localized.DescriptionKey="Settings.FileStacks.Unmatched.Description"
                                 svc:Localized.HeaderKey="Settings.FileStacks.Unmatched.Title">
                                 <ComboBox
                                     MinWidth="{StaticResource SettingsControlMinWidth}"
-                                    ItemsSource="{Binding AvailableFileStackUnmatchedBehaviorOptions}"
-                                    controls:SettingsComboBox.Value="{Binding SelectedFileStackUnmatchedBehavior, Mode=TwoWay}" />
+                                    ItemsSource="{Binding AvailableUnmatchedBehaviorOptions}"
+                                    controls:SettingsComboBox.Value="{Binding UnmatchedBehavior, Mode=TwoWay}" />
                             </toolkit:SettingsCard>
 
                             <Border Style="{StaticResource SettingsGroupStyle}">
@@ -1331,7 +1332,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         <Button
                                             Grid.Column="1"
                                             Click="AddFileStackRuleButton_Click"
-                                            IsEnabled="{Binding CanAddFileStackCustomRule}"
+                                            IsEnabled="{Binding CanAddRule}"
                                             Style="{StaticResource ActionButtonStyle}">
                                             <StackPanel Orientation="Horizontal" Spacing="7">
                                                 <SymbolIcon Symbol="Add" />
@@ -1343,7 +1344,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <TextBlock
                                         Style="{StaticResource SettingDescriptionTextStyle}"
                                         svc:Localized.Key="Settings.FileStacks.Custom.Empty"
-                                        Visibility="{Binding FileStackRulesEmptyVisibility}" />
+                                        Visibility="{Binding HasNoRules, Converter={StaticResource SettingsBoolToVisibilityConverter}}" />
 
                                     <ListView
                                         x:Name="FileStackRulesListView"
@@ -1352,8 +1353,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         CanDragItems="True"
                                         CanReorderItems="True"
                                         DragItemsCompleted="FileStackRulesListView_DragItemsCompleted"
-                                        IsEnabled="{Binding FileStacksEnabled}"
-                                        ItemsSource="{x:Bind FileStackCustomRules, Mode=OneWay}"
+                                        IsEnabled="{Binding StacksEnabled}"
+                                        ItemsSource="{x:Bind CustomRules, Mode=OneWay}"
                                         ReorderMode="Enabled"
                                         SelectionMode="None"
                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -1438,7 +1439,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Opacity="0.35" />
                                     <TextBlock
                                         Style="{StaticResource SettingDescriptionTextStyle}"
-                                        Text="{Binding FileStackPreviewSummaryText}" />
+                                        Text="{Binding PreviewSummaryText}" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

@@ -224,28 +224,31 @@ public sealed class SettingsService
 
     public const string AttachmentStorageModeLink = "Link";
     public const string AttachmentStorageModeCopy = "Copy";
-    public const string FileStackGroupByKind = "Kind";
-    public const string FileStackGroupByDateAdded = "DateAdded";
+    // Canonical file-stack option values and caps live in Contracts
+    // (FileStackOptionKinds, batch 45); these historical constants are
+    // aliases so existing consumers keep compiling unchanged.
+    public const string FileStackGroupByKind = FileStackOptionKinds.GroupByKind;
+    public const string FileStackGroupByDateAdded = FileStackOptionKinds.GroupByDateAdded;
     // Legacy value used by the first Stack preview build.
-    public const string FileStackGroupByDateCreated = "DateCreated";
-    public const string FileStackGroupByDateModified = "DateModified";
-    public const string FileStackGroupByCustom = "Custom";
-    public const int DefaultFileStackThreshold = 3;
-    public const string FileStackOrderByWidget = "Widget";
-    public const string FileStackOrderByName = "Name";
-    public const string FileStackOrderByDateAdded = "DateAdded";
-    public const string FileStackOrderByDateModified = "DateModified";
-    public const string FileStackOpenModeInline = "Inline";
-    public const string FileStackOpenModePopover = "Popover";
-    public const string FileStackPopoverLayoutAdaptive = "Adaptive";
-    public const string FileStackPopoverLayoutGrid3 = "Grid3";
-    public const string FileStackPopoverLayoutGrid5 = "Grid5";
-    public const string FileStackPopoverStyleFollowMaterial = "FollowMaterial";
-    public const string FileStackPopoverStyleNeutral = "Neutral";
-    public const string FileStackUnmatchedKeepLoose = "KeepLoose";
-    public const string FileStackUnmatchedOther = "Other";
-    public const int MaxFileStackCustomRules = 32;
-    public const int MaxFileStackExtensionsPerRule = 64;
+    public const string FileStackGroupByDateCreated = FileStackOptionKinds.GroupByDateCreated;
+    public const string FileStackGroupByDateModified = FileStackOptionKinds.GroupByDateModified;
+    public const string FileStackGroupByCustom = FileStackOptionKinds.GroupByCustom;
+    public const int DefaultFileStackThreshold = FileStackOptionKinds.DefaultThreshold;
+    public const string FileStackOrderByWidget = FileStackOptionKinds.OrderByWidget;
+    public const string FileStackOrderByName = FileStackOptionKinds.OrderByName;
+    public const string FileStackOrderByDateAdded = FileStackOptionKinds.OrderByDateAdded;
+    public const string FileStackOrderByDateModified = FileStackOptionKinds.OrderByDateModified;
+    public const string FileStackOpenModeInline = FileStackOptionKinds.OpenModeInline;
+    public const string FileStackOpenModePopover = FileStackOptionKinds.OpenModePopover;
+    public const string FileStackPopoverLayoutAdaptive = FileStackOptionKinds.PopoverLayoutAdaptive;
+    public const string FileStackPopoverLayoutGrid3 = FileStackOptionKinds.PopoverLayoutGrid3;
+    public const string FileStackPopoverLayoutGrid5 = FileStackOptionKinds.PopoverLayoutGrid5;
+    public const string FileStackPopoverStyleFollowMaterial = FileStackOptionKinds.PopoverStyleFollowMaterial;
+    public const string FileStackPopoverStyleNeutral = FileStackOptionKinds.PopoverStyleNeutral;
+    public const string FileStackUnmatchedKeepLoose = FileStackOptionKinds.UnmatchedKeepLoose;
+    public const string FileStackUnmatchedOther = FileStackOptionKinds.UnmatchedOther;
+    public const int MaxFileStackCustomRules = FileStackOptionKinds.MaxCustomRules;
+    public const int MaxFileStackExtensionsPerRule = FileStackOptionKinds.MaxExtensionsPerRule;
     public const int DefaultQuickCaptureItemPreviewLineCount = 3;
     public const int DefaultTodoItemPreviewLineCount = 2;
     [Obsolete("Use the feature-specific preview line defaults.")]
@@ -2739,123 +2742,32 @@ settings.FocusClickedWidgetOnRaise = false;
             : AttachmentStorageModeLink;
     }
 
-    public static string NormalizeFileStackGroupBy(string? groupBy)
-    {
-        if (string.Equals(groupBy, FileStackGroupByDateAdded, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(groupBy, FileStackGroupByDateCreated, StringComparison.OrdinalIgnoreCase))
-        {
-            return FileStackGroupByDateAdded;
-        }
+    // Canonical file-stack normalizers live in Contracts
+    // (FileStackOptionKinds, batch 45); these historical overloads delegate.
+    public static string NormalizeFileStackGroupBy(string? groupBy) =>
+        FileStackOptionKinds.NormalizeGroupBy(groupBy);
 
-        if (string.Equals(groupBy, FileStackGroupByDateModified, StringComparison.OrdinalIgnoreCase))
-        {
-            return FileStackGroupByDateModified;
-        }
+    public static int NormalizeFileStackThreshold(int threshold) =>
+        FileStackOptionKinds.NormalizeThreshold(threshold);
 
-        return string.Equals(groupBy, FileStackGroupByCustom, StringComparison.OrdinalIgnoreCase)
-            ? FileStackGroupByCustom
-            : FileStackGroupByKind;
-    }
-
-    public static int NormalizeFileStackThreshold(int threshold) => threshold switch
-    {
-        2 or 3 or 5 => threshold,
-        _ => DefaultFileStackThreshold
-    };
-
-    public static string NormalizeFileStackOrderBy(string? orderBy)
-    {
-        if (string.Equals(orderBy, FileStackOrderByName, StringComparison.OrdinalIgnoreCase))
-        {
-            return FileStackOrderByName;
-        }
-
-        if (string.Equals(orderBy, FileStackOrderByDateAdded, StringComparison.OrdinalIgnoreCase))
-        {
-            return FileStackOrderByDateAdded;
-        }
-
-        return string.Equals(orderBy, FileStackOrderByDateModified, StringComparison.OrdinalIgnoreCase)
-            ? FileStackOrderByDateModified
-            : FileStackOrderByWidget;
-    }
+    public static string NormalizeFileStackOrderBy(string? orderBy) =>
+        FileStackOptionKinds.NormalizeOrderBy(orderBy);
 
     public static string NormalizeFileStackOpenMode(string? openMode) =>
-        string.Equals(
-            openMode,
-            FileStackOpenModePopover,
-            StringComparison.OrdinalIgnoreCase)
-                ? FileStackOpenModePopover
-                : FileStackOpenModeInline;
+        FileStackOptionKinds.NormalizeOpenMode(openMode);
 
     public static string NormalizeFileStackPopoverLayout(string? layout) =>
-        layout switch
-        {
-            FileStackPopoverLayoutGrid3 => FileStackPopoverLayoutGrid3,
-            FileStackPopoverLayoutGrid5 => FileStackPopoverLayoutGrid5,
-            _ => FileStackPopoverLayoutAdaptive
-        };
+        FileStackOptionKinds.NormalizePopoverLayout(layout);
 
     public static string NormalizeFileStackPopoverStyle(string? style) =>
-        string.Equals(
-            style,
-            FileStackPopoverStyleFollowMaterial,
-            StringComparison.OrdinalIgnoreCase)
-                ? FileStackPopoverStyleFollowMaterial
-                : FileStackPopoverStyleNeutral;
+        FileStackOptionKinds.NormalizePopoverStyle(style);
 
     public static string NormalizeFileStackUnmatchedBehavior(string? behavior) =>
-        string.Equals(behavior, FileStackUnmatchedOther, StringComparison.OrdinalIgnoreCase)
-            ? FileStackUnmatchedOther
-            : FileStackUnmatchedKeepLoose;
+        FileStackOptionKinds.NormalizeUnmatchedBehavior(behavior);
 
     public static IReadOnlyList<string> NormalizeFileStackExtensions(
-        IEnumerable<string>? extensions)
-    {
-        if (extensions is null)
-        {
-            return [];
-        }
-
-        var normalized = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string? value in extensions)
-        {
-            string extension = (value ?? string.Empty).Trim();
-            if (extension.StartsWith("*.", StringComparison.Ordinal))
-            {
-                extension = extension[1..];
-            }
-            else if (extension.StartsWith('*'))
-            {
-                extension = extension[1..];
-            }
-
-            if (extension.Length == 0)
-            {
-                continue;
-            }
-
-            if (!extension.StartsWith('.'))
-            {
-                extension = $".{extension}";
-            }
-
-            extension = extension.ToLowerInvariant();
-            if (extension.Length > 24 ||
-                extension.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                extension.Contains(Path.DirectorySeparatorChar) ||
-                extension.Contains(Path.AltDirectorySeparatorChar) ||
-                !seen.Add(extension))
-            {
-                continue;
-            }
-
-            normalized.Add(extension);
-        }
-
-        return normalized;
-    }
+        IEnumerable<string>? extensions) =>
+        FileStackOptionKinds.NormalizeExtensions(extensions);
 
     private static bool FileStackCustomRulesEqual(
         IReadOnlyList<FileStackCustomRule> left,

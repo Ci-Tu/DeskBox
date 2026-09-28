@@ -1026,7 +1026,7 @@ $stage4E1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage4E1MaximumWmc1510Count = 866
+$stage4E1MaximumWmc1510Count = 864
 $stage4E1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -1197,7 +1197,7 @@ $stage4E2SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage4E2MaximumWmc1510Count = 866
+$stage4E2MaximumWmc1510Count = 864
 $stage4E2ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -1453,7 +1453,7 @@ $stage4E3SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage4E3MaximumWmc1510Count = 866
+$stage4E3MaximumWmc1510Count = 864
 $stage4E3ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -1507,22 +1507,22 @@ $stage4E4LegacyBindingSourceMatches = @(
 $stage4E4RequiredCompiledBindings = @(
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[0]
-        pattern = "{x:Bind ViewModel.FileStackSettingsSummaryText, Mode=OneWay}"
+        pattern = "{x:Bind FileStack.SettingsSummaryText, Mode=OneWay}"
         expectedCount = 1
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[0]
-        pattern = "{x:Bind ViewModel.FileStacksEnabled, Mode=TwoWay}"
+        pattern = "{x:Bind FileStack.StacksEnabled, Mode=TwoWay}"
         expectedCount = 1
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[0]
-        pattern = "{x:Bind ViewModel.AvailableFileWidgetFolderOpenBehaviorOptionItems, Mode=OneWay}"
+        pattern = "{x:Bind FeatureWidgets.AvailableFolderOpenBehaviorOptionItems, Mode=OneWay}"
         expectedCount = 1
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[0]
-        pattern = "{x:Bind ViewModel.SelectedFileWidgetFolderOpenBehavior, Mode=TwoWay}"
+        pattern = "{x:Bind FeatureWidgets.FolderOpenBehavior, Mode=TwoWay}"
         expectedCount = 1
     }
 )
@@ -1539,7 +1539,15 @@ $stage4E4MissingCompiledBindings = @(
 $stage4E4RequiredViewModelBridgePatterns = @(
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "public static readonly DependencyProperty ViewModelProperty"
+        pattern = "public static readonly DependencyProperty FileStackProperty"
+    },
+    [PSCustomObject]@{
+        sourceFile = $stage4E4SourceFiles[1]
+        pattern = "public static readonly DependencyProperty FeatureWidgetsProperty"
+    },
+    [PSCustomObject]@{
+        sourceFile = $stage4E4SourceFiles[1]
+        pattern = "public static readonly DependencyProperty InteractionProperty"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
@@ -1547,11 +1555,19 @@ $stage4E4RequiredViewModelBridgePatterns = @(
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "nameof(ViewModel)"
+        pattern = "nameof(FileStack)"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "typeof(SettingsViewModel)"
+        pattern = "typeof(FileStackSettingsViewModel)"
+    },
+    [PSCustomObject]@{
+        sourceFile = $stage4E4SourceFiles[1]
+        pattern = "typeof(FeatureWidgetsSettingsViewModel)"
+    },
+    [PSCustomObject]@{
+        sourceFile = $stage4E4SourceFiles[1]
+        pattern = "typeof(InteractionSettingsViewModel)"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
@@ -1559,15 +1575,15 @@ $stage4E4RequiredViewModelBridgePatterns = @(
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "public SettingsViewModel? ViewModel"
+        pattern = "public FileStackSettingsViewModel? FileStack"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "get => (SettingsViewModel?)GetValue(ViewModelProperty);"
+        pattern = "get => (FileStackSettingsViewModel?)GetValue(FileStackProperty);"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[1]
-        pattern = "set => SetValue(ViewModelProperty, value);"
+        pattern = "set => SetValue(FileStackProperty, value);"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[2]
@@ -1575,11 +1591,11 @@ $stage4E4RequiredViewModelBridgePatterns = @(
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[7]
-        pattern = "fileSettings.ViewModel = ViewModel;"
+        pattern = "fileSettings.FileStack = _fileStackSettingsViewModel;"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[2]
-        pattern = "AppearanceDetailSection.ViewModel = null;"
+        pattern = "AppearanceDetailSection.FileStack = null;"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[2]
@@ -1604,10 +1620,10 @@ $stage4E4DeferredDataContextIndex = $stage4E4DeferredSectionsSource.IndexOf(
     "section.DataContext = ViewModel;",
     [StringComparison]::Ordinal)
 $stage4E4BridgeAssignmentIndex = $stage4E4DeferredSectionsSource.IndexOf(
-    "fileSettings.ViewModel = ViewModel;",
+    "fileSettings.FileStack = _fileStackSettingsViewModel;",
     [StringComparison]::Ordinal)
 $stage4E4BridgeClearIndex = $stage4E4SettingsWindowSource.IndexOf(
-    "AppearanceDetailSection.ViewModel = null;",
+    "AppearanceDetailSection.FileStack = null;",
     [StringComparison]::Ordinal)
 $stage4E4ViewModelDisposeMatch = [regex]::Match(
     $stage4E4SettingsWindowSource,
@@ -1630,30 +1646,45 @@ $stage4E4UnexpectedManualBridgePatterns = @(
         }
     }
 )
+# Batch 45 re-homed the file-stack and folder-open behavior contracts onto
+# their section editors; the source list still points the legacy warning
+# scope at the historical shell files, so these behavior patterns read the
+# editor files directly.
+$stage4E4EditorSources = @{}
+foreach ($editorFile in @(
+        "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs",
+        "src\DeskBox\Features\FeatureWidgets\FeatureWidgetsSettingsViewModel.cs",
+        "src\DeskBox\Features\Interaction\InteractionSettingsViewModel.cs")) {
+    $stage4E4EditorSources[$editorFile] = Get-Content -LiteralPath (Join-Path $repoRoot $editorFile) -Raw
+}
 $stage4E4RequiredBehaviorPatterns = @(
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[3]
-        pattern = "OnPropertyChanged(nameof(FileStackSettingsSummaryText));"
+        sourceFile = "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs"
+        pattern = "OnPropertyChanged(nameof(SettingsSummaryText));"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[3]
-        pattern = "OnPropertyChanged(nameof(FileStackAutoStacking));"
+        sourceFile = "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs"
+        pattern = "OnPropertyChanged(nameof(AutoStacking));"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[3]
-        pattern = "SetProperty(ref _fileStacksEnabled, value)"
+        sourceFile = "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs"
+        pattern = "SetProperty(ref _stacksEnabled, value)"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[4]
-        pattern = "public string SelectedFileWidgetFolderOpenBehavior"
+        sourceFile = "src\DeskBox\Features\FeatureWidgets\FeatureWidgetsSettingsViewModel.cs"
+        pattern = "public string FolderOpenBehavior"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[4]
-        pattern = "_settingsService.Settings.FileWidgetFolderOpenBehavior = normalized;"
+        sourceFile = "src\DeskBox\Features\FeatureWidgets\FeatureWidgetsSettingsViewModel.cs"
+        pattern = "_settings.SetFileWidgetFolderOpenBehavior(normalized);"
     },
     [PSCustomObject]@{
-        sourceFile = $stage4E4SourceFiles[5]
-        pattern = "OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptions));"
+        sourceFile = "src\DeskBox\Features\FeatureWidgets\FeatureWidgetsSettingsViewModel.cs"
+        pattern = "OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptionItems));"
+    },
+    [PSCustomObject]@{
+        sourceFile = "src\DeskBox\Features\Interaction\InteractionSettingsViewModel.cs"
+        pattern = "SetProperty(ref _fileItemContextMenuEnabled, value)"
     },
     [PSCustomObject]@{
         sourceFile = $stage4E4SourceFiles[6]
@@ -1674,7 +1705,13 @@ $stage4E4RequiredBehaviorPatterns = @(
 )
 $stage4E4MissingBehaviorPatterns = @(
     foreach ($contract in $stage4E4RequiredBehaviorPatterns) {
-        if ($stage4E4Sources[$contract.sourceFile].IndexOf(
+        $behaviorSource = if ($stage4E4Sources.Contains($contract.sourceFile)) {
+            $stage4E4Sources[$contract.sourceFile]
+        } else {
+            $stage4E4EditorSources[$contract.sourceFile]
+        }
+        if ([string]::IsNullOrEmpty($behaviorSource) -or
+            $behaviorSource.IndexOf(
                 $contract.pattern,
                 [StringComparison]::Ordinal) -lt 0) {
             "$($contract.sourceFile)::$($contract.pattern)"
@@ -1700,7 +1737,7 @@ $stage4E4SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage4E4MaximumWmc1510Count = 866
+$stage4E4MaximumWmc1510Count = 864
 $stage4E4ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2038,7 +2075,7 @@ $stage4E5SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage4E5ExpectedWmc1510Count = 866
+$stage4E5ExpectedWmc1510Count = 864
 $stage4E5ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2118,7 +2155,7 @@ $stage5ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5AExpectedWmc1510Count = 866
+$stage5AExpectedWmc1510Count = 864
 $stage5AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2237,7 +2274,7 @@ $stage5B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B1ExpectedWmc1510Count = 866
+$stage5B1ExpectedWmc1510Count = 864
 $stage5B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2397,7 +2434,7 @@ $stage5B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B2AExpectedWmc1510Count = 866
+$stage5B2AExpectedWmc1510Count = 864
 $stage5B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2560,7 +2597,7 @@ $stage5B2BSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B2BExpectedWmc1510Count = 866
+$stage5B2BExpectedWmc1510Count = 864
 $stage5B2BActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2718,7 +2755,7 @@ $stage5B3ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B3AExpectedWmc1510Count = 866
+$stage5B3AExpectedWmc1510Count = 864
 $stage5B3AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -2903,7 +2940,7 @@ $stage5B3BSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B3BExpectedWmc1510Count = 866
+$stage5B3BExpectedWmc1510Count = 864
 $stage5B3BActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -3152,7 +3189,7 @@ $stage5B3CSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B3CExpectedWmc1510Count = 866
+$stage5B3CExpectedWmc1510Count = 864
 $stage5B3CActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -3422,7 +3459,7 @@ $stage5B4ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4AExpectedWmc1510Count = 866
+$stage5B4AExpectedWmc1510Count = 864
 $stage5B4AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -3608,7 +3645,7 @@ $stage5B4B1MissingBindableTypePatterns = @(
         }
     }
 )
-$stage5B4B1ExpectedBindableViewModelPropertyCount = 192
+$stage5B4B1ExpectedBindableViewModelPropertyCount = 174
 $stage5B4B1ActualBindableViewModelPropertyCount = [regex]::Matches(
     $stage5B4B1Sources[$stage5B4B1SourceFiles[9]],
     [regex]::Escape('nameof(')).Count
@@ -3627,7 +3664,7 @@ $stage5B4B1UnsafeBindableViewModelPatterns = @(
     }
 )
 $stage5B4B1RequiredFileStackXamlPatterns = @(
-    'ItemsSource="{x:Bind FileStackCustomRules, Mode=OneWay}"'
+    'ItemsSource="{x:Bind CustomRules, Mode=OneWay}"'
 )
 $stage5B4B1RequiredCommandXamlPatterns = @(
     'Command="{x:Bind ResetDisplayWidgetChromeOverridesCommand, Mode=OneWay}"',
@@ -3681,34 +3718,42 @@ $stage5B4B1RequiredFileWidgetProjectionPatterns = @(
     [ordered]@{
         file = $stage5B4B1SourceFiles[16]
         patterns = @(
-            'IsOn="{x:Bind ViewModel.FileStacksEnabled, Mode=TwoWay}"',
-            'ItemsSource="{x:Bind ViewModel.AvailableFileWidgetFolderOpenBehaviorOptionItems, Mode=OneWay}"')
+            'IsOn="{x:Bind FileStack.StacksEnabled, Mode=TwoWay}"',
+            'ItemsSource="{x:Bind FeatureWidgets.AvailableFolderOpenBehaviorOptionItems, Mode=OneWay}"')
     },
     [ordered]@{
-        file = $stage5B4B1SourceFiles[17]
+        file = 'src/DeskBox/Features/FileStack/FileStackSettingsViewModel.cs'
         patterns = @(
-            'public bool FileStacksEnabled',
-            'SetProperty(ref _fileStacksEnabled, value)',
-            '_settingsService.Settings.FileStacksEnabled = value;')
+            'public bool StacksEnabled',
+            'SetProperty(ref _stacksEnabled, value)',
+            '_settings.SetFileStacksEnabled(value);')
     },
     [ordered]@{
-        file = $stage5B4B1SourceFiles[18]
+        file = 'src/DeskBox/Features/FeatureWidgets/FeatureWidgetsSettingsViewModel.cs'
         patterns = @(
-            'public object[] AvailableFileWidgetFolderOpenBehaviorOptionItems',
-            'AvailableFileWidgetFolderOpenBehaviorOptions.Cast<object>().ToArray()')
+            'public object[] AvailableFolderOpenBehaviorOptionItems',
+            'AvailableFolderOpenBehaviorOptions.Cast<object>().ToArray()')
     },
     [ordered]@{
-        file = $stage5B4B1SourceFiles[19]
+        file = 'src/DeskBox/Features/FeatureWidgets/FeatureWidgetsSettingsViewModel.cs'
         patterns = @(
-            'OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems))')
+            'OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptionItems))')
     }
 )
+$stage5B4B1FileWidgetProjectionSources = @{}
+foreach ($projectionFile in @(
+        $stage5B4B1SourceFiles[16],
+        "src/DeskBox/Features/FileStack/FileStackSettingsViewModel.cs",
+        "src/DeskBox/Features/FeatureWidgets/FeatureWidgetsSettingsViewModel.cs")) {
+    $stage5B4B1FileWidgetProjectionSources[$projectionFile] =
+        Get-Content -LiteralPath (Join-Path $repoRoot ($projectionFile -replace '/', '\')) -Raw
+}
 $stage5B4B1MissingFileWidgetProjectionPatterns = @(
     foreach ($entry in $stage5B4B1RequiredFileWidgetProjectionPatterns) {
         foreach ($pattern in $entry.patterns) {
-            if ($stage5B4B1Sources[$entry.file].IndexOf(
-                    $pattern,
-                    [StringComparison]::Ordinal) -lt 0) {
+            if ($stage5B4B1FileWidgetProjectionSources[$entry.file].IndexOf(
+                $pattern,
+                [StringComparison]::Ordinal) -lt 0) {
                 "$($entry.file)::$pattern"
             }
         }
@@ -4018,7 +4063,7 @@ $stage5B4B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2AExpectedWmc1510Count = 866
+$stage5B4B2AExpectedWmc1510Count = 864
 $stage5B4B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -4209,7 +4254,7 @@ $stage5B4B2B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2B1ExpectedWmc1510Count = 866
+$stage5B4B2B1ExpectedWmc1510Count = 864
 $stage5B4B2B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -4444,7 +4489,7 @@ $stage5B4B2B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2B2AExpectedWmc1510Count = 866
+$stage5B4B2B2AExpectedWmc1510Count = 864
 $stage5B4B2B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -4676,7 +4721,7 @@ $stage5B4B2B2B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2B2B1ExpectedWmc1510Count = 866
+$stage5B4B2B2B1ExpectedWmc1510Count = 864
 $stage5B4B2B2B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -4942,7 +4987,7 @@ $stage5B4B2B2B2SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2B2B2ExpectedWmc1510Count = 866
+$stage5B4B2B2B2ExpectedWmc1510Count = 864
 $stage5B4B2B2B2ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -5187,7 +5232,7 @@ $stage5B4B2C1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2C1ExpectedWmc1510Count = 866
+$stage5B4B2C1ExpectedWmc1510Count = 864
 $stage5B4B2C1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -5381,7 +5426,7 @@ $stage5B4B2C2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2C2AExpectedWmc1510Count = 866
+$stage5B4B2C2AExpectedWmc1510Count = 864
 $stage5B4B2C2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -5633,7 +5678,7 @@ $stage5B4B2C2BSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4B2C2BExpectedWmc1510Count = 866
+$stage5B4B2C2BExpectedWmc1510Count = 864
 $stage5B4B2C2BActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -5888,7 +5933,7 @@ $stage5B4C1ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1AExpectedWmc1510Count = 866
+$stage5B4C1AExpectedWmc1510Count = 864
 $stage5B4C1AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -6169,7 +6214,7 @@ $stage5B4C1B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1B1ExpectedWmc1510Count = 866
+$stage5B4C1B1ExpectedWmc1510Count = 864
 $stage5B4C1B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -6419,7 +6464,7 @@ $stage5B4C1B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1B2AExpectedWmc1510Count = 866
+$stage5B4C1B2AExpectedWmc1510Count = 864
 $stage5B4C1B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -6659,7 +6704,7 @@ $stage5B4C1B2BSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1B2BExpectedWmc1510Count = 866
+$stage5B4C1B2BExpectedWmc1510Count = 864
 $stage5B4C1B2BActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -6893,7 +6938,7 @@ $stage5B4C1C1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1C1ExpectedWmc1510Count = 866
+$stage5B4C1C1ExpectedWmc1510Count = 864
 $stage5B4C1C1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -7173,7 +7218,7 @@ $stage5B4C1C2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C1C2AExpectedWmc1510Count = 866
+$stage5B4C1C2AExpectedWmc1510Count = 864
 $stage5B4C1C2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -7344,7 +7389,7 @@ $stage5B4C2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C2AExpectedWmc1510Count = 866
+$stage5B4C2AExpectedWmc1510Count = 864
 $stage5B4C2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -7518,7 +7563,7 @@ $stage5B4C3ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3AExpectedWmc1510Count = 866
+$stage5B4C3AExpectedWmc1510Count = 864
 $stage5B4C3AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -7698,7 +7743,7 @@ $stage5B4C3B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3B1ExpectedWmc1510Count = 866
+$stage5B4C3B1ExpectedWmc1510Count = 864
 $stage5B4C3B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -7882,7 +7927,7 @@ $stage5B4C3B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3B2AExpectedWmc1510Count = 866
+$stage5B4C3B2AExpectedWmc1510Count = 864
 $stage5B4C3B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -8074,7 +8119,7 @@ $stage5B4C3B2B1SourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3B2B1ExpectedWmc1510Count = 866
+$stage5B4C3B2B1ExpectedWmc1510Count = 864
 $stage5B4C3B2B1ActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -8235,7 +8280,7 @@ $stage5B4C3B2B2ASourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3B2B2AExpectedWmc1510Count = 866
+$stage5B4C3B2B2AExpectedWmc1510Count = 864
 $stage5B4C3B2B2AActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count
@@ -8416,7 +8461,7 @@ $stage5B4C3B2B2BSourceWarningMessages = @(
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique
 )
-$stage5B4C3B2B2BExpectedWmc1510Count = 866
+$stage5B4C3B2B2BExpectedWmc1510Count = 864
 $stage5B4C3B2B2BActualWmc1510Count = @(
     $warningMatches | Where-Object { $_ -ieq "WMC1510" }
 ).Count

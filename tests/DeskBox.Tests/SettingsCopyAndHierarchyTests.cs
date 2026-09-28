@@ -140,11 +140,11 @@ public sealed class SettingsCopyAndHierarchyTests
 
         // File stacking is redesigned around an explicit master switch plus
         // an automatic-grouping sub-switch, so the plain dropdown is gone.
-        Assert.Contains("IsOn=\"{x:Bind ViewModel.FileStacksEnabled, Mode=TwoWay}\"", fileWidgetXaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{x:Bind FileStack.StacksEnabled, Mode=TwoWay}\"", fileWidgetXaml, StringComparison.Ordinal);
         Assert.Contains("Settings.FileStacks.Mode.Title", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Settings.FileStacks.Mode.Description", windowXaml, StringComparison.Ordinal);
         Assert.Contains(
-            "IsOn=\"{Binding FileStacksEnabled, Mode=TwoWay}\"",
+            "IsOn=\"{Binding StacksEnabled, Mode=TwoWay}\"",
             windowXaml,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -155,13 +155,13 @@ public sealed class SettingsCopyAndHierarchyTests
             "public bool WidgetCapsuleModeEnabled",
             appSettings,
             StringComparison.Ordinal);
-        Assert.Contains("IsOn=\"{Binding FileStackAutoStacking, Mode=TwoWay}\"", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{Binding AutoStacking, Mode=TwoWay}\"", windowXaml, StringComparison.Ordinal);
         Assert.Contains(
-            "SelectedFileWidgetFolderOpenBehavior",
+            "{x:Bind FeatureWidgets.FolderOpenBehavior, Mode=TwoWay}",
             fileWidgetXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "IsOn=\"{x:Bind ViewModel.FileItemSystemContextMenuEnabled, Mode=TwoWay}\"",
+            "IsOn=\"{x:Bind Interaction.FileItemContextMenuEnabled, Mode=TwoWay}\"",
             fileWidgetXaml,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -406,7 +406,7 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.Contains("DesktopOrganization.Settings.StartAction", fileWidgetXaml, StringComparison.Ordinal);
         Assert.True(
             fileWidgetXaml.IndexOf("Tag=\"FileStackSettings\"", StringComparison.Ordinal) <
-            fileWidgetXaml.IndexOf("SelectedFileWidgetFolderOpenBehavior", StringComparison.Ordinal));
+            fileWidgetXaml.IndexOf("FeatureWidgets.FolderOpenBehavior", StringComparison.Ordinal));
         Assert.Contains(
             "MinHeight=\"{StaticResource SettingsRowMinHeight}\"",
             fileWidgetXaml,

@@ -58,10 +58,6 @@ private void OnLanguageChanged()
         {
             SelectedLanguage = LocalizationService.NormalizeLanguageSetting(settings.Language);
             AutoCheckForUpdates = settings.AutoCheckForUpdates;
-            FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;
-            SelectedFileWidgetFolderOpenBehavior =
-                FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
-                    settings.FileWidgetFolderOpenBehavior);
             ShowHoverButtons = settings.ShowHoverButtons;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
 
@@ -70,7 +66,13 @@ private void OnLanguageChanged()
             QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
 
             ApplyContentEditorSettingsSnapshot(settings);
-            ApplyFileStackSettingsSnapshot(settings);
+
+            // The file-stack section (including its custom-rule collection)
+            // and the file-widget overview's folder-open combo live on their
+            // section editors now: re-project from the coordinator snapshots
+            // instead of assigning shell facade properties.
+            _fileStackSettings.SyncPresentation();
+            _featureWidgetsSettings.SyncPresentation();
 
             SyncQuickCaptureSettingsFacade();
             SyncQuickCapturePresentationFacade();
@@ -222,7 +224,11 @@ private void OnLanguageChanged()
         // WinUI reset every bound ComboBox.SelectedIndex to -1.
         if (refreshLocalizedOptions)
         {
-            RefreshFileStackSelectionProperties();
+            // The file-stack option tables, rule priorities, preview texts
+            // and the overview summary re-project in the new language
+            // through the section editor (batch 45).
+            _fileStackSettings.RefreshLocalization();
+            _featureWidgetsSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
             _cachedQuickCaptureDefaultViewDisplayNames = null;
             _cachedQuickCaptureTabStyleDisplayNames = null;

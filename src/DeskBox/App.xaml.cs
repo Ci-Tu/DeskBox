@@ -2950,12 +2950,15 @@ public partial class App : Application
             new DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel(
                 _fileDisplaySettings ?? throw new InvalidOperationException("File display settings are not initialized.")),
             new DeskBox.Features.FileStack.FileStackSettingsViewModel(
-                _fileStackSettings ?? throw new InvalidOperationException("File stack settings are not initialized.")),
+                _fileStackSettings ?? throw new InvalidOperationException("File stack settings are not initialized."),
+                LocalizationService.T,
+                (key, args) => LocalizationService.Format(key, args)),
             new DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel(
                 _groupNavigationSettings ?? throw new InvalidOperationException("Group navigation settings are not initialized."),
                 LocalizationService.T),
             new DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel(
-                _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized.")),
+                _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.Music.MusicSettingsViewModel(
                 _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized."),
                 LocalizationService.T),
