@@ -106,8 +106,14 @@ public sealed partial class SettingsWindow
             section.DataContext = _interactionSettingsViewModel;
         }
 
+        if (sectionTag == "FileDisplaySettings")
+        {
+            section.DataContext = _fileDisplaySettingsViewModel;
+        }
+
         if (sectionTag == "FileStorageSettings")
         {
+            section.DataContext = _managedStorageSettingsViewModel;
             RefreshManagedStoragePathWarning();
             RefreshManagedStorageDesktopShortcutState();
         }

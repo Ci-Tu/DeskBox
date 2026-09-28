@@ -1146,9 +1146,9 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         <TextBlock Style="{StaticResource SettingTitleTextStyle}" svc:Localized.Key="Settings.DropAction.Title" />
                                         <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" svc:Localized.Key="Settings.DropAction.Description" />
                                     </StackPanel>
-                                    <ComboBox Grid.Column="1" MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableManagedDropActionOptions}" controls:SettingsComboBox.Value="{Binding SelectedManagedDropAction, Mode=TwoWay}" />
+                                    <ComboBox Grid.Column="1" MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableDropActionOptions}" controls:SettingsComboBox.Value="{Binding DropAction, Mode=TwoWay}" />
                                 </Grid>
-                                <TextBox IsReadOnly="True" Text="{Binding ManagedStorageRootPath, Mode=OneWay}" TextWrapping="NoWrap" />
+                                <TextBox IsReadOnly="True" Text="{Binding RootPath, Mode=OneWay}" TextWrapping="NoWrap" />
                                 <Border
                                     x:Name="ManagedStoragePathWarningBorder"
                                     Padding="12,9"

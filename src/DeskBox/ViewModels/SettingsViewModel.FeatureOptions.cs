@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeskBox.Contracts;
 using DeskBox.Helpers;
 using DeskBox.Models;
 using DeskBox.Services;
@@ -61,32 +62,6 @@ public partial class SettingsViewModel
         }
     }
 
-
-    public string SelectedManagedDropAction
-    {
-        get => _selectedManagedDropAction;
-        set
-        {
-            string normalized = value switch
-            {
-                SettingsService.ManagedDropActionCopy =>
-                    SettingsService.ManagedDropActionCopy,
-                SettingsService.ManagedDropActionFollowWindows =>
-                    SettingsService.ManagedDropActionFollowWindows,
-                _ => SettingsService.ManagedDropActionMove
-            };
-            if (!SetProperty(ref _selectedManagedDropAction, normalized))
-            {
-                return;
-            }
-
-            if (!_isRestoringDefaults && !_isApplyingSettingsSnapshot)
-            {
-                _featureWidgetsSettings.SetManagedDropAction(normalized);
-            }
-
-        }
-    }
 
     public string SelectedFileWidgetFolderOpenBehavior
     {
@@ -211,70 +186,67 @@ public partial class SettingsViewModel
         }
     }
 
-    public string ManagedStorageRootPath
+    // Host-side working state for the managed-storage section. The XAML
+    // binding surface lives on the managed-storage editor (section-level
+    // DataContext switch); the shell keeps the path display state it needs
+    // for the folder picker / migration / quick-access chains and pushes the
+    // quick-access presentation onto the editor whenever the state changes.
+    internal string ManagedStorageRootPath
     {
         get => _managedStorageRootPath;
         private set => SetProperty(ref _managedStorageRootPath, value);
     }
 
-    public QuickAccessPinState ManagedStorageQuickAccessPinState
+    internal QuickAccessPinState ManagedStorageQuickAccessPinState
     {
         get => _quickAccessPinState;
         private set
         {
-            if (!SetProperty(ref _quickAccessPinState, value))
+            if (SetProperty(ref _quickAccessPinState, value))
             {
-                return;
+                PushQuickAccessPresentation();
             }
-
-            OnPropertyChanged(nameof(QuickAccessStatusText));
-            OnPropertyChanged(nameof(PinQuickAccessButtonText));
-            OnPropertyChanged(nameof(PinQuickAccessToolTipText));
-            OnPropertyChanged(nameof(ShouldUnpinManagedStorageFromQuickAccess));
         }
     }
 
-    public bool IsQuickAccessBusy
+    internal bool IsQuickAccessBusy
     {
         get => _isQuickAccessBusy;
         private set
         {
-            if (!SetProperty(ref _isQuickAccessBusy, value))
+            if (SetProperty(ref _isQuickAccessBusy, value))
             {
-                return;
+                PushQuickAccessPresentation();
             }
-
-            OnPropertyChanged(nameof(QuickAccessStatusText));
-            OnPropertyChanged(nameof(PinQuickAccessButtonText));
-            OnPropertyChanged(nameof(PinQuickAccessToolTipText));
-            OnPropertyChanged(nameof(CanInvokeQuickAccessAction));
         }
     }
 
-    public bool CanInvokeQuickAccessAction => !IsQuickAccessBusy;
-
-    public string QuickAccessStatusText => IsQuickAccessBusy
-        ? _localizationService.T("Settings.ManagedPath.QuickAccessStatusUpdating")
-        : ManagedStorageQuickAccessPinState switch
+    private void PushQuickAccessPresentation()
     {
-        QuickAccessPinState.Pinned => _localizationService.T("Settings.ManagedPath.QuickAccessStatusPinned"),
-        QuickAccessPinState.NotPinned => _localizationService.T("Settings.ManagedPath.QuickAccessStatusNotPinned"),
-        _ => _localizationService.T("Settings.ManagedPath.QuickAccessStatusUnknown")
-    };
-
-    public string PinQuickAccessButtonText => IsQuickAccessBusy
-        ? _localizationService.T("Settings.ManagedPath.QuickAccessUpdating")
-        : ManagedStorageQuickAccessPinState == QuickAccessPinState.Pinned
-            ? _localizationService.T("Settings.ManagedPath.UnpinQuickAccess")
-            : _localizationService.T("Settings.ManagedPath.PinQuickAccess");
-
-    public string PinQuickAccessToolTipText => IsQuickAccessBusy
-        ? _localizationService.T("Settings.ManagedPath.QuickAccessUpdatingTooltip")
-        : ManagedStorageQuickAccessPinState == QuickAccessPinState.Pinned
-            ? _localizationService.T("Settings.ManagedPath.UnpinQuickAccessTooltip")
-            : _localizationService.T("Settings.ManagedPath.PinQuickAccessTooltip");
-
-    public bool ShouldUnpinManagedStorageFromQuickAccess => ManagedStorageQuickAccessPinState == QuickAccessPinState.Pinned;
+        bool busy = IsQuickAccessBusy;
+        bool pinned = ManagedStorageQuickAccessPinState == QuickAccessPinState.Pinned;
+        _managedStorageSettings.UpdateQuickAccessPresentation(new QuickAccessPresentationSettings(
+            CanInvoke: !busy,
+            ShouldUnpin: pinned,
+            StatusText: busy
+                ? _localizationService.T("Settings.ManagedPath.QuickAccessStatusUpdating")
+                : ManagedStorageQuickAccessPinState switch
+                {
+                    QuickAccessPinState.Pinned => _localizationService.T("Settings.ManagedPath.QuickAccessStatusPinned"),
+                    QuickAccessPinState.NotPinned => _localizationService.T("Settings.ManagedPath.QuickAccessStatusNotPinned"),
+                    _ => _localizationService.T("Settings.ManagedPath.QuickAccessStatusUnknown")
+                },
+            ButtonText: busy
+                ? _localizationService.T("Settings.ManagedPath.QuickAccessUpdating")
+                : pinned
+                    ? _localizationService.T("Settings.ManagedPath.UnpinQuickAccess")
+                    : _localizationService.T("Settings.ManagedPath.PinQuickAccess"),
+            ToolTipText: busy
+                ? _localizationService.T("Settings.ManagedPath.QuickAccessUpdatingTooltip")
+                : pinned
+                    ? _localizationService.T("Settings.ManagedPath.UnpinQuickAccessTooltip")
+                    : _localizationService.T("Settings.ManagedPath.PinQuickAccessTooltip")));
+    }
 
     // Host linkage for the interaction editor: the editor owns the hotkey
     // enable switch's binding surface; the registration state machine stays
@@ -755,28 +727,6 @@ set => WidgetOpacity = Math.Clamp(1.0 - value / 100d, SettingsService.MinWidgetO
     public string[] AvailableAttachmentStorageModeDisplayNames =>
         _cachedAttachmentStorageModeDisplayNames ??=
             AvailableAttachmentStorageModes.Select(GetAttachmentStorageModeDisplayName).ToArray();
-
-    public string[] AvailableManagedDropActions { get; } =
-    [
-        SettingsService.ManagedDropActionCopy,
-        SettingsService.ManagedDropActionMove,
-        SettingsService.ManagedDropActionFollowWindows
-    ];
-
-    public string[] AvailableManagedDropActionDisplayNames =>
-        _cachedManagedDropActionDisplayNames ??= AvailableManagedDropActions
-            .Select(GetManagedDropActionDisplayName)
-            .ToArray();
-
-    public string GetManagedDropActionDisplayName(string action) =>
-        action switch
-        {
-            SettingsService.ManagedDropActionMove =>
-                _localizationService.T("Settings.DropAction.Move"),
-            SettingsService.ManagedDropActionFollowWindows =>
-                _localizationService.T("Settings.DropAction.System"),
-            _ => _localizationService.T("Settings.DropAction.Copy")
-        };
 
     public string GetAttachmentStorageModeDisplayName(string storageMode)
     {

@@ -172,26 +172,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(DefaultHeightInput));
     }
 
-    partial void OnHideShortcutArrowOverlayChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetHideShortcutArrowOverlay(value);
-    }
-
-    partial void OnShowImageFilesAsIconsChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetShowImageFilesAsIcons(value);
-    }
-
     partial void OnShowHoverButtonsChanged(bool value)
     {
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
@@ -226,46 +206,6 @@ public partial class SettingsViewModel
     partial void OnShowHoverActionDeleteChanged(bool value)
     {
         OnHoverButtonActionSelectionChanged(SettingsService.WidgetHoverActionDelete, value);
-    }
-
-    partial void OnShowListItemDetailsChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetShowListItemDetails(value);
-    }
-
-    partial void OnShowFileItemPathTooltipsChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetShowFileItemPathTooltips(value);
-    }
-
-    partial void OnShowFileExtensionsChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetShowFileExtensions(value);
-    }
-
-    partial void OnHideShortcutExtensionWhenShowingFileExtensionsChanged(bool value)
-    {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _fileDisplaySettings.SetHideShortcutExtensionWhenShowingFileExtensions(value);
     }
 
     partial void OnIdleWorkingSetTrimEnabledChanged(bool value)

@@ -2956,7 +2956,8 @@ public partial class App : Application
                 _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized."),
                 LocalizationService.T),
             new DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel(
-                _managedStorageSettings ?? throw new InvalidOperationException("Managed storage settings are not initialized.")),
+                _managedStorageSettings ?? throw new InvalidOperationException("Managed storage settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.Maintenance.MaintenanceSettingsViewModel(
                 _maintenanceSettings ?? throw new InvalidOperationException("Maintenance settings are not initialized.")));
         _settingsWindow.Closed += SettingsWindow_ClosedForApp;

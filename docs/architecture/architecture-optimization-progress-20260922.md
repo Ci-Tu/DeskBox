@@ -960,8 +960,8 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 | 已完成 | Music | 4 | 新建 `Features/Music/MusicSettingsViewModel` | 试点基准 |
 | 已完成（批 41） | Interaction 主节 | 3 | InteractionSettingsViewModel 补面（批 34 薄缝扩成可绑定编辑器） | 最小；首批复制 |
 | 已完成（批 41） | InteractionWindow（高级） | 13 | 同上 | 全局热键/悬停按钮状态机经"壳计算+编辑器推面"分离（见第四十一批） |
-| 3 | FileDisplay | 6 | FileDisplaySettingsViewModel 补面 | 纯直保存族，低险 |
-| 4 | FileStorage(托管存储) | 7 | ManagedStorageSettingsViewModel 补面 | 快速访问状态/路径警告刷新链在壳 |
+| 已完成（批 42） | FileDisplay | 6 | FileDisplaySettingsViewModel 补面 | 纯直保存族，低险 |
+| 已完成（批 42） | FileStorage(托管存储) | 7 | ManagedStorageSettingsViewModel 补面 | 快速访问状态/路径警告刷新链在壳（经壳推面模式分离，见第四十二批） |
 | 5 | Appearance 四子节（材质/密度/窗口/动画） | 23+16+8+13 | AppearanceSettingsViewModel 补面 | 外观活预览链（RequestAppearancePreview/滑杆按压态）与全局主题联动，面最大 |
 | 6 | WidgetGroups | 9（另 20 行绑定已走 [GeneratedBindableCustomProperty] 项记录） | GroupNavigationSettingsViewModel 补面 | 既有组投影/成员记录已是独立 bindable 记录，壳只余 9 个节级属性 |
 | 7 | Capsule 四子节 | 5+6+3+7 | CapsuleSettingsViewModel 补面 | CapsuleModeSettingsSection.UserControl 的 ViewModel DP 需换型 |
@@ -970,7 +970,7 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 | 10 | BackupRestore/CloudBackup/CompatibilityDiagnostics | 11+19+13 | BackupSettingsViewModel（已有 5 属性 ObservableObject 面）/MaintenanceSettingsViewModel 补面 | 云备份连接状态机、拖放诊断、快照 ListView 代码后置 ItemsSource |
 | 11 | General/About/Performance | 16/25/14 | 暂留壳（About 更新卡、自启注册、性能 lambda 门面写属宿主域，超出本阶段口径） | 收官批再定去留 |
 
-**共享钉资源表**：迁 N 个门面绑定属性时必同步——AotBindableProperties nameof 计数（345 起逐批递减，批 41 后=329；测试+审计 ps1 两处）；SettingsViewModel.cs ObservableProperty 计数（73 起，批 41 后=69，AotPublishContract InlineData）；{Binding} 不得转 x:Bind（否则 WMC1510 866 变更牵动 ~20 runner×2 处钉）；BindableSettingsViewModelInventory 动态测试自动平衡（勿在壳残留同名属性）；编辑器文件 FacadePassthroughAccess 零命中（可绑定属性名避开平铺门面名，去前缀即可；**本地化资源键字面量也会被该正则命中**——"Settings.WidgetLayerMode.*" 键含 `settings.WidgetLayerMode`（忽略大小写），编辑器源里必须分片拼接或改从常量拼装，注释同理，批 41 实测踩坑）；ModuleBoundary 编译引用检查（Features/* 不得引用 DeskBox.Services/Platform/App——常量下沉 Contracts、本地化经 Func 委托）。
+**共享钉资源表**：迁 N 个门面绑定属性时必同步——AotBindableProperties nameof 计数（345 起逐批递减，批 42 后=316；测试+审计 ps1 两处）；SettingsViewModel.cs ObservableProperty 计数（73 起，批 42 后=63，AotPublishContract InlineData）；{Binding} 不得转 x:Bind（否则 WMC1510 866 变更牵动 ~20 runner×2 处钉）；BindableSettingsViewModelInventory 动态测试自动平衡（勿在壳残留同名属性——需要保留的壳工作态可转 internal，如批 42 的 ManagedStorageRootPath）；编辑器文件 FacadePassthroughAccess 零命中（可绑定属性名避开平铺门面名，去前缀即可；**本地化资源键字面量也会被该正则命中**——"Settings.WidgetLayerMode.*" 键含 `settings.WidgetLayerMode`（忽略大小写），编辑器源里必须分片拼接或改从常量拼装，注释同理，批 41 实测踩坑）；ModuleBoundary 编译引用检查（Features/* 不得引用 DeskBox.Services/Platform/App——常量下沉 Contracts、本地化经 Func 委托）。
 
 
 ## 第四十一批：门面退役第二阶段第一复制批（Interaction 主节+InteractionWindow 节 XAML 绑定迁编辑器）
@@ -1001,6 +1001,37 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 - **绑定实效验证（UIA 探针）**：隔离数据根 `facade-interaction-41-20260928-b41e7a` 的 `<root>/data/settings.json` 预置 `widgetLayerMode=QuickReveal`、`resizeSnapEnabled=false`、`widgetSnapSpacing=17`、`doubleClickToOpen=false`、`keepWidgetsVisibleOnShowDesktop=false`（camelCase，schemaVersion 9）+已完成 onboarding。canonical Debug `--open-settings` 启动（跳转列表激活路径），UIA 选中"快捷与交互"导航进入两节：层模式 ComboBox 读到**快捷唤起层**、打开方式读到**单击打开**、按 Win+D 后读到**和窗口一起隐藏**、格子吸附 ToggleSwitch 读到 **Off**、全局快捷键 ToggleSwitch 读到 **On**（推面）——预置非默认值经"磁盘→协调器读快照→编辑器→节级 DataContext {Binding}→控件"全链投影（绑定若死则控件呈编辑器默认 动态层/双击/保持显示/On）。再经 TogglePattern 把格子吸附拨到 On，3 秒后磁盘 `resizeSnapEnabled=true` 且其余预置字段不动——TwoWay 经"控件→{Binding}→编辑器 setter→协调器→SaveDebounced→磁盘"回写贯通（另在首轮错误预置位置的会话中亦已复证：默认态拨 Off 落盘 false）。启动管线 35 步（5 critical）、0 degraded、0 failed；Interaction/InteractionWindowSettings 两节延迟创建正常。探针后已按路径停止本 worktree 实例（主检出与 wingezi-p1c 实例未触碰）；探针脚本临时件未入库。
 - `git diff --check` 通过。
 - 遗留风险：①热键卡与悬停摘要的"推面"粒度是全量 push（每次重算 6 字段/1 字符串），状态机仍在壳，后续批次若迁状态机进编辑器需一并下沉本地化与 GlobalHotkeyService 查询委托；②ComboBox 选中项的 UIA 可读性依赖展开（未展开时 SelectionPattern 无选中项暴露），不影响绑定本身；③未做真实设置页逐控件操作手感验收（热键录制/预设按钮/悬停 flyout 的交互流仍是代码后置原路径，未受本批影响）。
+
+## 第四十二批：门面退役第二阶段第二复制批（FileDisplay 节+FileStorage 节 XAML 绑定迁编辑器）
+
+实施基线：`3f6f8ee0`（main，含批 40-41），worktree `codex/final2-facade-filewidget`。对象是施工图顺位 3/4 两节共 13 个唯一绑定属性（FileDisplay 文件显示节 6：显示后缀名/排除快捷方式 .lnk/图片视频图标/快捷方式小箭头/列表详情/路径提示六开关；FileStorage 收纳与路径节 7：托管拖放下拉×2、只读根路径、快速访问状态行/动作门/按钮面/按钮提示）。磁盘 schema、文案零变化；{Binding} 标记形态保持（WMC1510=866 零触碰）；两节编辑器缝为批 35 薄缝（FileDisplaySettingsViewModel/ManagedStorageSettingsViewModel），本批扩成可绑定面，非新建。
+
+**DP 类型改 x:Bind 路线的取舍（本批的耦合判断）**：施工图为 FileWidget 总览节（AppearanceDetail 的 FileWidgetSettingsSection，`x:Bind ViewModel.*` 且 DP 类型是壳门面）预留了"后续批次把 DP 类型换成编辑器沿用 x:Bind 免桥"的例外。本批评估后**未执行**：该节 5 个 x:Bind 绑定横跨三个协调器域（文件叠放开关+摘要属 FileStack 域且摘要状态机在壳、文件夹打开方式属 FeatureWidgets 域、文件项系统右键菜单属 Interaction 域），其中 FileStack 两绑定与尚未迁移的 FileStack 节 `{Binding}` 共享同一壳门面状态——现在换 DP 类型要么在编辑器复制 FileStack 推面状态（约 10 处推送接线），要么把三个域塞进一个复合编辑器，而 FileStack 批迁移时又要重做；且该两成员无论换不换 DP 都无法真删。x:Bind 免桥路线留给拥有 FileStack 迁移的批次执行。
+
+| 职责 | 所有者 |
+|---|---|
+| FileDisplay 节绑定面（6 属性：读投影+TwoWay 写入，无本地化） | `Features/FileDisplay/FileDisplaySettingsViewModel`（ObservableObject 化，属性名即 XAML 路径、本就无前缀） |
+| FileStorage 节绑定面（7 属性：DropAction+选项表+RootPath 推面+快速访问四呈现） | `Features/ManagedStorage/ManagedStorageSettingsViewModel`（ObservableObject 化；DropAction/RootPath 去前缀避门面名） |
+| NativeAOT {Binding} 桥（6+7 nameof 条目） | 两编辑器各自 `*.AotBindableProperties.cs`（Glance/Music 同款） |
+| 托管呈现读快照 `ReadManagedStoragePresentation`（拖放动作归一化+根路径归一化）与 `SetManagedDropAction` 写端口 | `Contracts/IManagedStorageSettings` + 协调器实现（FeatureWidgets 侧同字段写端口有第二消费者故保留不动）；`ManagedDropActions` 规范值下沉 Contracts，SettingsService 常量改别名 |
+| 快速访问状态机（Explorer 查询/忙态/置顶态）与根路径工作态 | 仍在 SettingsViewModel（HotkeyAndStorage/FeatureOptions）：`ManagedStorageRootPath`/`ManagedStorageQuickAccessPinState`/`IsQuickAccessBusy` 转 internal（PropertyChanged 供路径警告链），状态变更经 `PushQuickAccessPresentation` 全量推 `QuickAccessPresentationSettings` 五字段到编辑器；语言切换重算重推 |
+| 两节 DataContext 切换 | `SettingsWindow.EnsureSettingsSectionCreated`：`FileDisplaySettings`→`_fileDisplaySettingsViewModel`、`FileStorageSettings`→`_managedStorageSettingsViewModel`（SettingsWindow 新增两编辑器字段与 FileDisplaySettings 公开访问器） |
+| 外部刷新路径 | ApplySettingsSnapshot → `_fileDisplaySettings.SyncPresentation()`+`_managedStorageSettings.SyncPresentation()`；OnLanguageChanged → `_managedStorageSettings.RefreshLocalization()`+快速访问推面；根路径迁移提交 → 编辑器 `CommitRootPath`（协调器写+推面一体） |
+| 壳兼容属性（已删除） | ~~ShowFileExtensions/HideShortcutExtensionWhenShowingFileExtensions/ShowImageFilesAsIcons/HideShortcutArrowOverlay/ShowListItemDetails/ShowFileItemPathTooltips 六 ObservableProperty + 六 Changed 回调 + SelectedManagedDropAction/AvailableManagedDropActionOptions/AvailableManagedDropActions(+DisplayNames)/GetManagedDropActionDisplayName/QuickAccessStatusText/CanInvokeQuickAccessAction/PinQuickAccessButtonText/PinQuickAccessToolTipText/ShouldUnpinManagedStorageFromQuickAccess/死代码 RefreshQuickAccessState + `_selectedManagedDropAction`/`_cachedManagedDropActionDisplayNames` 字段 + 构造/快照/本地化处全部读写~~ |
+| AOT 持久化烟囱 | App.AotManagedUiSmoke 的 ShowFileExtensions 拨动/读出改经 `settingsWindow.FileDisplaySettings` 编辑器面（evidence 字段名不变），磁盘链路不变 |
+
+行为语义保全要点：①编辑器构造/Sync 期静默不回写（`_isSyncingPresentation`），与原壳回调的 `_isRestoringDefaults`/`_isApplyingSettingsSnapshot` 守卫等价；②拖放动作组合只出规范值、协调器写入归一化（未知值回退 Move），与原壳归一化 switch 同语义；③快速访问四呈现改为壳算好字符串整包推送（批 41 热键卡同款"壳推面"），ComboBox 值/按钮启用/提示全由编辑器呈现，代码后置 Pin/Unpin 处理改读编辑器 `CanInvokeQuickAccessAction`/`ShouldUnpinQuickAccessAction`；④根路径 TextBox 显示值从"构造期裸值"变为"读快照归一化值"（原快照应用期本就归一化，仅首开帧差异）；⑤桌面快捷方式开关/文件夹清理/打开路径按钮仍是代码后置原路径未受影响。
+
+门禁同步：①`AotStage5B4B1ContractTests` nameof 计数 329→**316**（测试两处+审计 ps1）；②`AotPublishContractTests` SettingsViewModel.cs ObservableProperty 69→**63**（删六个文件显示开关）；③动态对账测试自动平衡（壳属性与 XAML 路径双侧同步收缩，壳未残留同名公有属性——ManagedStorageRootPath 等转 internal）；④WMC1510=866 与全部 runner 零触碰；⑤`SettingsSliceOwnership` 读棘轮自动收缩；⑥`FacadePassthroughAccess` 两编辑器+合同文件零命中（本批本地化键 Settings.DropAction.*/Settings.ManagedPath.* 无平铺门面名前缀碰撞，未需分片拼接）；⑦ModuleBoundary：编辑器仅引 Contracts/Models/MVVM Toolkit，零 Services/Platform/App/WinUI；⑧审计 ps1 的 stage5B4B2A 烟囱钉（'ShowFileExtensions'/'settingsWindow.ViewModel'）随 harness 改指编辑器后原样满足。
+
+### 第四十二批验证记录
+
+- canonical Debug（非平台）构建 0 错误；x64 Debug 随测试构建 0 错误。
+- 新增 `FileSettingsEditorTests` 12 用例（两编辑器构造投影/快照归一化/写穿透+广播计数与unchanged跳过/外部同步零回写/CommitRootPath 归一化持久推面/快速访问推面/选项表/本地化重建/常量别名/壳反射面无残留/XAML+桥+接线+烟囱文本钉）。另将批 35 的 FileDisplaySettingsCoordinatorTests/ManagedStorageSettingsCoordinatorTests 两处旧薄缝调用改指新绑定面。全量 x64 测试：**4,361/4,361 通过**（批 41 基线 4,349 + 本批 12）。
+- AOT 定义编译检查（x64、`DefineConstants=TRACE;DEBUG;DESKBOX_NATIVE_AOT`，`ArtifactsPath`/`RestorePackagesPath` 隔离于 `.aotcheck/`，DeskBox 与 Updater 均随隔离 restore，`--no-incremental` 全量重编确认 DefineConstants 经 `-getProperty` 实际生效——Git Bash 下分号属性需内嵌引号传递，检查后已清理）：**0 错误**、22 警告。未执行 Native AOT publish/link 或发布包运行，仍为发版门禁。
+- **绑定实效验证（UIA 探针）**：隔离数据根 `facade-file-42-20260928-c42f7d` 的 `<root>/data/settings.json` 预置 `showFileExtensions=true`、`hideShortcutExtensionWhenShowingFileExtensions=false`、`showImageFilesAsIcons=true`、`hideShortcutArrowOverlay=false`、`showListItemDetails=true`、`showFileItemPathTooltips=false`、`managedDropAction=FollowWindows`（camelCase，schemaVersion 9）+已完成 onboarding、zh-CN。canonical Debug `--open-settings` 启动（跳转列表激活路径），UIA 选中"文件格子"导航：收纳与路径节读到拖放下拉选中**跟随 Windows 默认**（预置 FollowWindows）与只读根路径 `C:\Users\simon\DeskBox`；drill-down 进入文件显示节后六 ToggleSwitch 读到 **On/Off/On/Off/On/Off**——与预置逐项一致（绑定若死则控件呈编辑器默认 Off/On/Off/On/Off/On）。再经 TogglePattern 把"图片和视频只显示图标"拨到 Off，4 秒后磁盘 `showImageFilesAsIcons=false` 且其余预置字段（含 managedDropAction）不动——TwoWay 经"控件→{Binding}→编辑器 setter→协调器→SaveDebounced→磁盘"回写贯通。启动管线 35 步（5 critical）、0 degraded、0 failed；FileDisplaySettings/FileStorageSettings 两节延迟创建正常。探针后已按路径停止本 worktree 实例（主检出实例未触碰）；探针脚本临时件未入库。
+- `git diff --check` 通过。
+- 遗留风险：①快速访问推面为全量五字段 push（状态机在壳，迁编辑器需一并下沉 Explorer 查询委托与本地化）；②FileWidget 总览节仍走壳门面 x:Bind（DP 类型改 x:Bind 免桥路线已评估未执行，见上），其 5 绑定与 FileStack 批耦合；③根路径显示值首开帧从裸值变归一化值（正常安装两者相同）；④未做真实设置页逐控件操作手感验收（文件夹选择器/迁移对话框/桌面快捷方式开关的交互流仍是代码后置原路径，未受本批影响）。
 
 
 
