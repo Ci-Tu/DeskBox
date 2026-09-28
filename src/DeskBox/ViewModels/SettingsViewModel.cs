@@ -104,12 +104,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _isUpdatingHoverButtonActionSelection;
 
     private string[]? _cachedLanguageDisplayNames;
-    private string[]? _cachedTodoNewTaskPositionDisplayNames;
     private string[]? _cachedAttachmentStorageModeDisplayNames;
-    private string[]? _cachedTodoDefaultFilterDisplayNames;
-    private string[]? _cachedTodoLayoutModeDisplayNames;
-    private string[]? _cachedTodoTabStyleDisplayNames;
-    private string[]? _cachedTodoReminderOffsetDisplayNames;
 private string[]? _cachedWeatherTempUnitDisplayNames;
 private string[]? _cachedWeatherWindUnitDisplayNames;
 private string[]? _cachedWeatherDefaultViewDisplayNames;
@@ -164,20 +159,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool IdleWorkingSetTrimEnabled { get; set; } = true;
     [ObservableProperty] public partial bool ImmediateHiddenWorkingSetTrimEnabled { get; set; }
     [ObservableProperty] public partial bool QuiescenceWorkingSetTrimEnabled { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowTabBar { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowAllTab { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowActiveTab { get; set; }
-    [ObservableProperty] public partial bool TodoShowTodayTab { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowThisWeekTab { get; set; }
-    [ObservableProperty] public partial bool TodoShowThisMonthTab { get; set; }
-    [ObservableProperty] public partial bool TodoShowImportantTab { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowCompletedTab { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowCompletedTasks { get; set; } = true;
-    [ObservableProperty] public partial bool TodoShowFooterStats { get; set; }
-    [ObservableProperty] public partial bool TodoShowClearCompletedButton { get; set; } = true;
-    [ObservableProperty] public partial bool TodoUseWideDetailPane { get; set; } = true;
-    [ObservableProperty] public partial bool TodoAutoSelectFirstInWideLayout { get; set; } = true;
-
     [ObservableProperty] public partial bool WeatherAutoLocation { get; set; } = true;
     [ObservableProperty] public partial string WeatherCityName { get; set; } = string.Empty;
     [ObservableProperty] public partial bool WeatherShowForecast { get; set; } = true;
@@ -188,8 +169,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool WeatherShowWind { get; set; } = true;
     [ObservableProperty] public partial bool WeatherShowPressure { get; set; }
 
-    [ObservableProperty] public partial double TodoListTextSize { get; set; } = SettingsService.DefaultTextSize;
-    [ObservableProperty] public partial double TodoContentTextSize { get; set; } = SettingsService.DefaultTextSize;
     [ObservableProperty] public partial bool IsCheckingForUpdates { get; set; }
     [ObservableProperty] public partial bool IsDownloadingUpdate { get; set; }
     [ObservableProperty] public partial string UpdateStatusText { get; set; } = string.Empty;
@@ -274,11 +253,10 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
         QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
         _selectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
-        SyncTodoTabFacade();
-        SyncTodoDisplayFacade();
-        SyncTodoTextSizeFacade();
-        TodoUseWideDetailPane = _todoSettings.LayoutMode != SettingsService.TodoLayoutModeSinglePane;
-        TodoAutoSelectFirstInWideLayout = _todoSettings.AutoSelectFirstInWideLayout;
+        // The Todo section's presentation (layout, tabs, content editor,
+        // reminders, footer display) lives on the section editor now
+        // (batch 47); its constructor syncs itself from the coordinator
+        // snapshots.
         WeatherAutoLocation = settings.WeatherAutoLocation;
         WeatherCityName = settings.WeatherCityName;
         _weatherCitySearchText = settings.WeatherCityName;

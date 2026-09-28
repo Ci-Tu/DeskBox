@@ -642,7 +642,7 @@ public sealed class SettingsCopyAndHierarchyTests
             "x:Name=\"MusicSettingsSection\"");
 
         Assert.Contains("IsOn=\"{Binding Enabled, Mode=TwoWay}\"", quickCapture, StringComparison.Ordinal);
-        Assert.Contains("IsOn=\"{Binding TodoEnabled, Mode=TwoWay}\"", todo, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{Binding Enabled, Mode=TwoWay}\"", todo, StringComparison.Ordinal);
         Assert.Equal(5, CountOccurrences(quickCapture, "Loaded=\"FeatureSettingsExpander_Loaded\""));
         Assert.Equal(5, CountOccurrences(todo, "Loaded=\"FeatureSettingsExpander_Loaded\""));
 
@@ -665,10 +665,12 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.Contains("Click=\"TodoTabsDropDown_Click\"", todo, StringComparison.Ordinal);
         Assert.Contains("Click=\"TodoFooterDisplayDropDown_Click\"", todo, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleDefaultViewOptions}\"", quickCapture, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{Binding VisibleTodoDefaultFilterOptions}\"", todo, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding VisibleDefaultFilterOptions}\"", todo, StringComparison.Ordinal);
 
         Assert.DoesNotContain("IsOn=\"{Binding ShowRecordsTab", quickCapture, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsOn=\"{Binding TodoShowAllTab", todo, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding TodoShowAllTab", todo, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding TodoShowTabBar", todo, StringComparison.Ordinal);
+        Assert.DoesNotContain("{Binding SelectedTodo", todo, StringComparison.Ordinal);
         Assert.Contains(
             "controls:SettingsComboBox.Value=\"{Binding EditorFormat, Mode=TwoWay}\"",
             quickCapture,

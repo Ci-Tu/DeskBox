@@ -2923,6 +2923,8 @@ public partial class App : Application
             SettingsService, ThemeService, LocalizationService,
             new TodoSettingsViewModel(
                 _todoSettings ?? throw new InvalidOperationException("Todo settings are not initialized."),
+                LocalizationService.T,
+                (key, args) => LocalizationService.Format(key, args),
                 ex => Log($"[TodoSettings] Update failed: {ex}")),
             new SearchSettingsViewModel(
                 _searchSettings ?? throw new InvalidOperationException("Search settings are not initialized."),

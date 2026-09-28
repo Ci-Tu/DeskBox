@@ -123,6 +123,16 @@ public sealed partial class SettingsWindow
             section.DataContext = _quickCaptureSettingsViewModel;
         }
 
+        // The Todo section binds through the Todo editor (batch 47):
+        // {Binding} markup resolves through its generated custom property
+        // provider under Native AOT; the batch-14 default-filter/tab
+        // linkage renders through the coordinator's snapshot
+        // re-projection.
+        if (sectionTag == "TodoSettings")
+        {
+            section.DataContext = _todoSettingsViewModel;
+        }
+
         // The file-stack section binds through the file-stack editor
         // (batch 45): {Binding} markup resolves through its generated custom
         // property provider under Native AOT, and the template's compiled

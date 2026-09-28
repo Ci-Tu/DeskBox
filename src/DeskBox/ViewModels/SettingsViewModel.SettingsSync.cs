@@ -34,8 +34,10 @@ private void OnLanguageChanged()
     _capsuleSettings.RefreshLocalization();
     RefreshWidgetGroupSettings();
     // The Quick Capture editor re-localizes its option tables, summaries and
-    // the clipboard-diagnostics line (batch 46).
+    // the clipboard-diagnostics line (batch 46); the Todo editor rebuilds
+    // its option tables, summaries and tab texts (batch 47).
     _quickCaptureSettingsEditor.RefreshLocalization();
+    _todoSettings.RefreshLocalization();
 }
 
 
@@ -81,12 +83,9 @@ private void OnLanguageChanged()
             SelectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
             ApplyPerformanceSettingsSnapshot(settings);
 
+            // The Todo section's whole presentation lives on its editor
+            // (batch 47): re-project from the coordinator snapshots.
             _todoSettings.Refresh();
-            SyncTodoTabFacade();
-            SyncTodoDisplayFacade();
-            SyncTodoTextSizeFacade();
-            TodoUseWideDetailPane = _todoSettings.LayoutMode != SettingsService.TodoLayoutModeSinglePane;
-            TodoAutoSelectFirstInWideLayout = _todoSettings.AutoSelectFirstInWideLayout;
 
             // Appearance presentation (material, density, window chrome, animation,
             // foreground, tray icon style) lives on the appearance editor now;
@@ -224,12 +223,7 @@ private void OnLanguageChanged()
             _fileStackSettings.RefreshLocalization();
             _featureWidgetsSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
-            _cachedTodoNewTaskPositionDisplayNames = null;
             _cachedAttachmentStorageModeDisplayNames = null;
-            _cachedTodoDefaultFilterDisplayNames = null;
-            _cachedTodoLayoutModeDisplayNames = null;
-            _cachedTodoTabStyleDisplayNames = null;
-            _cachedTodoReminderOffsetDisplayNames = null;
             _cachedWeatherTempUnitDisplayNames = null;
             _cachedWeatherWindUnitDisplayNames = null;
             _cachedWeatherDefaultViewDisplayNames = null;
@@ -238,19 +232,14 @@ private void OnLanguageChanged()
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
-            OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
             OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionDisplayNames));
-            OnPropertyChanged(nameof(AvailableTodoDefaultFilterDisplayNames));
-            OnPropertyChanged(nameof(AvailableTodoTabStyleDisplayNames));
-            OnPropertyChanged(nameof(AvailableTodoReminderOffsetDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherTemperatureUnitDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherWindSpeedUnitDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherDefaultViewDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherSkinDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherRefreshIntervalDisplayNames));
-            RefreshContentEditorLocalizedProperties();
             NotifySelectionOptionsChanged();
         }
 
@@ -259,17 +248,6 @@ private void OnLanguageChanged()
         OnPropertyChanged(nameof(SelectedLanguageText));
         NotifyHoverButtonActionPropertiesChanged();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
-        OnPropertyChanged(nameof(SelectedTodoNewTaskPositionText));
-        OnPropertyChanged(nameof(SelectedTodoDefaultFilterText));
-        OnPropertyChanged(nameof(SelectedTodoTabStyleText));
-        OnPropertyChanged(nameof(SelectedTodoReminderOffsetMinutesText));
-        RefreshTodoTabsPresentation();
-        RefreshTodoContentPresentation();
-        OnPropertyChanged(nameof(TodoLayoutSummaryText));
-        OnPropertyChanged(nameof(TodoWideOptionsVisibility));
-        OnPropertyChanged(nameof(TodoTabStyleIndex));
-        OnPropertyChanged(nameof(TodoReminderSummaryText));
-        OnPropertyChanged(nameof(TodoFooterDisplaySummaryText));
         OnPropertyChanged(nameof(WeatherDisplayOptionsSummaryText));
     }
 }

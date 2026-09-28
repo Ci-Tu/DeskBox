@@ -250,7 +250,7 @@ public sealed class SettingsService
     public const int MaxFileStackCustomRules = FileStackOptionKinds.MaxCustomRules;
     public const int MaxFileStackExtensionsPerRule = FileStackOptionKinds.MaxExtensionsPerRule;
     public const int DefaultQuickCaptureItemPreviewLineCount = 3;
-    public const int DefaultTodoItemPreviewLineCount = 2;
+    public const int DefaultTodoItemPreviewLineCount = TodoOptionKinds.DefaultItemPreviewLineCount;
     [Obsolete("Use the feature-specific preview line defaults.")]
     public const int DefaultItemPreviewLineCount = DefaultQuickCaptureItemPreviewLineCount;
     public const int MinItemPreviewLineCount = QuickCaptureOptionKinds.MinItemPreviewLineCount;
@@ -309,21 +309,21 @@ public sealed class SettingsService
     public const string MusicDisplayModeRecordVertical = Contracts.MusicDisplayModes.RecordVertical;
     public const string MusicDisplayModeRecordHorizontal = Contracts.MusicDisplayModes.RecordHorizontal;
     public const int MaxRecentOrganizationHistoryCount = 24;
-    public const string TodoNewTaskPositionTop = "Top";
-    public const string TodoNewTaskPositionBottom = "Bottom";
-    public const string TodoDefaultFilterAll = "All";
-    public const string TodoDefaultFilterActive = "Active";
-    public const string TodoDefaultFilterToday = "Today";
-    public const string TodoDefaultFilterThisWeek = "ThisWeek";
-    public const string TodoDefaultFilterThisMonth = "ThisMonth";
-    public const string TodoDefaultFilterImportant = "Important";
-    public const string TodoDefaultFilterCompleted = "Completed";
-    public const string TodoLayoutModeAuto = "Auto";
-    public const string TodoLayoutModeSinglePane = "SinglePane";
-    public const string TodoLayoutModeDualPane = "DualPane";
-    public const int DefaultTodoReminderOffsetMinutes = 5;
-    public const int MinTodoReminderOffsetMinutes = 0;
-    public const int MaxTodoReminderOffsetMinutes = 1440;
+    public const string TodoNewTaskPositionTop = TodoOptionKinds.NewTaskPositionTop;
+    public const string TodoNewTaskPositionBottom = TodoOptionKinds.NewTaskPositionBottom;
+    public const string TodoDefaultFilterAll = TodoOptionKinds.DefaultFilterAll;
+    public const string TodoDefaultFilterActive = TodoOptionKinds.DefaultFilterActive;
+    public const string TodoDefaultFilterToday = TodoOptionKinds.DefaultFilterToday;
+    public const string TodoDefaultFilterThisWeek = TodoOptionKinds.DefaultFilterThisWeek;
+    public const string TodoDefaultFilterThisMonth = TodoOptionKinds.DefaultFilterThisMonth;
+    public const string TodoDefaultFilterImportant = TodoOptionKinds.DefaultFilterImportant;
+    public const string TodoDefaultFilterCompleted = TodoOptionKinds.DefaultFilterCompleted;
+    public const string TodoLayoutModeAuto = TodoOptionKinds.LayoutModeAuto;
+    public const string TodoLayoutModeSinglePane = TodoOptionKinds.LayoutModeSinglePane;
+    public const string TodoLayoutModeDualPane = TodoOptionKinds.LayoutModeDualPane;
+    public const int DefaultTodoReminderOffsetMinutes = TodoOptionKinds.DefaultReminderOffsetMinutes;
+    public const int MinTodoReminderOffsetMinutes = TodoOptionKinds.MinReminderOffsetMinutes;
+    public const int MaxTodoReminderOffsetMinutes = TodoOptionKinds.MaxReminderOffsetMinutes;
     public const string QuickCaptureDefaultViewRecords = QuickCaptureOptionKinds.DefaultViewRecords;
     public const string QuickCaptureDefaultViewPinned = QuickCaptureOptionKinds.DefaultViewPinned;
     public const string QuickCaptureDefaultViewRecent = QuickCaptureOptionKinds.DefaultViewRecent;
@@ -3088,27 +3088,8 @@ settings.FocusClickedWidgetOnRaise = false;
 
     public static string NormalizeTodoLayoutMode(
         string? mode,
-        bool legacyUseWideDetailPane = true)
-    {
-        if (string.IsNullOrWhiteSpace(mode))
-        {
-            return legacyUseWideDetailPane
-                ? TodoLayoutModeAuto
-                : TodoLayoutModeSinglePane;
-        }
-
-        if (string.Equals(mode, TodoLayoutModeSinglePane, StringComparison.OrdinalIgnoreCase))
-        {
-            return TodoLayoutModeSinglePane;
-        }
-
-        if (string.Equals(mode, TodoLayoutModeDualPane, StringComparison.OrdinalIgnoreCase))
-        {
-            return TodoLayoutModeDualPane;
-        }
-
-        return TodoLayoutModeAuto;
-    }
+        bool legacyUseWideDetailPane = true) =>
+        TodoOptionKinds.NormalizeLayoutMode(mode, legacyUseWideDetailPane);
 
     public static int NormalizeItemPreviewLineCount(int lineCount) =>
         QuickCaptureOptionKinds.NormalizeItemPreviewLineCount(lineCount);
@@ -3122,9 +3103,7 @@ settings.FocusClickedWidgetOnRaise = false;
             : controlPressed;
 
     public static string NormalizeTodoNewTaskPosition(string? position) =>
-        position == TodoNewTaskPositionBottom
-            ? TodoNewTaskPositionBottom
-            : TodoNewTaskPositionTop;
+        TodoOptionKinds.NormalizeNewTaskPosition(position);
 
     public static string NormalizeWidgetTabStyle(string? style) =>
         QuickCaptureOptionKinds.NormalizeTabStyle(style);
@@ -3161,15 +3140,8 @@ settings.FocusClickedWidgetOnRaise = false;
         return QuickCaptureDefaultViewRecords;
     }
 
-    public static string NormalizeTodoDefaultFilter(string? filter) => filter is
-        TodoDefaultFilterActive or
-        TodoDefaultFilterToday or
-        TodoDefaultFilterThisWeek or
-        TodoDefaultFilterThisMonth or
-        TodoDefaultFilterImportant or
-        TodoDefaultFilterCompleted
-        ? filter
-        : TodoDefaultFilterAll;
+    public static string NormalizeTodoDefaultFilter(string? filter) =>
+        TodoOptionKinds.NormalizeDefaultFilter(filter);
 
     public static bool IsTodoTabVisible(AppSettings settings, string? filter) =>
         IsTodoTabVisible(settings.Todo, filter);
@@ -3200,12 +3172,8 @@ settings.FocusClickedWidgetOnRaise = false;
         return TodoDefaultFilterAll;
     }
 
-    public static int NormalizeTodoReminderOffsetMinutes(int minutes)
-    {
-        return minutes is 0 or 5 or 10 or 15 or 30 or 60 or 1440
-            ? minutes
-            : DefaultTodoReminderOffsetMinutes;
-    }
+    public static int NormalizeTodoReminderOffsetMinutes(int minutes) =>
+        TodoOptionKinds.NormalizeReminderOffsetMinutes(minutes);
 
     internal static bool NormalizeWeatherSettings(AppSettings settings)
     {

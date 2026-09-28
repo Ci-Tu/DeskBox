@@ -543,7 +543,7 @@ public sealed class AotPublishContractTests
 
     [Theory]
     [InlineData("src/DeskBox/ViewModels/SearchPopupViewModel.cs", 15)]
-    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 41)]
+    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 26)]
     public void AotSensitiveViewModels_UseObservablePartialProperties(
         string relativePath,
         int expectedCount)
@@ -559,18 +559,20 @@ public sealed class AotPublishContractTests
     }
 
     [Fact]
-    public void TodoSettingsFacade_PreservesWritableAotBindingSurface()
+    public void TodoSettingsEditor_PreservesWritableAotBindingSurface()
     {
+        // Batch 47 moved the Todo section's binding surface onto the
+        // section editor; the writable AOT bridge follows it there.
         string bridge = File.ReadAllText(TestPaths.FromRepository(
-            "src/DeskBox/ViewModels/SettingsViewModel.AotBindableProperties.cs"));
+            "src/DeskBox/Features/Todo/TodoSettingsViewModel.AotBindableProperties.cs"));
         foreach ((string name, Type expectedType) in new[]
         {
-            ("TodoEnabled", typeof(bool)),
-            ("TodoReminderEnabled", typeof(bool)),
-            ("SelectedTodoReminderOffsetMinutes", typeof(int))
+            ("Enabled", typeof(bool)),
+            ("RemindersEnabled", typeof(bool)),
+            ("DefaultOffsetMinutes", typeof(int))
         })
         {
-            var property = typeof(DeskBox.ViewModels.SettingsViewModel).GetProperty(name);
+            var property = typeof(DeskBox.Features.Todo.TodoSettingsViewModel).GetProperty(name);
             Assert.NotNull(property);
             Assert.Equal(expectedType, property!.PropertyType);
             Assert.True(property.CanRead && property.CanWrite);

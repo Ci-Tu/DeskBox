@@ -226,14 +226,4 @@ public partial class SettingsViewModel
     {
         return SettingsService.NormalizeWidgetTitleIconModeSetting(mode);
     }
-
-    private static string NormalizeTodoNewTaskPosition(string? position)
-    {
-        return SettingsService.NormalizeTodoNewTaskPosition(position);
-    }
-
-    private static string NormalizeTodoDefaultFilter(string? filter)
-    {
-        return SettingsService.NormalizeTodoDefaultFilter(filter);
-    }
 }
