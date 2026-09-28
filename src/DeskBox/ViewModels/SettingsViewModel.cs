@@ -43,10 +43,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private const string AnimationPresetStandard = "Standard";
     private const string AnimationPresetEmphasized = "Emphasized";
     private const string AnimationPresetCustom = "Custom";
-    private const string FileOpenMethodSingleClick = "SingleClick";
-    private const string FileOpenMethodDoubleClick = "DoubleClick";
-    private const string ShowDesktopBehaviorKeepVisible = "KeepVisible";
-    private const string ShowDesktopBehaviorHideWithWindows = "HideWithWindows";
     private const string WeatherLocationModeAuto = "Auto";
     private const string WeatherLocationModeManual = "Manual";
     private const string RepositoryUrl = "https://github.com/Tianyu199509/DeskBox";
@@ -102,7 +98,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string _selectedDisplayWidgetChromeMode = SettingsService.WidgetChromeModeOverlay;
     private string _selectedInteractiveWidgetChromeMode = SettingsService.WidgetChromeModeStandard;
     private string _selectedWidgetTitleIconMode = SettingsService.WidgetTitleIconModeColor;
-    private string _selectedWidgetLayerMode = SettingsService.WidgetLayerModeDynamic;
     private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
     private string _selectedManagedDropAction = SettingsService.ManagedDropActionMove;
     private string _selectedFileWidgetFolderOpenBehavior =
@@ -118,10 +113,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string _managedStorageRootPath = SettingsService.GetDefaultManagedStorageRootPath();
     private QuickAccessPinState _quickAccessPinState = QuickAccessPinState.Unknown;
     private bool _isQuickAccessBusy;
-    private bool _globalHotkeyEnabled;
-    private string _globalHotkeyText = string.Empty;
-    private string _globalHotkeyStatusText = string.Empty;
-    private string _globalHotkeyStatusKind = "Normal";
     private string _quickCaptureImageCacheText = string.Empty;
     private string _quickCaptureClipboardDiagnosticsText = string.Empty;
     private StartupRegistrationState _autoStartState =
@@ -154,7 +145,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string[]? _cachedDisplayWidgetChromeModeDisplayNames;
     private string[]? _cachedInteractiveWidgetChromeModeDisplayNames;
     private string[]? _cachedWidgetTitleIconModeDisplayNames;
-    private string[]? _cachedWidgetLayerModeDisplayNames;
     private string[]? _cachedQuickCaptureDefaultViewDisplayNames;
     private string[]? _cachedQuickCaptureTabStyleDisplayNames;
     private string[]? _cachedTodoNewTaskPositionDisplayNames;
@@ -209,16 +199,12 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
             ? Visibility.Visible
             : Visibility.Collapsed;
     [ObservableProperty] public partial bool AutoCheckForUpdates { get; set; } = true;
-    [ObservableProperty] public partial bool DoubleClickToOpen { get; set; }
     [ObservableProperty] public partial bool FileItemSystemContextMenuEnabled { get; set; }
     [ObservableProperty] public partial double DefaultWidth { get; set; }
     [ObservableProperty] public partial double DefaultHeight { get; set; }
     [ObservableProperty] public partial bool HideShortcutArrowOverlay { get; set; }
     [ObservableProperty] public partial bool ShowImageFilesAsIcons { get; set; }
     [ObservableProperty] public partial bool ShowHoverButtons { get; set; } = true;
-    [ObservableProperty] public partial bool ResizeSnapEnabled { get; set; } = true;
-    [ObservableProperty] public partial double WidgetSnapSpacing { get; set; } = SettingsService.DefaultWidgetSnapSpacing;
-    [ObservableProperty] public partial bool KeepWidgetsVisibleOnShowDesktop { get; set; } = true;
     [ObservableProperty] public partial bool ShowHoverActionLockPosition { get; set; }
     [ObservableProperty] public partial bool ShowHoverActionLockSize { get; set; }
     [ObservableProperty] public partial bool ShowHoverActionAdd { get; set; } = true;
@@ -346,7 +332,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         if (StartupService.Current is DirectStartupService directStartup)
             SelectedAutoStartMode = directStartup.Mode.ToString();
         AutoCheckForUpdates = settings.AutoCheckForUpdates;
-        DoubleClickToOpen = settings.DoubleClickToOpen;
         FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;
         _selectedFileWidgetFolderOpenBehavior =
             FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
@@ -356,9 +341,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         HideShortcutArrowOverlay = settings.HideShortcutArrowOverlay;
         ShowImageFilesAsIcons = settings.ShowImageFilesAsIcons;
         ShowHoverButtons = settings.ShowHoverButtons;
-        ResizeSnapEnabled = settings.ResizeSnapEnabled;
-        WidgetSnapSpacing = SettingsService.NormalizeWidgetSnapSpacing(settings.WidgetSnapSpacing);
-        KeepWidgetsVisibleOnShowDesktop = settings.KeepWidgetsVisibleOnShowDesktop;
         ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
         ShowListItemDetails = settings.ShowListItemDetails;
         ShowFileItemPathTooltips = settings.ShowFileItemPathTooltips;
@@ -413,7 +395,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _selectedDisplayWidgetChromeMode = NormalizeWidgetChromeModeSetting(settings.DisplayWidgetChromeMode, WidgetChromeMode.Overlay);
         _selectedInteractiveWidgetChromeMode = NormalizeWidgetChromeModeSetting(settings.InteractiveWidgetChromeMode, WidgetChromeMode.Standard);
         _selectedWidgetTitleIconMode = NormalizeWidgetTitleIconModeSetting(settings.WidgetTitleIconMode);
-        _selectedWidgetLayerMode = SettingsService.NormalizeWidgetLayerModeSetting(settings.WidgetLayerMode);
         IconSize = settings.IconSize;
         TextSize = settings.TextSize;
         LayoutDensityScale = settings.LayoutDensityScale;
@@ -488,6 +469,17 @@ _ = RefreshQuickAccessStateAsync();
         _themeService.AppearanceChanged += OnAppearanceChanged;
         _localizationService.LanguageChanged += OnLanguageChanged;
         RefreshQuickCaptureClipboardDiagnostics();
+
+        // Interaction-section host linkages: the editor owns the section's
+        // binding surface and persisted writes, the shell still owns the
+        // host-side effects that ran around the legacy facade writes. The
+        // handlers live in the partials that already carried them.
+        _interactionSettings.LayerModeUserChanged += OnInteractionLayerModeUserChanged;
+        _interactionSettings.ShowDesktopBehaviorUserChanged += OnInteractionShowDesktopBehaviorUserChanged;
+        _interactionSettings.SnapEnabledUserChanged += OnInteractionSnapEnabledUserChanged;
+        _interactionSettings.SnapSpacingUserChanged += OnInteractionSnapSpacingUserChanged;
+        _interactionSettings.HotkeyEnabledUserChanged += OnInteractionHotkeyEnabledUserChanged;
+        _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
     }
 
     [RelayCommand]

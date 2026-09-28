@@ -101,9 +101,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableWidgetTitleIconModeOptions =>
         CreateSelectionOptions(AvailableWidgetTitleIconModes, AvailableWidgetTitleIconModeDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableWidgetLayerModeOptions =>
-        CreateSelectionOptions(AvailableWidgetLayerModes, AvailableWidgetLayerModeDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableQuickCaptureDefaultViewOptions =>
         CreateSelectionOptions(AvailableQuickCaptureDefaultViews, AvailableQuickCaptureDefaultViewDisplayNames);
 
@@ -217,10 +214,8 @@ public partial class SettingsViewModel
     {
         OnPropertyChanged(nameof(AvailableThemeOptions));
         OnPropertyChanged(nameof(AvailableAccentColorSourceOptions));
-        OnPropertyChanged(nameof(AvailableFileOpenMethodOptions));
         OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptions));
         OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems));
-        OnPropertyChanged(nameof(AvailableShowDesktopBehaviorOptions));
         OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
         OnPropertyChanged(nameof(AvailableTrayIconStyleOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
@@ -248,7 +243,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(AvailableDisplayWidgetChromeModeOptions));
         OnPropertyChanged(nameof(AvailableInteractiveWidgetChromeModeOptions));
         OnPropertyChanged(nameof(AvailableWidgetTitleIconModeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetLayerModeOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleOptions));
         OnPropertyChanged(nameof(AvailableItemPreviewLineCountOptions));

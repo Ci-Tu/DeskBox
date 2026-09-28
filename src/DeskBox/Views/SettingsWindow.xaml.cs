@@ -137,6 +137,7 @@ public sealed partial class SettingsWindow : Window
     private readonly BackupRestoreActions _backupRestoreActions;
     private readonly IBackupCommands _backupCommands;
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
+    private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
 
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
         TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
@@ -173,6 +174,7 @@ public sealed partial class SettingsWindow : Window
         _backupSettingsViewModel = backupSettings;
         _backupRestoreActions = backupRestoreActions;
         _musicSettingsViewModel = musicSettings;
+        _interactionSettingsViewModel = interactionSettings;
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,

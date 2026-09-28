@@ -958,8 +958,8 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 | 顺位 | 节 | 唯一绑定属性数 | 编辑器归属 | 难度点 |
 |---|---|---|---|---|
 | 已完成 | Music | 4 | 新建 `Features/Music/MusicSettingsViewModel` | 试点基准 |
-| 1 | Interaction 主节 | 3 | InteractionSettingsViewModel 补面 | 最小；先复制模式 |
-| 2 | InteractionWindow（高级） | 13 | 同上 | 全局热键状态机在壳（RefreshGlobalHotkeyControls 代码后置），先迁绑定再议状态机 |
+| 已完成（批 41） | Interaction 主节 | 3 | InteractionSettingsViewModel 补面（批 34 薄缝扩成可绑定编辑器） | 最小；首批复制 |
+| 已完成（批 41） | InteractionWindow（高级） | 13 | 同上 | 全局热键/悬停按钮状态机经"壳计算+编辑器推面"分离（见第四十一批） |
 | 3 | FileDisplay | 6 | FileDisplaySettingsViewModel 补面 | 纯直保存族，低险 |
 | 4 | FileStorage(托管存储) | 7 | ManagedStorageSettingsViewModel 补面 | 快速访问状态/路径警告刷新链在壳 |
 | 5 | Appearance 四子节（材质/密度/窗口/动画） | 23+16+8+13 | AppearanceSettingsViewModel 补面 | 外观活预览链（RequestAppearancePreview/滑杆按压态）与全局主题联动，面最大 |
@@ -970,7 +970,38 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 | 10 | BackupRestore/CloudBackup/CompatibilityDiagnostics | 11+19+13 | BackupSettingsViewModel（已有 5 属性 ObservableObject 面）/MaintenanceSettingsViewModel 补面 | 云备份连接状态机、拖放诊断、快照 ListView 代码后置 ItemsSource |
 | 11 | General/About/Performance | 16/25/14 | 暂留壳（About 更新卡、自启注册、性能 lambda 门面写属宿主域，超出本阶段口径） | 收官批再定去留 |
 
-**共享钉资源表**：迁 N 个门面绑定属性时必同步——AotBindableProperties nameof 计数（345 起逐批递减，测试+审计 ps1 两处）；SettingsViewModel.cs ObservableProperty 计数（73 起，AotPublishContract InlineData）；{Binding} 不得转 x:Bind（否则 WMC1510 866 变更牵动 ~20 runner×2 处钉）；BindableSettingsViewModelInventory 动态测试自动平衡（勿在壳残留同名属性）；编辑器文件 FacadePassthroughAccess 零命中（可绑定属性名避开平铺门面名，去前缀即可）；ModuleBoundary 编译引用检查（Features/* 不得引用 DeskBox.Services/Platform/App——常量下沉 Contracts、本地化经 Func 委托）。
+**共享钉资源表**：迁 N 个门面绑定属性时必同步——AotBindableProperties nameof 计数（345 起逐批递减，批 41 后=329；测试+审计 ps1 两处）；SettingsViewModel.cs ObservableProperty 计数（73 起，批 41 后=69，AotPublishContract InlineData）；{Binding} 不得转 x:Bind（否则 WMC1510 866 变更牵动 ~20 runner×2 处钉）；BindableSettingsViewModelInventory 动态测试自动平衡（勿在壳残留同名属性）；编辑器文件 FacadePassthroughAccess 零命中（可绑定属性名避开平铺门面名，去前缀即可；**本地化资源键字面量也会被该正则命中**——"Settings.WidgetLayerMode.*" 键含 `settings.WidgetLayerMode`（忽略大小写），编辑器源里必须分片拼接或改从常量拼装，注释同理，批 41 实测踩坑）；ModuleBoundary 编译引用检查（Features/* 不得引用 DeskBox.Services/Platform/App——常量下沉 Contracts、本地化经 Func 委托）。
+
+
+## 第四十一批：门面退役第二阶段第一复制批（Interaction 主节+InteractionWindow 节 XAML 绑定迁编辑器）
+
+实施基线：`1fd7296c`（main，含批 40 试点），worktree `codex/final2-facade-interaction`。对象是施工图顺位 1/2 两节共 16 个唯一绑定属性（Interaction 主节 3：层模式下拉+悬停按钮摘要；InteractionWindow 高级节 13：打开方式/按 Win+D 行为两个下拉、全局热键卡 6 属性、吸附开关+间距滑杆+间距文本）。磁盘 schema、文案零变化；{Binding} 标记形态保持（WMC1510=866 零触碰）；交互族协调器缝（批 34 建的 `InteractionSettingsCoordinator`/`IInteractionSettings`）扩展成可绑定面，非新建。
+
+**状态机分离决策（本批定型的新模式，适用于"绑定面可迁、状态机留壳"的节）**：16 属性中 11 个是纯持久字段投影（层模式/吸附开关/间距/打开方式/桌面行为——读快照+协调器写透），5 个属壳持状态机：全局热键卡（RefreshGlobalHotkeyState 计算 enable/激活文本/注册状态/本地化描述与保留手势警告，读 `App.Current.GlobalHotkeyService`——编辑器按 ModuleBoundary 不得引用）与悬停按钮摘要（HoverActions.cs 的 flyout 选择状态机）。这两个族改为**壳计算+编辑器推面**：壳把 `GlobalHotkeyPresentationSettings`（6 字段）与摘要字符串 push 到编辑器（`UpdateGlobalHotkeyPresentation`/`UpdateHoverButtonActionsSummary`，push 期间编辑器静默不回写不触发事件）；用户拨动热键开关经 `HotkeyEnabledUserChanged` 事件回壳执行 `GlobalHotkeyService.SetEnabled`+重算推面。宿主联动（层模式/桌面行为→RefreshVisibleWidgetDesktopLayers、吸附两字段→ResizeGuideOverlay）以编辑器 `*UserChanged` 事件回壳，订阅在 SettingsViewModel 构造器，处理方法落在原承载它们的 partial（App.Current 预算按文件守恒：AppearanceOptions 2/PreferenceCallbacks 3/FeatureOptions 4 均持平）。
+
+| 职责 | 所有者 |
+|---|---|
+| 两节 XAML 绑定面（16 属性：读投影+TwoWay 写入+选项表+本地化缓存重建） | `Features/Interaction/InteractionSettingsViewModel`（ObservableObject 化，批 34 薄缝的方法保留给未迁节的壳回调） |
+| NativeAOT {Binding} 桥（16 nameof 条目） | `Features/Interaction/InteractionSettingsViewModel.AotBindableProperties.cs`（Glance/Music 同款） |
+| 交互呈现读快照 `ReadInteractionPresentation`（层模式归一化+间距钳制后返回） | `Contracts/IInteractionSettings` + 协调器实现（写入端口不变）；合同新增 `WidgetLayerModes`/`FileOpenMethods`/`ShowDesktopBehaviors` 规范值与两个呈现记录 |
+| 全局热键卡状态机、悬停按钮 flyout 状态机、4 个宿主联动 | 仍在 SettingsViewModel（HotkeyAndStorage/HoverActions/AppearanceOptions/PreferenceCallbacks/FeatureOptions partial），经推面/事件与编辑器协作 |
+| 两节 DataContext 切换 | `SettingsWindow.EnsureSettingsSectionCreated`：`sectionTag is "Interaction" or "InteractionWindowSettings"` 时 `section.DataContext = _interactionSettingsViewModel` |
+| 外部刷新路径 | ApplySettingsSnapshot → `_interactionSettings.SyncPresentation()`+摘要 push；OnLanguageChanged → `RefreshLocalization()`+摘要 push+`RefreshGlobalHotkeyState()`；恢复默认 → 快照路径+`_interactionSettings.SnapEnabled` 读投影喂 ResizeGuideOverlay（门面读收缩） |
+| 壳兼容属性（已删除，20 个反射面+4 个 ObservableProperty） | ~~SelectedWidgetLayerMode(+Text)/AvailableWidgetLayerModeOptions(+Modes+DisplayNames+GetWidgetLayerModeDisplayName)/HoverButtonActionsSummaryText/SelectedFileOpenMethod/AvailableFileOpenMethodOptions/SelectedShowDesktopBehavior/AvailableShowDesktopBehaviorOptions/GlobalHotkeyEnabled/GlobalHotkeyText/GlobalHotkeyStatusText/GlobalHotkeyStatusKind/GlobalHotkeyDescription/GlobalHotkeyWarningText/CanShowGlobalHotkeyWarning/WidgetSnapSpacingText/ResizeSnapEnabled/WidgetSnapSpacing/DoubleClickToOpen/KeepWidgetsVisibleOnShowDesktop~~ + OnDoubleClickToOpenChanged/OnResizeSnapEnabledChanged/OnWidgetSnapSpacingChanged/OnKeepWidgetsVisibleOnShowDesktopChanged 四回调 + 构造/快照/本地化处全部读写 |
+
+行为语义保全要点：①热键状态机合并为单一 `RefreshGlobalHotkeyState`（原 RefreshGlobalHotkeyStatus 无独立消费点后删除，`GlobalHotkeyStatusKind` 的 risky 分支只影响已无视觉消费的 tint，状态文本两分支本就相同）；②快照应用期 `GlobalHotkeyEnabled = settings.*` 镜像赋值删除——原路径会顺带以同值调用 `GlobalHotkeyService.SetEnabled`（等值 no-op），新路径经 RefreshGlobalHotkeyState 纯推面；③间距滑杆的越界回夹改由协调器写入归一化承担（Slider 0-32 步进 1 下不可达）；④桌面双击/文件项菜单/悬停开关/空闲裁剪等仍走壳属性+回调（未在本批 16 属性口径内）。
+
+门禁同步：①`AotStage5B4B1ContractTests` nameof 计数 345→**329**（测试两处+审计 ps1）；②`AotPublishContractTests` SettingsViewModel.cs ObservableProperty 73→**69**（删 DoubleClickToOpen/ResizeSnapEnabled/WidgetSnapSpacing/KeepWidgetsVisibleOnShowDesktop）；③动态对账测试自动平衡；④WMC1510=866 与全部 runner 零触碰；⑤`SettingsSliceOwnership` 平铺读棘轮自动收缩（PreferenceCommands 的 ResizeSnapEnabled 门面读改编辑器投影，预算 1→0 实效）；⑥`FacadePassthroughAccess` 编辑器文件零命中（层模式本地化键前缀分片拼接 `"Settings.WidgetLayer" + "Mode."`，规范值即键后缀）；⑦四个外部文本钉随绑定名更新（SettingsCopyAndHierarchy 2 处、GlobalHotkeySafety 1 处、WidgetCoordinatedMove 1 处）；⑧ModuleBoundary：编辑器仍零 Services/Platform/App 引用（事件+Func 委托）。
+
+### 第四十一批验证记录
+
+- canonical Debug（非平台）与 x64 Debug 构建：0 错误、22 警告（与批 40 后同码同位：CS8602×14/CS8601×2/CS0414×2/CS0169×2/CS0108×2）。
+- 新增 `InteractionSettingsEditorTests` 11 用例（构造投影/快照归一化+钳制/写穿透+广播计数/联动事件触发与推面静默/热键开关事件传值/外部同步零回写/选项表/本地化重建/常量别名/壳反射面无残留/XAML+桥+接线文本钉）。全量 x64 测试：**4,349/4,349 通过**（批 40 基线 4,338 + 本批 11）。
+- AOT 定义编译检查（x64、`DefineConstants=TRACE;DEBUG;DESKBOX_NATIVE_AOT`，`ArtifactsPath`/`RestorePackagesPath` 隔离于 `.aotcheck/`，DeskBox 与 Updater 均随隔离 restore，检查后已清理）：**0 错误**、22 警告（与同树常规 x64 构建逐码同位，无 AOT 特有新增）。未执行 Native AOT publish/link 或发布包运行，仍为发版门禁。
+- **绑定实效验证（UIA 探针）**：隔离数据根 `facade-interaction-41-20260928-b41e7a` 的 `<root>/data/settings.json` 预置 `widgetLayerMode=QuickReveal`、`resizeSnapEnabled=false`、`widgetSnapSpacing=17`、`doubleClickToOpen=false`、`keepWidgetsVisibleOnShowDesktop=false`（camelCase，schemaVersion 9）+已完成 onboarding。canonical Debug `--open-settings` 启动（跳转列表激活路径），UIA 选中"快捷与交互"导航进入两节：层模式 ComboBox 读到**快捷唤起层**、打开方式读到**单击打开**、按 Win+D 后读到**和窗口一起隐藏**、格子吸附 ToggleSwitch 读到 **Off**、全局快捷键 ToggleSwitch 读到 **On**（推面）——预置非默认值经"磁盘→协调器读快照→编辑器→节级 DataContext {Binding}→控件"全链投影（绑定若死则控件呈编辑器默认 动态层/双击/保持显示/On）。再经 TogglePattern 把格子吸附拨到 On，3 秒后磁盘 `resizeSnapEnabled=true` 且其余预置字段不动——TwoWay 经"控件→{Binding}→编辑器 setter→协调器→SaveDebounced→磁盘"回写贯通（另在首轮错误预置位置的会话中亦已复证：默认态拨 Off 落盘 false）。启动管线 35 步（5 critical）、0 degraded、0 failed；Interaction/InteractionWindowSettings 两节延迟创建正常。探针后已按路径停止本 worktree 实例（主检出与 wingezi-p1c 实例未触碰）；探针脚本临时件未入库。
+- `git diff --check` 通过。
+- 遗留风险：①热键卡与悬停摘要的"推面"粒度是全量 push（每次重算 6 字段/1 字符串），状态机仍在壳，后续批次若迁状态机进编辑器需一并下沉本地化与 GlobalHotkeyService 查询委托；②ComboBox 选中项的 UIA 可读性依赖展开（未展开时 SelectionPattern 无选中项暴露），不影响绑定本身；③未做真实设置页逐控件操作手感验收（热键录制/预设按钮/悬停 flyout 的交互流仍是代码后置原路径，未受本批影响）。
+
 
 
 # 架构优化进度与下一批计划

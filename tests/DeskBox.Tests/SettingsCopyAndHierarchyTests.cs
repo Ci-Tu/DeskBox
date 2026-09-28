@@ -131,8 +131,8 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.Contains("SelectedAccentColorSource", appearanceXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding UseSystemAccentColor", appearanceXaml, StringComparison.Ordinal);
 
-        Assert.Contains("SelectedFileOpenMethod", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedShowDesktopBehavior", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("{Binding FileOpenMethod, Mode=TwoWay}", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("{Binding ShowDesktopBehavior, Mode=TwoWay}", windowXaml, StringComparison.Ordinal);
         Assert.Contains("SelectedWeatherLocationMode", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding DoubleClickToOpen", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding KeepWidgetsVisibleOnShowDesktop", windowXaml, StringComparison.Ordinal);
@@ -169,7 +169,7 @@ public sealed class SettingsCopyAndHierarchyTests
             fileWidgetSettings,
             StringComparison.Ordinal);
 
-        Assert.Contains("HoverButtonActionsSummaryText", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("{Binding HoverButtonActionsSummary}", windowXaml, StringComparison.Ordinal);
         Assert.Contains("Click=\"HoverButtonActionsDropDown_Click\"", windowXaml, StringComparison.Ordinal);
         Assert.Equal(
             1,

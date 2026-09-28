@@ -2942,7 +2942,8 @@ public partial class App : Application
             new DeskBox.Features.Capsule.CapsuleSettingsViewModel(
                 _capsuleSettings ?? throw new InvalidOperationException("Capsule settings are not initialized.")),
             new DeskBox.Features.Interaction.InteractionSettingsViewModel(
-                _interactionSettings ?? throw new InvalidOperationException("Interaction settings are not initialized.")),
+                _interactionSettings ?? throw new InvalidOperationException("Interaction settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel(
                 _fileDisplaySettings ?? throw new InvalidOperationException("File display settings are not initialized.")),
             new DeskBox.Features.FileStack.FileStackSettingsViewModel(

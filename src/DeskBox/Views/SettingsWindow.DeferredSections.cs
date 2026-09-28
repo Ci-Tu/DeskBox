@@ -101,6 +101,11 @@ public sealed partial class SettingsWindow
             section.DataContext = _musicSettingsViewModel;
         }
 
+        if (sectionTag is "Interaction" or "InteractionWindowSettings")
+        {
+            section.DataContext = _interactionSettingsViewModel;
+        }
+
         if (sectionTag == "FileStorageSettings")
         {
             RefreshManagedStoragePathWarning();
