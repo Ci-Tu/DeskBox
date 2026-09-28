@@ -24,24 +24,6 @@ public partial class SettingsViewModel
         };
     }
 
-    public string GetWidgetCompactWidthModeDisplayName(string mode)
-    {
-        return SettingsService.NormalizeWidgetCompactWidthMode(mode) ==
-            SettingsService.WidgetCompactWidthModeIndependent
-                ? _localizationService.T("Settings.Capsule.WidthMode.Independent")
-                : _localizationService.T("Settings.Capsule.WidthMode.Aligned");
-    }
-
-    public string GetWidgetCompactContentModeDisplayName(string mode)
-    {
-        return SettingsService.NormalizeWidgetCompactContentMode(mode) switch
-        {
-            SettingsService.WidgetCompactContentModeMinimal => _localizationService.T("Settings.CompactContent.Minimal"),
-            SettingsService.WidgetCompactContentModeSummary => _localizationService.T("Settings.CompactContent.Summary"),
-            _ => _localizationService.T("Settings.CompactContent.Smart")
-        };
-    }
-
     public string GetHoverButtonActionDisplayName(string action)
     {
         return action switch

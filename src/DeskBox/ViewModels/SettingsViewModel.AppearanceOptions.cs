@@ -62,63 +62,6 @@ public partial class SettingsViewModel
 
     public string SelectedLanguageText => _localizationService.GetLanguageDisplayName(SelectedLanguage);
 
-    // Capsule-section selection properties (the capsule editor is a later
-    // batch; the shell keeps these binding surfaces for those sections).
-    public string SelectedWidgetCollapseBehavior
-    {
-        get => _selectedWidgetCollapseBehavior;
-        set
-        {
-            string normalized = SettingsService.NormalizeWidgetCollapseBehavior(value);
-            if (!SetProperty(ref _selectedWidgetCollapseBehavior, normalized))
-            {
-                return;
-            }
-
-            OnPropertyChanged(nameof(SelectedWidgetCollapseBehaviorText));
-            OnPropertyChanged(nameof(IsSmartWidgetCollapseBehavior));
-            OnPropertyChanged(nameof(IsSmartWidgetCollapseBehaviorSelected));
-            OnPropertyChanged(nameof(CapsuleHoverResponseEntryVisibility));
-            OnPropertyChanged(nameof(IsWidgetCapsuleBarEnabled));
-            OnPropertyChanged(nameof(IsWidgetCapsuleBarSpacingEnabled));
-
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-
-            _capsuleSettings.SetWidgetCollapseBehavior(normalized);
-        }
-    }
-
-    public string SelectedWidgetCollapseBehaviorText =>
-        GetWidgetCollapseBehaviorDisplayName(SelectedWidgetCollapseBehavior);
-
-
-    public string SelectedWidgetCompactContentMode
-    {
-        get => _selectedWidgetCompactContentMode;
-        set
-        {
-            string normalized = SettingsService.NormalizeWidgetCompactContentMode(value);
-            if (!SetProperty(ref _selectedWidgetCompactContentMode, normalized))
-            {
-                return;
-            }
-
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-
-            _capsuleSettings.SetWidgetCompactContentMode(normalized);
-            OnPropertyChanged(nameof(SelectedWidgetCompactContentModeText));
-        }
-    }
-
-    public string SelectedWidgetCompactContentModeText =>
-        GetWidgetCompactContentModeDisplayName(SelectedWidgetCompactContentMode);
-
     // --- Appearance-section host linkage ---
     //
     // The appearance editor owns the section family's binding surface and
@@ -126,6 +69,8 @@ public partial class SettingsViewModel
     // surround the legacy facade writes. The live-preview orchestration
     // (SaveAppearanceChange / CommitAppearanceChanges / the slider drag
     // flags) stays on this shell and is driven by the editor's value events.
+    // Batch 44 recycled the group-navigation push group into the
+    // group-navigation editor (the WidgetGroups section owns those fields).
 
     private void OnAppearanceThemeUserChanged(string value)
     {
@@ -152,11 +97,6 @@ public partial class SettingsViewModel
         {
             SetCustomAccentColor(color);
         }
-    }
-
-    private void OnAppearanceGroupNavigationStyleUserChanged(string value)
-    {
-        SelectedWidgetGroupDefaultNavigationStyle = value;
     }
 
     private void OnAppearanceValueCommitted()
@@ -187,9 +127,10 @@ public partial class SettingsViewModel
     // --- Appearance-section push surface ---
     //
     // Selections whose state machines stay on this shell (theme service,
-    // accent mode/effective color, group-navigation domain, OS capability
-    // probes) are pushed onto the editor; the editor never writes them back
-    // except through the user-changed events above.
+    // accent mode/effective color, OS capability probes) are pushed onto the
+    // editor; the editor never writes them back except through the
+    // user-changed events above. The group-navigation push moved to the
+    // group-navigation editor in batch 44.
 
     private void PushAppearanceThemeSelection()
     {
@@ -203,13 +144,6 @@ public partial class SettingsViewModel
         _appearanceSettings.UpdateAccentPresentation(
             UseSystemAccentColor,
             AccentColorHelper.ToHex(_currentAccentColor));
-    }
-
-    private void PushAppearanceGroupNavigationPresentation()
-    {
-        _appearanceSettings.UpdateGroupNavigationPresentation(
-            SelectedWidgetGroupDefaultNavigationStyle,
-            AvailableWidgetGroupNavigationStyleOptions);
     }
 
     private void PushAppearanceHostEnvironment()

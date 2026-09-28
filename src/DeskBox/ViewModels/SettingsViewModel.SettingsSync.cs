@@ -26,10 +26,13 @@ private void OnLanguageChanged()
     _managedStorageSettings.RefreshLocalization();
     PushQuickAccessPresentation();
     // The appearance editor's option tables and value texts re-localize
-    // themselves; the pushed group-navigation option list follows the shell
-    // table that re-localizes above.
+    // themselves. The group-navigation and capsule editors rebuild their
+    // option tables too; their pushed projections (existing groups, override
+    // lists/summaries) are rebuilt by the notify calls below.
     _appearanceSettings.RefreshLocalization();
-    PushAppearanceGroupNavigationPresentation();
+    _groupNavigationSettings.RefreshLocalization();
+    _capsuleSettings.RefreshLocalization();
+    RefreshWidgetGroupSettings();
 }
 
 
@@ -61,32 +64,6 @@ private void OnLanguageChanged()
                     settings.FileWidgetFolderOpenBehavior);
             ShowHoverButtons = settings.ShowHoverButtons;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
-
-            SelectedWidgetCompactWidthMode = SettingsService.NormalizeWidgetCompactWidthMode(
-                settings.WidgetCompactWidthMode);
-            SelectedWidgetCompactExpansionDirection =
-                SettingsService.NormalizeWidgetCompactExpansionDirection(
-                    settings.WidgetCompactExpansionDirection);
-            SelectedWidgetCapsuleArrangementMode = SettingsService.NormalizeWidgetCapsuleArrangementMode(
-                settings.WidgetCapsuleArrangementMode);
-            WidgetCapsuleBarSpacing = SettingsService.NormalizeWidgetCapsuleBarSpacing(
-                settings.WidgetCapsuleBarSpacing);
-            SelectedWidgetCapsuleBarPlacement = SettingsService.NormalizeWidgetCapsuleBarPlacement(
-                settings.WidgetCapsuleBarPlacement);
-            SelectedWidgetCapsuleBarDirection = SettingsService.NormalizeWidgetCapsuleBarDirection(
-                settings.WidgetCapsuleBarDirection);
-            WidgetCompactHideSensitiveContent = settings.WidgetCompactHideSensitiveContent;
-            SelectedWidgetCollapseBehavior = SettingsService.NormalizeWidgetCollapseBehavior(
-                settings.WidgetCollapseBehavior);
-            SelectedWidgetCompactContentMode = SettingsService.NormalizeWidgetCompactContentMode(settings.WidgetCompactContentMode);
-            SelectedWidgetCompactAnimationEffect = SettingsService.NormalizeWidgetCompactAnimationEffect(settings.WidgetCompactAnimationEffect);
-            WidgetCompactAnimationDurationMs = SettingsService.NormalizeWidgetCompactAnimationDurationMs(settings.WidgetCompactAnimationDurationMs);
-            WidgetCompactExpandDelayMs = SettingsService.NormalizeWidgetCompactExpandDelayMs(settings.WidgetCompactExpandDelayMs);
-            WidgetCompactCollapseDelayMs = SettingsService.NormalizeWidgetCompactCollapseDelayMs(settings.WidgetCompactCollapseDelayMs);
-            SelectedWidgetCompactHoverResponse = SettingsService.ResolveWidgetCompactHoverResponse(
-                settings.WidgetCompactExpandDelayMs,
-                settings.WidgetCompactCollapseDelayMs);
-            SelectedWidgetCompactMediaCornerMode = SettingsService.NormalizeWidgetCompactMediaCornerMode(settings.WidgetCompactMediaCornerMode);
 
             IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
             ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
@@ -121,7 +98,13 @@ private void OnLanguageChanged()
                 ThemeService.AccentModeCustom,
                 StringComparison.OrdinalIgnoreCase);
             PushAppearanceAccentPresentation();
-            PushAppearanceGroupNavigationPresentation();
+
+            // The group-navigation defaults and the capsule family's whole
+            // presentation live on their section editors now: re-project them
+            // from the coordinator snapshots instead of assigning shell
+            // facade properties.
+            _groupNavigationSettings.SyncPresentation();
+            _capsuleSettings.SyncPresentation();
 
 
             // Music presentation lives on the section editor now: refresh the
@@ -224,8 +207,8 @@ private void OnLanguageChanged()
         OnPropertyChanged(nameof(QuickCaptureRecentLimitText));
         OnPropertyChanged(nameof(FeatureWidgetEntries));
         NotifyCapsuleOverridePropertiesChanged();
-        OnPropertyChanged(nameof(AvailableWidgetGroupNavigationStyleOptions));
-        OnPropertyChanged(nameof(AvailableWidgetGroupTitleDisplayModeOptions));
+        // The group-navigation editor rebuilds its option tables itself; the
+        // existing-groups projection rebuild follows.
         RefreshWidgetGroupSettings();
         OnPropertyChanged(nameof(WeatherCitySearchPlaceholder));
         OnPropertyChanged(nameof(WeatherCityNoResultsText));
@@ -241,16 +224,6 @@ private void OnLanguageChanged()
         {
             RefreshFileStackSelectionProperties();
             _cachedLanguageDisplayNames = null;
-            _cachedWidgetCollapseBehaviorDisplayNames = null;
-            _cachedWidgetCompactContentModeDisplayNames = null;
-            _cachedWidgetCompactWidthModeDisplayNames = null;
-            _cachedWidgetCompactExpansionDirectionDisplayNames = null;
-            _cachedWidgetCapsuleArrangementDisplayNames = null;
-            _cachedWidgetCapsuleBarPlacementDisplayNames = null;
-            _cachedWidgetCapsuleBarDirectionDisplayNames = null;
-            _cachedWidgetCompactAnimationEffectDisplayNames = null;
-            _cachedWidgetCompactHoverResponseDisplayNames = null;
-            _cachedWidgetCompactMediaCornerDisplayNames = null;
             _cachedQuickCaptureDefaultViewDisplayNames = null;
             _cachedQuickCaptureTabStyleDisplayNames = null;
             _cachedTodoNewTaskPositionDisplayNames = null;
@@ -267,16 +240,6 @@ private void OnLanguageChanged()
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCollapseBehaviorDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactWidthModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactExpansionDirectionDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactContentModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCapsuleArrangementDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCapsuleBarPlacementDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCapsuleBarDirectionDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactAnimationEffectDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactHoverResponseDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCompactMediaCornerDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
@@ -298,31 +261,6 @@ private void OnLanguageChanged()
         RefreshPerformanceSelectionProperties(refreshLocalizedOptions);
 
         OnPropertyChanged(nameof(SelectedLanguageText));
-        OnPropertyChanged(nameof(SelectedWidgetCollapseBehaviorText));
-        OnPropertyChanged(nameof(SelectedWidgetCompactWidthModeText));
-        OnPropertyChanged(nameof(SelectedWidgetCompactExpansionDirectionText));
-        OnPropertyChanged(nameof(IsSmartWidgetCollapseBehavior));
-        OnPropertyChanged(nameof(IsSmartWidgetCollapseBehaviorSelected));
-        OnPropertyChanged(nameof(CapsuleHoverResponseEntryVisibility));
-        OnPropertyChanged(nameof(CanOpenWidgetCompactHoverResponseDetails));
-        OnPropertyChanged(nameof(CanOpenWidgetCompactAnimationDetails));
-        OnPropertyChanged(nameof(SelectedWidgetCapsuleArrangementText));
-        OnPropertyChanged(nameof(IsWidgetCapsuleBarSelected));
-        OnPropertyChanged(nameof(IsWidgetCapsuleBarEnabled));
-        OnPropertyChanged(nameof(IsWidgetCapsuleBarSpacingEnabled));
-        OnPropertyChanged(nameof(CapsuleArrangementEntryVisibility));
-        OnPropertyChanged(nameof(WidgetCapsuleBarSpacingText));
-        OnPropertyChanged(nameof(SelectedWidgetCapsuleBarPlacementText));
-        OnPropertyChanged(nameof(SelectedWidgetCapsuleBarDirectionText));
-        OnPropertyChanged(nameof(CapsuleArrangementDetailsSummaryText));
-        OnPropertyChanged(nameof(SelectedWidgetCompactContentModeText));
-        OnPropertyChanged(nameof(SelectedWidgetCompactAnimationEffectText));
-        OnPropertyChanged(nameof(IsWidgetCompactAnimationCustom));
-        OnPropertyChanged(nameof(WidgetCompactAnimationCustomVisibility));
-        OnPropertyChanged(nameof(SelectedWidgetCompactHoverResponseText));
-        OnPropertyChanged(nameof(IsWidgetCompactHoverResponseCustom));
-        OnPropertyChanged(nameof(WidgetCompactHoverResponseCustomVisibility));
-        OnPropertyChanged(nameof(SelectedWidgetCompactMediaCornerText));
         NotifyHoverButtonActionPropertiesChanged();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
         OnPropertyChanged(nameof(SelectedQuickCaptureDefaultViewText));

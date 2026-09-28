@@ -302,25 +302,20 @@ public sealed class AppearanceSettingsEditorTests : IDisposable
         string? theme = null;
         bool? sourceUseSystem = null;
         string? accent = null;
-        string? groupNav = null;
         editor.ThemeUserChanged += value => theme = value;
         editor.AccentColorSourceUserChanged += value => sourceUseSystem = value;
         editor.AccentColorUserChanged += value => accent = value;
-        editor.GroupNavigationStyleUserChanged += value => groupNav = value;
 
         editor.UpdateThemeSelection("Dark");
         editor.UpdateAccentPresentation(useSystemAccentColor: false, "#EF6950");
-        editor.UpdateGroupNavigationPresentation("Wheel", []);
 
         Assert.Equal("Dark", editor.Theme);
         Assert.Equal("Custom", editor.AccentColorSource);
         Assert.False(editor.CanEditCustomAccent);
         Assert.Equal("#EF6950", editor.SelectedAccentColorHex);
-        Assert.Equal("Wheel", editor.GroupNavigationStyle);
         Assert.Null(theme);
         Assert.Null(sourceUseSystem);
         Assert.Null(accent);
-        Assert.Null(groupNav);
     }
 
     [Fact]
@@ -331,25 +326,21 @@ public sealed class AppearanceSettingsEditorTests : IDisposable
         string? tray = null;
         bool? sourceUseSystem = null;
         string? accent = null;
-        string? groupNav = null;
         editor.ThemeUserChanged += value => theme = value;
         editor.TrayIconStyleUserChanged += value => tray = value;
         editor.AccentColorSourceUserChanged += value => sourceUseSystem = value;
         editor.AccentColorUserChanged += value => accent = value;
-        editor.GroupNavigationStyleUserChanged += value => groupNav = value;
 
         editor.UpdateAccentPresentation(useSystemAccentColor: false, "#000000");
         editor.Theme = "Light";
         editor.TrayIconStyle = "White";
         editor.AccentColorSource = "System";
         editor.NotifyAccentPresetPicked("#038387");
-        editor.GroupNavigationStyle = "Hover";
 
         Assert.Equal("Light", theme);
         Assert.Equal("White", tray);
         Assert.True(sourceUseSystem);
         Assert.Equal("#038387", accent);
-        Assert.Equal("Hover", groupNav);
     }
 
     [Fact]
@@ -509,9 +500,10 @@ public sealed class AppearanceSettingsEditorTests : IDisposable
             Assert.DoesNotContain(properties, property => property.Name == name);
         }
 
-        // The group-navigation style stays: its section (WidgetGroups) is a
-        // later batch and still binds through the shell.
-        Assert.Contains(properties, property => property.Name == "SelectedWidgetGroupDefaultNavigationStyle");
+        // Batch 44 recycled the group-navigation push group into the
+        // group-navigation editor; the appearance shell surface no longer
+        // carries any group-navigation facade.
+        Assert.DoesNotContain(properties, property => property.Name == "SelectedWidgetGroupDefaultNavigationStyle");
     }
 
     [Fact]

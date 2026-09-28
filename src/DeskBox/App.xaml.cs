@@ -2941,7 +2941,9 @@ public partial class App : Application
                 _appearanceSettings ?? throw new InvalidOperationException("Appearance settings are not initialized."),
                 LocalizationService.T),
             new DeskBox.Features.Capsule.CapsuleSettingsViewModel(
-                _capsuleSettings ?? throw new InvalidOperationException("Capsule settings are not initialized.")),
+                _capsuleSettings ?? throw new InvalidOperationException("Capsule settings are not initialized."),
+                LocalizationService.T,
+                (key, args) => LocalizationService.Format(key, args)),
             new DeskBox.Features.Interaction.InteractionSettingsViewModel(
                 _interactionSettings ?? throw new InvalidOperationException("Interaction settings are not initialized."),
                 LocalizationService.T),
@@ -2950,7 +2952,8 @@ public partial class App : Application
             new DeskBox.Features.FileStack.FileStackSettingsViewModel(
                 _fileStackSettings ?? throw new InvalidOperationException("File stack settings are not initialized.")),
             new DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel(
-                _groupNavigationSettings ?? throw new InvalidOperationException("Group navigation settings are not initialized.")),
+                _groupNavigationSettings ?? throw new InvalidOperationException("Group navigation settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel(
                 _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized.")),
             new DeskBox.Features.Music.MusicSettingsViewModel(
