@@ -67,6 +67,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettings;
     private readonly DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel _groupNavigationSettings;
     private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettings;
+    private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettings;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettings;
     private readonly DeskBox.Features.Maintenance.MaintenanceSettingsViewModel _maintenanceSettings;
     private readonly LocalizationService _localizationService;
@@ -106,7 +107,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string _selectedManagedDropAction = SettingsService.ManagedDropActionMove;
     private string _selectedFileWidgetFolderOpenBehavior =
         FileWidgetFolderOpenBehaviorNames.Explorer;
-    private string _selectedMusicDisplayMode = SettingsService.MusicDisplayModeAuto;
     private string _selectedWeatherTemperatureUnit = SettingsService.WeatherTemperatureUnitCelsius;
     private string _selectedWeatherWindSpeedUnit = SettingsService.WeatherWindSpeedUnitKmh;
     private string _selectedWeatherDefaultView = SettingsService.WeatherDefaultViewToday;
@@ -164,7 +164,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string[]? _cachedTodoLayoutModeDisplayNames;
     private string[]? _cachedTodoTabStyleDisplayNames;
     private string[]? _cachedTodoReminderOffsetDisplayNames;
-    private string[]? _cachedMusicDisplayModeDisplayNames;
 private string[]? _cachedWeatherTempUnitDisplayNames;
 private string[]? _cachedWeatherWindUnitDisplayNames;
 private string[]? _cachedWeatherDefaultViewDisplayNames;
@@ -259,8 +258,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool TodoShowClearCompletedButton { get; set; } = true;
     [ObservableProperty] public partial bool TodoUseWideDetailPane { get; set; } = true;
     [ObservableProperty] public partial bool TodoAutoSelectFirstInWideLayout { get; set; } = true;
-    [ObservableProperty] public partial bool MusicUseArtworkBackdrop { get; set; } = true;
-    [ObservableProperty] public partial bool MusicEnableCoverHoverMotion { get; set; } = true;
 
     [ObservableProperty] public partial bool WeatherAutoLocation { get; set; } = true;
     [ObservableProperty] public partial string WeatherCityName { get; set; } = string.Empty;
@@ -300,6 +297,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         DeskBox.Features.FileStack.FileStackSettingsViewModel fileStackSettings,
         DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel groupNavigationSettings,
         DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel featureWidgetsSettings,
+        DeskBox.Features.Music.MusicSettingsViewModel musicSettings,
         DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel managedStorageSettings,
         DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings,
         LocalizationService? localizationService = null,
@@ -319,6 +317,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _fileStackSettings = fileStackSettings;
         _groupNavigationSettings = groupNavigationSettings;
         _featureWidgetsSettings = featureWidgetsSettings;
+        _musicSettings = musicSettings;
         _managedStorageSettings = managedStorageSettings;
         _maintenanceSettings = maintenanceSettings;
         _themeService = themeService;
@@ -447,9 +446,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         SyncTodoTextSizeFacade();
         TodoUseWideDetailPane = _todoSettings.LayoutMode != SettingsService.TodoLayoutModeSinglePane;
         TodoAutoSelectFirstInWideLayout = _todoSettings.AutoSelectFirstInWideLayout;
-        MusicUseArtworkBackdrop = settings.MusicUseArtworkBackdrop;
-        MusicEnableCoverHoverMotion = settings.MusicEnableCoverHoverMotion;
-        _selectedMusicDisplayMode = SettingsService.NormalizeMusicDisplayMode(settings.MusicDisplayMode);
         WeatherAutoLocation = settings.WeatherAutoLocation;
         WeatherCityName = settings.WeatherCityName;
         _weatherCitySearchText = settings.WeatherCityName;

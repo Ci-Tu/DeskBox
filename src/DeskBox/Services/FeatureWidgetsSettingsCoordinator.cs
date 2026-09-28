@@ -32,6 +32,15 @@ public sealed class FeatureWidgetsSettingsCoordinator : IFeatureWidgetsSettings
         _settings = settings;
     }
 
+    public MusicPresentationSettings ReadMusicPresentation()
+    {
+        MusicSettingsSlice music = _settings.Settings.Music;
+        return new MusicPresentationSettings(
+            music.MusicUseArtworkBackdrop,
+            music.MusicEnableCoverHoverMotion,
+            SettingsService.NormalizeMusicDisplayMode(music.MusicDisplayMode));
+    }
+
     public void SetFeatureWidgetEnabled(WidgetKind kind, bool enabled)
     {
         ThrowIfStopped();

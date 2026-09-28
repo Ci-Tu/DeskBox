@@ -2116,8 +2116,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableMusicDisplayModeOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedMusicDisplayMode, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableDisplayModeOptions}"
+                                controls:SettingsComboBox.Value="{Binding DisplayMode, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2131,7 +2131,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 OnContent=""
                                 OffContent=""
                                 MinWidth="0"
-                                IsOn="{Binding MusicUseArtworkBackdrop, Mode=TwoWay}" />
+                                IsOn="{Binding UseArtworkBackdrop, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2145,7 +2145,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 OnContent=""
                                 OffContent=""
                                 MinWidth="0"
-                                IsOn="{Binding MusicEnableCoverHoverMotion, Mode=TwoWay}" />
+                                IsOn="{Binding EnableCoverHoverMotion, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
                     </StackPanel>
                 </StackPanel>
