@@ -167,14 +167,12 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
 
     private bool _windows10Compatibility = true;
     private bool _nativeCornersSupported = true;
-    private IReadOnlyList<SettingsOption> _groupNavigationStyleOptions = [];
 
     // Selection state.
     private string _theme = "System";
     private string _trayIconStyle = "System";
     private string _accentColorSource = AccentSourceSystem;
     private string _selectedAccentColorHex = "#0078D4";
-    private string _groupNavigationStyle = string.Empty;
 
     // Material state.
     private string _materialType = WidgetMaterialKinds.Acrylic;
@@ -258,9 +256,6 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
 
     /// <summary>Host linkage: a custom accent color was picked; the shell owns the custom accent write.</summary>
     public event Action<string>? AccentColorUserChanged;
-
-    /// <summary>Host linkage: the group-navigation default style changed; the shell owns the group-navigation coordinator write.</summary>
-    public event Action<string>? GroupNavigationStyleUserChanged;
 
     // --- Main appearance section binding surface ---
 
@@ -409,31 +404,6 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
                 AccentColorUserChanged?.Invoke(value);
             }
         }
-    }
-
-    /// <summary>Pushed by the shell: the group-navigation default style selection.</summary>
-    public string GroupNavigationStyle
-    {
-        get => _groupNavigationStyle;
-        set
-        {
-            if (!SetProperty(ref _groupNavigationStyle, value))
-            {
-                return;
-            }
-
-            if (!_isSyncingPresentation)
-            {
-                GroupNavigationStyleUserChanged?.Invoke(value);
-            }
-        }
-    }
-
-    /// <summary>Pushed by the shell: the group-navigation style option list.</summary>
-    public IReadOnlyList<SettingsOption> AvailableGroupNavigationStyleOptions
-    {
-        get => _groupNavigationStyleOptions;
-        private set => SetProperty(ref _groupNavigationStyleOptions, value);
     }
 
     // --- Material subsection binding surface ---
@@ -1745,26 +1715,6 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
                 ? AccentSourceSystem
                 : AccentSourceCustom;
             SelectedAccentColorHex = accentColorHex;
-        }
-        finally
-        {
-            _isSyncingPresentation = false;
-        }
-    }
-
-    /// <summary>
-    /// Re-projects the group-navigation default style selection and option
-    /// list the shell owns (the group-navigation domain is not migrated yet).
-    /// </summary>
-    public void UpdateGroupNavigationPresentation(
-        string style,
-        IReadOnlyList<SettingsOption> options)
-    {
-        _isSyncingPresentation = true;
-        try
-        {
-            AvailableGroupNavigationStyleOptions = options;
-            GroupNavigationStyle = style;
         }
         finally
         {

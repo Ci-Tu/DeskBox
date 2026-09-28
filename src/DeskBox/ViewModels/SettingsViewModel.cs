@@ -81,8 +81,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private long? _updateTotalBytes;
     private Color _currentAccentColor;
     private string _selectedLanguage = SettingsService.LanguageSystem;
-    private string _selectedWidgetCollapseBehavior = SettingsService.WidgetCollapseBehaviorExpanded;
-    private string _selectedWidgetCompactContentMode = SettingsService.WidgetCompactContentModeSmart;
     private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
     private string _selectedFileWidgetFolderOpenBehavior =
         FileWidgetFolderOpenBehaviorNames.Explorer;
@@ -109,8 +107,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private bool _isUpdatingHoverButtonActionSelection;
 
     private string[]? _cachedLanguageDisplayNames;
-    private string[]? _cachedWidgetCollapseBehaviorDisplayNames;
-    private string[]? _cachedWidgetCompactContentModeDisplayNames;
     private string[]? _cachedQuickCaptureDefaultViewDisplayNames;
     private string[]? _cachedQuickCaptureTabStyleDisplayNames;
     private string[]? _cachedTodoNewTaskPositionDisplayNames;
@@ -285,32 +281,10 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         InitializeFileStackSettings(settings);
         InitializeContentEditorSettings(settings);
         InitializePerformanceSettings(settings);
-        _selectedWidgetCompactWidthMode = SettingsService.NormalizeWidgetCompactWidthMode(
-            settings.WidgetCompactWidthMode);
-        _selectedWidgetCompactExpansionDirection =
-            SettingsService.NormalizeWidgetCompactExpansionDirection(
-                settings.WidgetCompactExpansionDirection);
-        _selectedWidgetCapsuleArrangementMode = SettingsService.NormalizeWidgetCapsuleArrangementMode(
-            settings.WidgetCapsuleArrangementMode);
-        _widgetCapsuleBarSpacing = SettingsService.NormalizeWidgetCapsuleBarSpacing(
-            settings.WidgetCapsuleBarSpacing);
-        _selectedWidgetCapsuleBarPlacement = SettingsService.NormalizeWidgetCapsuleBarPlacement(
-            settings.WidgetCapsuleBarPlacement);
-        _selectedWidgetCapsuleBarDirection = SettingsService.NormalizeWidgetCapsuleBarDirection(
-            settings.WidgetCapsuleBarDirection);
-        _widgetCompactHideSensitiveContent = settings.WidgetCompactHideSensitiveContent;
-        _selectedWidgetCollapseBehavior = SettingsService.NormalizeWidgetCollapseBehavior(
-            settings.WidgetCollapseBehavior);
-        _selectedWidgetCompactContentMode = SettingsService.NormalizeWidgetCompactContentMode(
-            settings.WidgetCompactContentMode);
-        _selectedWidgetCompactAnimationEffect = SettingsService.NormalizeWidgetCompactAnimationEffect(settings.WidgetCompactAnimationEffect);
-        _widgetCompactAnimationDurationMs = SettingsService.NormalizeWidgetCompactAnimationDurationMs(settings.WidgetCompactAnimationDurationMs);
-        _widgetCompactExpandDelayMs = SettingsService.NormalizeWidgetCompactExpandDelayMs(settings.WidgetCompactExpandDelayMs);
-        _widgetCompactCollapseDelayMs = SettingsService.NormalizeWidgetCompactCollapseDelayMs(settings.WidgetCompactCollapseDelayMs);
-        _selectedWidgetCompactHoverResponse = SettingsService.ResolveWidgetCompactHoverResponse(
-            settings.WidgetCompactExpandDelayMs,
-            settings.WidgetCompactCollapseDelayMs);
-        _selectedWidgetCompactMediaCornerMode = SettingsService.NormalizeWidgetCompactMediaCornerMode(settings.WidgetCompactMediaCornerMode);
+        // The capsule family's presentation lives on the capsule editor now
+        // (batch 44); its constructor syncs itself from the coordinator
+        // snapshots, and the widget/group override projection is pushed in
+        // right after the editor fields are wired below.
         IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
         ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
         QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
@@ -394,10 +368,16 @@ _ = RefreshQuickAccessStateAsync();
         _appearanceSettings.TrayIconStyleUserChanged += OnAppearanceTrayIconStyleUserChanged;
         _appearanceSettings.AccentColorSourceUserChanged += OnAppearanceAccentColorSourceUserChanged;
         _appearanceSettings.AccentColorUserChanged += OnAppearanceAccentColorUserChanged;
-        _appearanceSettings.GroupNavigationStyleUserChanged += OnAppearanceGroupNavigationStyleUserChanged;
         PushAppearanceHostEnvironment();
-        PushAppearanceGroupNavigationPresentation();
         PushAppearanceThemeSelection();
+
+        // Group-navigation and capsule host linkages (batch 44): the editors
+        // own the section binding surfaces; the shell answers user edits with
+        // the explicit widget-group presentation notification and rebuilds
+        // the pushed existing-groups / override projections.
+        _groupNavigationSettings.PresentationUserChanged += OnGroupNavigationPresentationUserChanged;
+        NotifyExistingWidgetGroupPropertiesChanged();
+        NotifyCapsuleOverridePropertiesChanged();
     }
 
     [RelayCommand]

@@ -8,46 +8,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableLanguageOptions =>
         CreateSelectionOptions(AvailableLanguages, AvailableLanguageDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableWidgetCollapseBehaviorOptions =>
-        CreateSelectionOptions(AvailableWidgetCollapseBehaviors, AvailableWidgetCollapseBehaviorDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactWidthModeOptions =>
-        CreateSelectionOptions(
-            AvailableWidgetCompactWidthModes,
-            AvailableWidgetCompactWidthModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactExpansionDirectionOptions =>
-        CreateSelectionOptions(
-            AvailableWidgetCompactExpansionDirections,
-            AvailableWidgetCompactExpansionDirectionDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCapsuleArrangementOptions =>
-        CreateSelectionOptions(
-            AvailableWidgetCapsuleArrangementModes,
-            AvailableWidgetCapsuleArrangementDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCapsuleBarPlacementOptions =>
-        CreateSelectionOptions(
-            AvailableWidgetCapsuleBarPlacements,
-            AvailableWidgetCapsuleBarPlacementDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCapsuleBarDirectionOptions =>
-        CreateSelectionOptions(
-            AvailableWidgetCapsuleBarDirections,
-            AvailableWidgetCapsuleBarDirectionDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactContentModeOptions =>
-        CreateSelectionOptions(AvailableWidgetCompactContentModes, AvailableWidgetCompactContentModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactAnimationEffectOptions =>
-        CreateSelectionOptions(AvailableWidgetCompactAnimationEffects, AvailableWidgetCompactAnimationEffectDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactHoverResponseOptions =>
-        CreateSelectionOptions(AvailableWidgetCompactHoverResponses, AvailableWidgetCompactHoverResponseDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCompactMediaCornerOptions =>
-        CreateSelectionOptions(AvailableWidgetCompactMediaCornerModes, AvailableWidgetCompactMediaCornerDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableQuickCaptureDefaultViewOptions =>
         CreateSelectionOptions(AvailableQuickCaptureDefaultViews, AvailableQuickCaptureDefaultViewDisplayNames);
 
@@ -160,16 +120,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems));
         OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCollapseBehaviorOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactWidthModeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactExpansionDirectionOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCapsuleArrangementOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCapsuleBarPlacementOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCapsuleBarDirectionOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactContentModeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactAnimationEffectOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactHoverResponseOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCompactMediaCornerOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleOptions));
         OnPropertyChanged(nameof(AvailableItemPreviewLineCountOptions));

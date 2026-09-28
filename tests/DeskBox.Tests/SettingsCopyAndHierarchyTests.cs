@@ -60,22 +60,22 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.DoesNotContain("Settings.Capsule.Enabled.Title", capsuleXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("WidgetCapsuleModeEnabled", capsuleXaml, StringComparison.Ordinal);
         Assert.Contains(
-            "controls:SettingsComboBox.Value=\"{Binding SelectedWidgetCollapseBehavior, Mode=TwoWay}\"",
+            "controls:SettingsComboBox.Value=\"{Binding CollapseBehavior, Mode=TwoWay}\"",
             capsuleXaml,
             StringComparison.Ordinal);
         Assert.Contains("Tag=\"WidgetGroups\"", appearanceXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsWidgetGroupsEnabled", appearanceXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsWidgetGroupsEnabled", windowXaml, StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "ItemsSource=\"{Binding AvailableGroupNavigationStyleOptions}\"",
             appearanceXaml,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "controls:SettingsComboBox.Value=\"{Binding GroupNavigationStyle, Mode=TwoWay}\"",
             appearanceXaml,
             StringComparison.Ordinal);
         Assert.Contains("x:Key=\"SettingValueTextStyle\"", overviewResources, StringComparison.Ordinal);
-        Assert.Contains("ExistingWidgetGroupItems", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding ExistingGroups}\"", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Settings.WidgetGroups.Existing.Name.Title", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("WidgetGroupNameTextBox_LostFocus", windowXaml, StringComparison.Ordinal);
         Assert.Contains(

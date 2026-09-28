@@ -104,9 +104,9 @@ public sealed class AotStage5B4B1ContractTests
         string ruleEditor = ReadRepositoryFile("src/DeskBox/ViewModels/FileStackCustomRuleEditor.cs");
         string settingsOption = ReadRepositoryFile("src/DeskBox/Models/SettingsOption.cs");
         string capsuleOptions = ReadRepositoryFile(
-            "src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs");
+            "src/DeskBox/Models/CapsuleOverrideSettingsItem.cs");
         string groupNavigation = ReadRepositoryFile(
-            "src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs");
+            "src/DeskBox/Models/WidgetGroupSettingsItems.cs");
         string weatherData = ReadRepositoryFile("src/DeskBox/Models/WeatherData.cs");
         string fileWidgetXaml = ReadRepositoryFile(
             "src/DeskBox/Views/SettingsSections/FileWidgetSettingsSection.xaml");
@@ -191,11 +191,11 @@ public sealed class AotStage5B4B1ContractTests
             "ItemsSource=\"{x:Bind FileStackCustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(243, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(192, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
-        Assert.Contains("nameof(SelectedWidgetCapsuleBarPlacement)", bindableViewModel, StringComparison.Ordinal);
+        Assert.DoesNotContain("nameof(SelectedWidgetCapsuleBarPlacement)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(ResetAllCapsuleOverridesCommand)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(ResetCapsuleWidthOverridesCommand)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains(
@@ -358,12 +358,12 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 243", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 192", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1SourceWarningMessages", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedWmc1510Count = 866", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedWmc1510Count = 864", audit, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string value, string token)

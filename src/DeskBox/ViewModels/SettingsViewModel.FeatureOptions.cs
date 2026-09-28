@@ -444,25 +444,6 @@ public partial class SettingsViewModel
         }
     }
 
-    public string[] AvailableWidgetCollapseBehaviors { get; } =
-    [
-        SettingsService.WidgetCollapseBehaviorExpanded,
-        SettingsService.WidgetCollapseBehaviorClick,
-        SettingsService.WidgetCollapseBehaviorSmart
-    ];
-    public string[] AvailableWidgetCollapseBehaviorDisplayNames =>
-        _cachedWidgetCollapseBehaviorDisplayNames ??=
-            AvailableWidgetCollapseBehaviors.Select(GetWidgetCollapseBehaviorDisplayName).ToArray();
-
-    public string[] AvailableWidgetCompactContentModes { get; } =
-    [
-        SettingsService.WidgetCompactContentModeSmart,
-        SettingsService.WidgetCompactContentModeSummary,
-        SettingsService.WidgetCompactContentModeMinimal
-    ];
-    public string[] AvailableWidgetCompactContentModeDisplayNames =>
-        _cachedWidgetCompactContentModeDisplayNames ??=
-            AvailableWidgetCompactContentModes.Select(GetWidgetCompactContentModeDisplayName).ToArray();
     public string[] AvailableQuickCaptureDefaultViews { get; } =
     [
         SettingsService.QuickCaptureDefaultViewRecords,

@@ -481,6 +481,12 @@ public sealed class ModuleBoundaryContractTests
     private static readonly string[] LegacyModelsUiExpectedFiles =
     {
         "src/DeskBox/Models/GlanceWidgetData.cs",
+        // Batch 44 moved the settings-section projection records (widget
+        // groups and capsule overrides) from the settings-shell partials
+        // into Models so the WinUI-free editors can expose them as pushed
+        // binding surfaces; they keep the WinRT bindable attribute.
+        "src/DeskBox/Models/CapsuleOverrideSettingsItem.cs",
+        "src/DeskBox/Models/WidgetGroupSettingsItems.cs",
         "src/DeskBox/Models/SearchModels.cs",
         "src/DeskBox/Models/SettingsOption.cs",
         "src/DeskBox/Models/WeatherData.cs",

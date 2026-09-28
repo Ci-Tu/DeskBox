@@ -137,27 +137,27 @@ public sealed class SettingsService
     public const string WidgetCollapseBehaviorSmart = WidgetCollapseBehaviorNames.Smart;
     public const string WidgetCollapseBehaviorManual = WidgetCollapseBehaviorClick;
     public const string WidgetCollapseBehaviorAuto = WidgetCollapseBehaviorSmart;
-    public const string WidgetCompactWidthModeAligned = "Aligned";
-    public const string WidgetCompactWidthModeIndependent = "Independent";
-    public const string WidgetCompactExpansionDirectionAuto = "Auto";
-    public const string WidgetCompactExpansionDirectionDown = "Down";
-    public const string WidgetCompactExpansionDirectionUp = "Up";
-    public const string WidgetCapsuleArrangementFree = "Free";
-    public const string WidgetCapsuleArrangementBar = "Bar";
+    public const string WidgetCompactWidthModeAligned = CapsuleOptionKinds.WidthModeAligned;
+    public const string WidgetCompactWidthModeIndependent = CapsuleOptionKinds.WidthModeIndependent;
+    public const string WidgetCompactExpansionDirectionAuto = CapsuleOptionKinds.ExpansionDirectionAuto;
+    public const string WidgetCompactExpansionDirectionDown = CapsuleOptionKinds.ExpansionDirectionDown;
+    public const string WidgetCompactExpansionDirectionUp = CapsuleOptionKinds.ExpansionDirectionUp;
+    public const string WidgetCapsuleArrangementFree = CapsuleOptionKinds.ArrangementFree;
+    public const string WidgetCapsuleArrangementBar = CapsuleOptionKinds.ArrangementBar;
     // Legacy top-level values retained for settings migration.
-    public const string WidgetCapsuleArrangementHorizontal = "Horizontal";
-    public const string WidgetCapsuleArrangementVertical = "Vertical";
-    public const string WidgetCapsuleBarPlacementFloating = "Floating";
-    public const string WidgetCapsuleBarPlacementTop = "Top";
-    public const string WidgetCapsuleBarPlacementBottom = "Bottom";
-    public const string WidgetCapsuleBarPlacementLeft = "Left";
-    public const string WidgetCapsuleBarPlacementRight = "Right";
-    public const string WidgetCapsuleBarDirectionAuto = "Auto";
-    public const string WidgetCapsuleBarDirectionHorizontal = "Horizontal";
-    public const string WidgetCapsuleBarDirectionVertical = "Vertical";
-    public const double DefaultWidgetCapsuleBarSpacing = 8;
-    public const double MinWidgetCapsuleBarSpacing = 0;
-    public const double MaxWidgetCapsuleBarSpacing = 32;
+    public const string WidgetCapsuleArrangementHorizontal = CapsuleOptionKinds.ArrangementHorizontal;
+    public const string WidgetCapsuleArrangementVertical = CapsuleOptionKinds.ArrangementVertical;
+    public const string WidgetCapsuleBarPlacementFloating = CapsuleOptionKinds.BarPlacementFloating;
+    public const string WidgetCapsuleBarPlacementTop = CapsuleOptionKinds.BarPlacementTop;
+    public const string WidgetCapsuleBarPlacementBottom = CapsuleOptionKinds.BarPlacementBottom;
+    public const string WidgetCapsuleBarPlacementLeft = CapsuleOptionKinds.BarPlacementLeft;
+    public const string WidgetCapsuleBarPlacementRight = CapsuleOptionKinds.BarPlacementRight;
+    public const string WidgetCapsuleBarDirectionAuto = CapsuleOptionKinds.BarDirectionAuto;
+    public const string WidgetCapsuleBarDirectionHorizontal = CapsuleOptionKinds.BarDirectionHorizontal;
+    public const string WidgetCapsuleBarDirectionVertical = CapsuleOptionKinds.BarDirectionVertical;
+    public const double DefaultWidgetCapsuleBarSpacing = CapsuleOptionKinds.DefaultBarSpacing;
+    public const double MinWidgetCapsuleBarSpacing = CapsuleOptionKinds.MinBarSpacing;
+    public const double MaxWidgetCapsuleBarSpacing = CapsuleOptionKinds.MaxBarSpacing;
     public const double DefaultWidgetSnapSpacing = 5;
     public const double MinWidgetSnapSpacing = 0;
     public const double MaxWidgetSnapSpacing = 32;
@@ -165,38 +165,38 @@ public sealed class SettingsService
     public const string WidgetCollapsedStyleSummary = "Summary";
     public const string WidgetCollapsedStyleSmart = "Smart";
     public const string WidgetCollapsedStylePill = "Pill";
-    public const string WidgetCompactContentModeMinimal = "Minimal";
-    public const string WidgetCompactContentModeSummary = "Summary";
-    public const string WidgetCompactContentModeSmart = "Smart";
+    public const string WidgetCompactContentModeMinimal = CapsuleOptionKinds.ContentModeMinimal;
+    public const string WidgetCompactContentModeSummary = CapsuleOptionKinds.ContentModeSummary;
+    public const string WidgetCompactContentModeSmart = CapsuleOptionKinds.ContentModeSmart;
     public const int CurrentWidgetCompactSettingsVersion = 2;
-    public const string WidgetCompactAnimationSmooth = "Smooth";
-    public const string WidgetCompactAnimationSlow = "Slow";
-    public const string WidgetCompactAnimationSnappy = "Snappy";
-    public const string WidgetCompactAnimationCustom = "Custom";
-    public const string WidgetCompactAnimationNone = "None";
+    public const string WidgetCompactAnimationSmooth = CapsuleOptionKinds.AnimationSmooth;
+    public const string WidgetCompactAnimationSlow = CapsuleOptionKinds.AnimationSlow;
+    public const string WidgetCompactAnimationSnappy = CapsuleOptionKinds.AnimationSnappy;
+    public const string WidgetCompactAnimationCustom = CapsuleOptionKinds.AnimationCustom;
+    public const string WidgetCompactAnimationNone = CapsuleOptionKinds.AnimationNone;
     public const string WidgetCompactMediaCornerFollowWidget = "FollowWidget";
     public const string WidgetCompactMediaCornerSquare = "Square";
     public const string WidgetCompactMediaCornerSmall = "Small";
     public const string WidgetCompactMediaCornerRound = "Round";
-    public const int DefaultWidgetCompactAnimationDurationMs = 220;
-    public const int SlowWidgetCompactAnimationDurationMs = 360;
-    public const int SnappyWidgetCompactAnimationDurationMs = 160;
-    public const int MinWidgetCompactAnimationDurationMs = 120;
-    public const int MaxWidgetCompactAnimationDurationMs = 400;
-    public const int DefaultWidgetCompactExpandDelayMs = 360;
-    public const int MinWidgetCompactExpandDelayMs = 100;
-    public const int MaxWidgetCompactExpandDelayMs = 1000;
-    public const int DefaultWidgetCompactCollapseDelayMs = 620;
-    public const int MinWidgetCompactCollapseDelayMs = 200;
-    public const int MaxWidgetCompactCollapseDelayMs = 1500;
-    public const string WidgetCompactHoverResponseSensitive = "Sensitive";
-    public const string WidgetCompactHoverResponseBalanced = "Balanced";
-    public const string WidgetCompactHoverResponsePreventAccidental = "PreventAccidental";
-    public const string WidgetCompactHoverResponseCustom = "Custom";
-    public const int SensitiveWidgetCompactExpandDelayMs = 100;
-    public const int SensitiveWidgetCompactCollapseDelayMs = 200;
-    public const int PreventAccidentalWidgetCompactExpandDelayMs = 620;
-    public const int PreventAccidentalWidgetCompactCollapseDelayMs = 900;
+    public const int DefaultWidgetCompactAnimationDurationMs = CapsuleOptionKinds.DefaultAnimationDurationMs;
+    public const int SlowWidgetCompactAnimationDurationMs = CapsuleOptionKinds.SlowAnimationDurationMs;
+    public const int SnappyWidgetCompactAnimationDurationMs = CapsuleOptionKinds.SnappyAnimationDurationMs;
+    public const int MinWidgetCompactAnimationDurationMs = CapsuleOptionKinds.MinAnimationDurationMs;
+    public const int MaxWidgetCompactAnimationDurationMs = CapsuleOptionKinds.MaxAnimationDurationMs;
+    public const int DefaultWidgetCompactExpandDelayMs = CapsuleOptionKinds.DefaultExpandDelayMs;
+    public const int MinWidgetCompactExpandDelayMs = CapsuleOptionKinds.MinExpandDelayMs;
+    public const int MaxWidgetCompactExpandDelayMs = CapsuleOptionKinds.MaxExpandDelayMs;
+    public const int DefaultWidgetCompactCollapseDelayMs = CapsuleOptionKinds.DefaultCollapseDelayMs;
+    public const int MinWidgetCompactCollapseDelayMs = CapsuleOptionKinds.MinCollapseDelayMs;
+    public const int MaxWidgetCompactCollapseDelayMs = CapsuleOptionKinds.MaxCollapseDelayMs;
+    public const string WidgetCompactHoverResponseSensitive = CapsuleOptionKinds.HoverResponseSensitive;
+    public const string WidgetCompactHoverResponseBalanced = CapsuleOptionKinds.HoverResponseBalanced;
+    public const string WidgetCompactHoverResponsePreventAccidental = CapsuleOptionKinds.HoverResponsePreventAccidental;
+    public const string WidgetCompactHoverResponseCustom = CapsuleOptionKinds.HoverResponseCustom;
+    public const int SensitiveWidgetCompactExpandDelayMs = CapsuleOptionKinds.SensitiveExpandDelayMs;
+    public const int SensitiveWidgetCompactCollapseDelayMs = CapsuleOptionKinds.SensitiveCollapseDelayMs;
+    public const int PreventAccidentalWidgetCompactExpandDelayMs = CapsuleOptionKinds.PreventAccidentalExpandDelayMs;
+    public const int PreventAccidentalWidgetCompactCollapseDelayMs = CapsuleOptionKinds.PreventAccidentalCollapseDelayMs;
     public const string WidgetTitleIconModeFilledMono = WidgetTitleIconModeNames.FilledMono;
     public const string WidgetTitleIconModeLineMono = WidgetTitleIconModeNames.LineMono;
     public const string WidgetTitleIconModeColor = WidgetTitleIconModeNames.Color;
@@ -2105,84 +2105,23 @@ settings.FocusClickedWidgetOnRaise = false;
     public static string NormalizeWidgetAnimationEasingIntensity(string? intensity) =>
         Contracts.WidgetAnimationKinds.NormalizeEasingIntensity(intensity);
 
-    public static string NormalizeWidgetCompactWidthMode(string? value)
-    {
-        return string.Equals(
-            value,
-            WidgetCompactWidthModeIndependent,
-            StringComparison.OrdinalIgnoreCase)
-                ? WidgetCompactWidthModeIndependent
-                : WidgetCompactWidthModeAligned;
-    }
+    public static string NormalizeWidgetCompactWidthMode(string? value) =>
+        CapsuleOptionKinds.NormalizeWidthMode(value);
 
-    public static string NormalizeWidgetCompactExpansionDirection(string? value)
-    {
-        if (string.Equals(
-                value,
-                WidgetCompactExpansionDirectionDown,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCompactExpansionDirectionDown;
-        }
+    public static string NormalizeWidgetCompactExpansionDirection(string? value) =>
+        CapsuleOptionKinds.NormalizeExpansionDirection(value);
 
-        return string.Equals(
-                value,
-                WidgetCompactExpansionDirectionUp,
-                StringComparison.OrdinalIgnoreCase)
-            ? WidgetCompactExpansionDirectionUp
-            : WidgetCompactExpansionDirectionAuto;
-    }
+    public static string NormalizeWidgetCapsuleArrangementMode(string? value) =>
+        CapsuleOptionKinds.NormalizeArrangementMode(value);
 
-    public static string NormalizeWidgetCapsuleArrangementMode(string? value)
-    {
-        return string.Equals(value, WidgetCapsuleArrangementBar, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, WidgetCapsuleArrangementHorizontal, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(value, WidgetCapsuleArrangementVertical, StringComparison.OrdinalIgnoreCase)
-            ? WidgetCapsuleArrangementBar
-            : WidgetCapsuleArrangementFree;
-    }
+    public static string NormalizeWidgetCapsuleBarPlacement(string? value) =>
+        CapsuleOptionKinds.NormalizeBarPlacement(value);
 
-    public static string NormalizeWidgetCapsuleBarPlacement(string? value)
-    {
-        if (string.Equals(value, WidgetCapsuleBarPlacementTop, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCapsuleBarPlacementTop;
-        }
+    public static string NormalizeWidgetCapsuleBarDirection(string? value) =>
+        CapsuleOptionKinds.NormalizeBarDirection(value);
 
-        if (string.Equals(value, WidgetCapsuleBarPlacementBottom, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCapsuleBarPlacementBottom;
-        }
-
-        if (string.Equals(value, WidgetCapsuleBarPlacementLeft, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCapsuleBarPlacementLeft;
-        }
-
-        return string.Equals(value, WidgetCapsuleBarPlacementRight, StringComparison.OrdinalIgnoreCase)
-            ? WidgetCapsuleBarPlacementRight
-            : WidgetCapsuleBarPlacementFloating;
-    }
-
-    public static string NormalizeWidgetCapsuleBarDirection(string? value)
-    {
-        if (string.Equals(value, WidgetCapsuleBarDirectionHorizontal, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCapsuleBarDirectionHorizontal;
-        }
-
-        return string.Equals(value, WidgetCapsuleBarDirectionVertical, StringComparison.OrdinalIgnoreCase)
-            ? WidgetCapsuleBarDirectionVertical
-            : WidgetCapsuleBarDirectionAuto;
-    }
-
-    public static double NormalizeWidgetCapsuleBarSpacing(double value)
-    {
-        double finiteValue = double.IsFinite(value)
-            ? value
-            : DefaultWidgetCapsuleBarSpacing;
-        return Math.Clamp(finiteValue, MinWidgetCapsuleBarSpacing, MaxWidgetCapsuleBarSpacing);
-    }
+    public static double NormalizeWidgetCapsuleBarSpacing(double value) =>
+        CapsuleOptionKinds.NormalizeBarSpacing(value);
 
     public static double NormalizeWidgetSnapSpacing(double value)
     {
@@ -2209,72 +2148,26 @@ settings.FocusClickedWidgetOnRaise = false;
             : WidgetCollapsedStyleSummary;
     }
 
-    public static string NormalizeWidgetCompactContentMode(string? value)
-    {
-        if (string.Equals(value, WidgetCompactContentModeMinimal, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCompactContentModeMinimal;
-        }
+    public static string NormalizeWidgetCompactContentMode(string? value) =>
+        CapsuleOptionKinds.NormalizeContentMode(value);
 
-        return string.Equals(value, WidgetCompactContentModeSummary, StringComparison.OrdinalIgnoreCase)
-            ? WidgetCompactContentModeSummary
-            : WidgetCompactContentModeSmart;
-    }
-
-    public static string NormalizeWidgetCompactAnimationEffect(string? value)
-    {
-        if (string.Equals(value, WidgetCompactAnimationSlow, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCompactAnimationSlow;
-        }
-
-        if (string.Equals(value, WidgetCompactAnimationSnappy, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCompactAnimationSnappy;
-        }
-
-        if (string.Equals(value, WidgetCompactAnimationCustom, StringComparison.OrdinalIgnoreCase))
-        {
-            return WidgetCompactAnimationCustom;
-        }
-
-        return string.Equals(value, WidgetCompactAnimationNone, StringComparison.OrdinalIgnoreCase)
-            ? WidgetCompactAnimationNone
-            : WidgetCompactAnimationSmooth;
-    }
+    public static string NormalizeWidgetCompactAnimationEffect(string? value) =>
+        CapsuleOptionKinds.NormalizeAnimationEffect(value);
 
     public static int NormalizeWidgetCompactAnimationDurationMs(int value) =>
-        Math.Clamp(value, MinWidgetCompactAnimationDurationMs, MaxWidgetCompactAnimationDurationMs);
+        CapsuleOptionKinds.NormalizeAnimationDurationMs(value);
 
     public static int NormalizeWidgetCompactExpandDelayMs(int value) =>
-        Math.Clamp(value, MinWidgetCompactExpandDelayMs, MaxWidgetCompactExpandDelayMs);
+        CapsuleOptionKinds.NormalizeExpandDelayMs(value);
 
     public static int NormalizeWidgetCompactCollapseDelayMs(int value) =>
-        Math.Clamp(value, MinWidgetCompactCollapseDelayMs, MaxWidgetCompactCollapseDelayMs);
+        CapsuleOptionKinds.NormalizeCollapseDelayMs(value);
 
-    public static string NormalizeWidgetCompactHoverResponse(string? value) => value switch
-    {
-        WidgetCompactHoverResponseSensitive => WidgetCompactHoverResponseSensitive,
-        WidgetCompactHoverResponsePreventAccidental => WidgetCompactHoverResponsePreventAccidental,
-        WidgetCompactHoverResponseCustom => WidgetCompactHoverResponseCustom,
-        _ => WidgetCompactHoverResponseBalanced
-    };
+    public static string NormalizeWidgetCompactHoverResponse(string? value) =>
+        CapsuleOptionKinds.NormalizeHoverResponse(value);
 
-    public static string ResolveWidgetCompactHoverResponse(int expandDelayMs, int collapseDelayMs)
-    {
-        int expand = NormalizeWidgetCompactExpandDelayMs(expandDelayMs);
-        int collapse = NormalizeWidgetCompactCollapseDelayMs(collapseDelayMs);
-        return (expand, collapse) switch
-        {
-            (SensitiveWidgetCompactExpandDelayMs, SensitiveWidgetCompactCollapseDelayMs) =>
-                WidgetCompactHoverResponseSensitive,
-            (DefaultWidgetCompactExpandDelayMs, DefaultWidgetCompactCollapseDelayMs) =>
-                WidgetCompactHoverResponseBalanced,
-            (PreventAccidentalWidgetCompactExpandDelayMs, PreventAccidentalWidgetCompactCollapseDelayMs) =>
-                WidgetCompactHoverResponsePreventAccidental,
-            _ => WidgetCompactHoverResponseCustom
-        };
-    }
+    public static string ResolveWidgetCompactHoverResponse(int expandDelayMs, int collapseDelayMs) =>
+        CapsuleOptionKinds.ResolveHoverResponse(expandDelayMs, collapseDelayMs);
 
     public static string NormalizeWidgetCompactMediaCornerMode(string? value)
     {
@@ -2296,30 +2189,11 @@ settings.FocusClickedWidgetOnRaise = false;
     // Uplifted from the settings shell's capsule section (batch 33) so the
     // CapsuleSettingsCoordinator and the shell's binding state share one
     // preset mapping, like the animation-normalizer precedent of batch 29.
-    public static int? WidgetCompactAnimationPresetDurationMs(string? effect)
-    {
-        return NormalizeWidgetCompactAnimationEffect(effect) switch
-        {
-            WidgetCompactAnimationSmooth => DefaultWidgetCompactAnimationDurationMs,
-            WidgetCompactAnimationSlow => SlowWidgetCompactAnimationDurationMs,
-            WidgetCompactAnimationSnappy => SnappyWidgetCompactAnimationDurationMs,
-            _ => null
-        };
-    }
+    public static int? WidgetCompactAnimationPresetDurationMs(string? effect) =>
+        CapsuleOptionKinds.AnimationPresetDurationMs(effect);
 
-    public static (int Expand, int Collapse)? WidgetCompactHoverResponsePresetDelays(string? response)
-    {
-        return NormalizeWidgetCompactHoverResponse(response) switch
-        {
-            WidgetCompactHoverResponseSensitive =>
-                (SensitiveWidgetCompactExpandDelayMs, SensitiveWidgetCompactCollapseDelayMs),
-            WidgetCompactHoverResponsePreventAccidental =>
-                (PreventAccidentalWidgetCompactExpandDelayMs, PreventAccidentalWidgetCompactCollapseDelayMs),
-            WidgetCompactHoverResponseBalanced =>
-                (DefaultWidgetCompactExpandDelayMs, DefaultWidgetCompactCollapseDelayMs),
-            _ => null
-        };
-    }
+    public static (int Expand, int Collapse)? WidgetCompactHoverResponsePresetDelays(string? response) =>
+        CapsuleOptionKinds.HoverResponsePresetDelays(response);
 
     public static string NormalizeWidgetTitleIconModeSetting(string? value)
     {

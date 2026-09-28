@@ -141,6 +141,8 @@ public sealed partial class SettingsWindow : Window
     private readonly DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel _fileDisplaySettingsViewModel;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettingsViewModel;
     private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettingsViewModel;
+    private readonly DeskBox.Features.Capsule.CapsuleSettingsViewModel _capsuleSettingsViewModel;
+    private readonly DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel _groupNavigationSettingsViewModel;
 
     /// <summary>
     /// The file-display section's editor. Exposed for the AOT managed-UI
@@ -198,6 +200,8 @@ public sealed partial class SettingsWindow : Window
         _fileDisplaySettingsViewModel = fileDisplaySettings;
         _managedStorageSettingsViewModel = managedStorageSettings;
         _appearanceSettingsViewModel = appearanceSettings;
+        _capsuleSettingsViewModel = capsuleSettings;
+        _groupNavigationSettingsViewModel = groupNavigationSettings;
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,
