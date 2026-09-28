@@ -137,6 +137,7 @@ public sealed partial class SettingsWindow : Window
     private readonly BackupRestoreActions _backupRestoreActions;
     private readonly IBackupCommands _backupCommands;
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
+    private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsViewModel;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
     private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettingsViewModel;
     private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettingsViewModel;
@@ -174,8 +175,9 @@ public sealed partial class SettingsWindow : Window
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
         TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
         BackupSettingsViewModel backupSettings, BackupRestoreActions backupRestoreActions,
-        IQuickCaptureSettings quickCaptureSettings,
-        ISearchFeatureSettings searchFeatureSettings,
+            IQuickCaptureSettings quickCaptureSettings,
+            DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel quickCaptureSettingsEditor,
+            ISearchFeatureSettings searchFeatureSettings,
         IBackupCommands backupCommands,
         DeskBox.Features.Appearance.AppearanceSettingsViewModel appearanceSettings,
         DeskBox.Features.Capsule.CapsuleSettingsViewModel capsuleSettings,
@@ -206,6 +208,7 @@ public sealed partial class SettingsWindow : Window
         _backupSettingsViewModel = backupSettings;
         _backupRestoreActions = backupRestoreActions;
         _musicSettingsViewModel = musicSettings;
+        _quickCaptureSettingsViewModel = quickCaptureSettingsEditor;
         _interactionSettingsViewModel = interactionSettings;
         _fileStackSettingsViewModel = fileStackSettings;
         _featureWidgetsSettingsViewModel = featureWidgetsSettings;
@@ -217,7 +220,7 @@ public sealed partial class SettingsWindow : Window
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,
-            backupSettings, quickCaptureSettings, searchFeatureSettings, appearanceSettings,
+            backupSettings, quickCaptureSettings, quickCaptureSettingsEditor, searchFeatureSettings, appearanceSettings,
             capsuleSettings, interactionSettings, fileDisplaySettings, fileStackSettings,
             groupNavigationSettings, featureWidgetsSettings, musicSettings,
             managedStorageSettings, maintenanceSettings, localizationService,

@@ -192,7 +192,7 @@ public sealed class AotStage5B4B1ContractTests
             "ItemsSource=\"{x:Bind CustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(174, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(141, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
@@ -359,7 +359,7 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 174", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 141", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);

@@ -1779,7 +1779,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                     Style="{StaticResource SectionPanelStyle}">
                     <StackPanel Margin="0,8,0,0" Spacing="4">
                         <toolkit:SettingsCard
-                            Description="{Binding QuickCaptureStatusText}"
+                            Description="{Binding StatusText}"
                             HorizontalContentAlignment="Right"
                             svc:Localized.HeaderKey="Settings.QuickCapture.Title">
                             <toolkit:SettingsCard.HeaderIcon>
@@ -1791,51 +1791,51 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 OffContent=""
                                 MinWidth="0"
                                 Toggled="FeatureSettingsEnabledToggle_Toggled"
-                                IsOn="{Binding QuickCaptureEnabled, Mode=TwoWay}" />
+                                IsOn="{Binding Enabled, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
                         <StackPanel Spacing="4">
                             <toolkit:SettingsExpander
                                 Tag="QuickCapture"
-                                IsEnabled="{Binding QuickCaptureEnabled}"
+                                IsEnabled="{Binding Enabled}"
                                 Loaded="FeatureSettingsExpander_Loaded"
                                 HorizontalContentAlignment="Stretch"
-                                Description="{Binding QuickCaptureLayoutSummaryText}"
+                                Description="{Binding LayoutSummaryText}"
                                 svc:Localized.HeaderKey="Settings.QuickCapture.WideLayout.Title">
                                 <toolkit:SettingsExpander.HeaderIcon>
                                     <FontIcon Glyph="&#xECA5;" />
                                 </toolkit:SettingsExpander.HeaderIcon>
                                 <ComboBox
                                     MinWidth="190"
-                                    ItemsSource="{Binding AvailableQuickCaptureWideLayoutOptions}"
-                                    controls:SettingsComboBox.Value="{Binding QuickCaptureWideLayout, Mode=TwoWay}" />
+                                    ItemsSource="{Binding AvailableWideLayoutOptions}"
+                                    controls:SettingsComboBox.Value="{Binding WideLayout, Mode=TwoWay}" />
                                 <toolkit:SettingsExpander.Items>
                                     <toolkit:SettingsCard
-                                        Visibility="{Binding QuickCaptureWideOptionsVisibility}"
+                                        Visibility="{Binding ShowWideOptions, Converter={StaticResource SettingsBoolToVisibilityConverter}}"
                                         HorizontalContentAlignment="Right"
                                         svc:Localized.DescriptionKey="Settings.QuickCapture.WideOpen.Description"
                                         svc:Localized.HeaderKey="Settings.QuickCapture.WideOpen.Title">
                                         <ComboBox
                                             MinWidth="190"
-                                            ItemsSource="{Binding AvailableQuickCaptureWideOpenModeOptions}"
-                                            controls:SettingsComboBox.Value="{Binding QuickCaptureWideOpenMode, Mode=TwoWay}" />
+                                            ItemsSource="{Binding AvailableWideOpenModeOptions}"
+                                            controls:SettingsComboBox.Value="{Binding WideOpenMode, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                 </toolkit:SettingsExpander.Items>
                             </toolkit:SettingsExpander>
 
                             <toolkit:SettingsExpander
                                 Tag="QuickCapture"
-                                IsEnabled="{Binding QuickCaptureEnabled}"
+                                IsEnabled="{Binding Enabled}"
                                 Loaded="FeatureSettingsExpander_Loaded"
                                 HorizontalContentAlignment="Stretch"
-                                Description="{Binding QuickCaptureTabsSummaryText}"
+                                Description="{Binding TabsSummaryText}"
                                 svc:Localized.HeaderKey="Settings.QuickCapture.Tabs.Title">
                                 <toolkit:SettingsExpander.HeaderIcon>
                                     <FontIcon Glyph="&#xE8A9;" />
                                 </toolkit:SettingsExpander.HeaderIcon>
-                                <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding QuickCaptureShowTabBar, Mode=TwoWay}" />
+                                <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding ShowTabBar, Mode=TwoWay}" />
                                 <toolkit:SettingsExpander.Items>
                                     <toolkit:SettingsCard
-                                        IsEnabled="{Binding QuickCaptureShowTabBar}"
+                                        IsEnabled="{Binding ShowTabBar}"
                                         HorizontalContentAlignment="Right"
                                         svc:Localized.DescriptionKey="Settings.QuickCapture.Tabs.Description"
                                         svc:Localized.HeaderKey="Settings.Tabs.VisibleCategories">
@@ -1844,7 +1844,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                             MaxWidth="280"
                                             HorizontalAlignment="Right"
                                             Click="QuickCaptureTabsDropDown_Click"
-                                            Content="{Binding QuickCaptureVisibleTabsText}" />
+                                            Content="{Binding VisibleTabsText}" />
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard
                                         HorizontalContentAlignment="Right"
@@ -1852,16 +1852,16 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         svc:Localized.HeaderKey="Settings.QuickCapture.DefaultView.Title">
                                         <ComboBox
                                             MinWidth="190"
-                                            ItemsSource="{Binding VisibleQuickCaptureDefaultViewOptions}"
-                                            controls:SettingsComboBox.Value="{Binding SelectedQuickCaptureDefaultView, Mode=TwoWay}" />
+                                            ItemsSource="{Binding VisibleDefaultViewOptions}"
+                                            controls:SettingsComboBox.Value="{Binding SelectedDefaultView, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard
-                                        IsEnabled="{Binding QuickCaptureShowTabBar}"
+                                        IsEnabled="{Binding ShowTabBar}"
                                         HorizontalContentAlignment="Right"
                                         svc:Localized.HeaderKey="Settings.QuickCapture.TabStyle.Title">
                                         <toolkit:Segmented
                                             MinWidth="220"
-                                            SelectedIndex="{Binding QuickCaptureTabStyleIndex, Mode=TwoWay}">
+                                            SelectedIndex="{Binding TabStyleIndex, Mode=TwoWay}">
                                             <toolkit:SegmentedItem>
                                                 <TextBlock svc:Localized.Key="Settings.WidgetTabStyle.Pivot" />
                                             </toolkit:SegmentedItem>
@@ -1875,10 +1875,10 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
 
                             <toolkit:SettingsExpander
                                 Tag="QuickCapture"
-                                IsEnabled="{Binding QuickCaptureEnabled}"
+                                IsEnabled="{Binding Enabled}"
                                 Loaded="FeatureSettingsExpander_Loaded"
                                 HorizontalContentAlignment="Stretch"
-                                Description="{Binding QuickCaptureContentSummaryText}"
+                                Description="{Binding ContentSummaryText}"
                                 svc:Localized.HeaderKey="Settings.ContentEditor.Group.Title">
                                 <toolkit:SettingsExpander.HeaderIcon>
                                     <FontIcon Glyph="&#xE70F;" />
@@ -1886,58 +1886,58 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <toolkit:SettingsExpander.Items>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.Feature.ListTextSize.Title" svc:Localized.DescriptionKey="Settings.Feature.ListTextSize.Description">
                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding QuickCaptureListTextSizeValueText}" />
-                                            <Slider Maximum="16" Minimum="10" StepFrequency="0.5" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding QuickCaptureListTextSize, Mode=TwoWay}" ManipulationMode="TranslateX" ManipulationStarted="AppearanceSlider_ManipulationStarted" ManipulationCompleted="AppearanceSlider_ManipulationCompleted" ValueChanged="AppearanceSlider_ValueChanged" PointerPressed="AppearanceSlider_PointerPressed" PointerReleased="AppearanceSlider_PointerReleased" LostFocus="AppearanceSlider_LostFocus" />
+                                            <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding ListTextSizeValueText}" />
+                                            <Slider Maximum="16" Minimum="10" StepFrequency="0.5" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding ListTextSize, Mode=TwoWay}" ManipulationMode="TranslateX" ManipulationStarted="AppearanceSlider_ManipulationStarted" ManipulationCompleted="AppearanceSlider_ManipulationCompleted" ValueChanged="AppearanceSlider_ValueChanged" PointerPressed="AppearanceSlider_PointerPressed" PointerReleased="AppearanceSlider_PointerReleased" LostFocus="AppearanceSlider_LostFocus" />
                                         </StackPanel>
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.Feature.ContentTextSize.Title" svc:Localized.DescriptionKey="Settings.Feature.ContentTextSize.Description">
                                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
-                                            <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding QuickCaptureContentTextSizeValueText}" />
-                                            <Slider Maximum="16" Minimum="10" StepFrequency="0.5" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding QuickCaptureContentTextSize, Mode=TwoWay}" ManipulationMode="TranslateX" ManipulationStarted="AppearanceSlider_ManipulationStarted" ManipulationCompleted="AppearanceSlider_ManipulationCompleted" ValueChanged="AppearanceSlider_ValueChanged" PointerPressed="AppearanceSlider_PointerPressed" PointerReleased="AppearanceSlider_PointerReleased" LostFocus="AppearanceSlider_LostFocus" />
+                                            <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding ContentTextSizeValueText}" />
+                                            <Slider Maximum="16" Minimum="10" StepFrequency="0.5" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding ContentTextSize, Mode=TwoWay}" ManipulationMode="TranslateX" ManipulationStarted="AppearanceSlider_ManipulationStarted" ManipulationCompleted="AppearanceSlider_ManipulationCompleted" ValueChanged="AppearanceSlider_ValueChanged" PointerPressed="AppearanceSlider_PointerPressed" PointerReleased="AppearanceSlider_PointerReleased" LostFocus="AppearanceSlider_LostFocus" />
                                         </StackPanel>
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.ContentEditor.PreviewLines.Description" svc:Localized.HeaderKey="Settings.ContentEditor.PreviewLines.Title">
-                                        <ComboBox MinWidth="220" ItemsSource="{Binding AvailableItemPreviewLineCountOptions}" controls:SettingsComboBox.Value="{Binding QuickCaptureItemPreviewLineCount, Mode=TwoWay}" />
+                                        <ComboBox MinWidth="220" ItemsSource="{Binding AvailablePreviewLineOptions}" controls:SettingsComboBox.Value="{Binding ItemPreviewLineCount, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.Format.Description" svc:Localized.HeaderKey="Settings.QuickCapture.Format.Title">
-                                        <ComboBox MinWidth="190" ItemsSource="{Binding AvailableQuickCaptureFormatOptions}" controls:SettingsComboBox.Value="{Binding QuickCaptureEditorFormat, Mode=TwoWay}" />
+                                        <ComboBox MinWidth="190" ItemsSource="{Binding AvailableFormatOptions}" controls:SettingsComboBox.Value="{Binding EditorFormat, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.ContentEditor.EnterBehavior.Description" svc:Localized.HeaderKey="Settings.ContentEditor.EnterBehavior.Title">
-                                        <ComboBox MinWidth="220" ItemsSource="{Binding AvailableEditorEnterBehaviorOptions}" controls:SettingsComboBox.Value="{Binding QuickCaptureEditorEnterBehavior, Mode=TwoWay}" />
+                                        <ComboBox MinWidth="220" ItemsSource="{Binding AvailableEnterBehaviorOptions}" controls:SettingsComboBox.Value="{Binding EditorEnterBehavior, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                     <toolkit:SettingsCard HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.ShowCreatedTime.Description" svc:Localized.HeaderKey="Settings.QuickCapture.ShowCreatedTime.Title">
-                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding QuickCaptureShowCreatedTime, Mode=TwoWay}" />
+                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding ShowCreatedTime, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
-                                    <toolkit:SettingsCard Visibility="{Binding QuickCaptureRemoteImagesVisibility}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.RemoteImages.Description" svc:Localized.HeaderKey="Settings.QuickCapture.RemoteImages.Title">
-                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding QuickCaptureAllowRemoteImages, Mode=TwoWay}" />
+                                    <toolkit:SettingsCard Visibility="{Binding ShowRemoteImages, Converter={StaticResource SettingsBoolToVisibilityConverter}}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.RemoteImages.Description" svc:Localized.HeaderKey="Settings.QuickCapture.RemoteImages.Title">
+                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding AllowRemoteImages, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                 </toolkit:SettingsExpander.Items>
                             </toolkit:SettingsExpander>
 
                             <toolkit:SettingsExpander
                                 Tag="QuickCapture"
-                                IsEnabled="{Binding QuickCaptureEnabled}"
+                                IsEnabled="{Binding Enabled}"
                                 Loaded="FeatureSettingsExpander_Loaded"
                                 HorizontalContentAlignment="Stretch"
-                                Description="{Binding QuickCaptureClipboardDiagnosticsText}"
+                                Description="{Binding ClipboardDiagnosticsText}"
                                 svc:Localized.HeaderKey="Settings.QuickCapture.ClipboardTitle">
                                 <toolkit:SettingsExpander.HeaderIcon>
                                     <FontIcon Glyph="&#xE8C8;" />
                                 </toolkit:SettingsExpander.HeaderIcon>
-                                <ToggleSwitch x:Name="QuickCaptureClipboardToggle" MinWidth="0" OffContent="" OnContent="" IsOn="{Binding QuickCaptureClipboardEnabled, Mode=TwoWay}" />
+                                <ToggleSwitch x:Name="QuickCaptureClipboardToggle" MinWidth="0" OffContent="" OnContent="" IsOn="{Binding ClipboardEnabled, Mode=TwoWay}" />
                                 <toolkit:SettingsExpander.Items>
-                                    <toolkit:SettingsCard IsEnabled="{Binding QuickCaptureClipboardEnabled}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.ImageClipboardDescription" svc:Localized.HeaderKey="Settings.QuickCapture.ImageClipboardTitle">
-                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding QuickCaptureImageClipboardEnabled, Mode=TwoWay}" />
+                                    <toolkit:SettingsCard IsEnabled="{Binding ClipboardEnabled}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.QuickCapture.ImageClipboardDescription" svc:Localized.HeaderKey="Settings.QuickCapture.ImageClipboardTitle">
+                                        <ToggleSwitch MinWidth="0" OffContent="" OnContent="" IsOn="{Binding ImageClipboardEnabled, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
-                                    <toolkit:SettingsCard Description="{Binding QuickCaptureRecentLimitText}" HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.QuickCapture.RecentLimitTitle">
-                                        <NumberBox Style="{StaticResource CompactNumberBoxStyle}" Minimum="1" Maximum="200" Value="{Binding QuickCaptureRecentLimit, Mode=TwoWay}" />
+                                    <toolkit:SettingsCard Description="{Binding RecentLimitText}" HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.QuickCapture.RecentLimitTitle">
+                                        <NumberBox Style="{StaticResource CompactNumberBoxStyle}" Minimum="1" Maximum="200" Value="{Binding RecentLimit, Mode=TwoWay}" />
                                     </toolkit:SettingsCard>
                                 </toolkit:SettingsExpander.Items>
                             </toolkit:SettingsExpander>
 
                             <toolkit:SettingsExpander
                                 Tag="QuickCapture"
-                                IsEnabled="{Binding QuickCaptureEnabled}"
+                                IsEnabled="{Binding Enabled}"
                                 Loaded="FeatureSettingsExpander_Loaded"
                                 HorizontalContentAlignment="Stretch"
                                 svc:Localized.DescriptionKey="Settings.QuickCapture.Group.Data.Description"
@@ -1946,8 +1946,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <FontIcon Glyph="&#xE74D;" />
                                 </toolkit:SettingsExpander.HeaderIcon>
                                 <toolkit:SettingsExpander.Items>
-                                    <toolkit:SettingsCard Description="{Binding QuickCaptureImageCacheText}" HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.QuickCapture.ImageCacheTitle">
-                                        <Button Click="CleanupQuickCaptureImageCacheButton_Click" IsEnabled="{Binding CanClearQuickCaptureImageCache}" Style="{StaticResource ActionButtonStyle}" svc:Localized.ToolTipKey="Settings.QuickCapture.ImageCacheCleanupTooltip">
+                                    <toolkit:SettingsCard Description="{Binding ImageCacheText}" HorizontalContentAlignment="Right" svc:Localized.HeaderKey="Settings.QuickCapture.ImageCacheTitle">
+                                        <Button Click="CleanupQuickCaptureImageCacheButton_Click" IsEnabled="{Binding CanClearImageCache}" Style="{StaticResource ActionButtonStyle}" svc:Localized.ToolTipKey="Settings.QuickCapture.ImageCacheCleanupTooltip">
                                             <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Delete" /><TextBlock svc:Localized.Key="Common.Cleanup" /></StackPanel>
                                         </Button>
                                     </toolkit:SettingsCard>

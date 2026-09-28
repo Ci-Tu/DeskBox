@@ -956,13 +956,17 @@ public sealed partial class SettingsWindow
             return;
         }
 
+        // The tab-visibility flyout state machine lives on the Quick Capture
+        // section editor (batch 46); the section reaches it through its
+        // DataContext.
+        var quickCaptureSettings = _quickCaptureSettingsViewModel;
         SettingsMultiSelectMenu.Show(
             button,
-            ViewModel.AvailableQuickCaptureDefaultViews,
-            ViewModel.GetQuickCaptureTabDisplayName,
-            ViewModel.IsQuickCaptureTabSelected,
-            ViewModel.CanToggleQuickCaptureTab,
-            ViewModel.ToggleQuickCaptureTab);
+            quickCaptureSettings.AvailableDefaultViews,
+            quickCaptureSettings.GetDefaultViewDisplayName,
+            quickCaptureSettings.IsTabSelected,
+            quickCaptureSettings.CanToggleTab,
+            quickCaptureSettings.ToggleTab);
     }
 
     private void TodoTabsDropDown_Click(object sender, RoutedEventArgs e)

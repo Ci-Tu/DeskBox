@@ -63,22 +63,6 @@ public partial class SettingsViewModel
     }
 
 
-    public string SelectedQuickCaptureDefaultView
-    {
-        get => _quickCaptureSettings.ReadTabs().DefaultView;
-        set => ApplyQuickCaptureDefaultView(value);
-    }
-
-    public string SelectedQuickCaptureDefaultViewText => GetQuickCaptureDefaultViewDisplayName(SelectedQuickCaptureDefaultView);
-
-    public string SelectedQuickCaptureTabStyle
-    {
-        get => _quickCaptureSettings.ReadPresentation().TabStyle;
-        set => ApplyQuickCaptureTabStyle(value);
-    }
-
-    public string SelectedQuickCaptureTabStyleText => GetWidgetTabStyleDisplayName(SelectedQuickCaptureTabStyle);
-
     public string SelectedTodoDefaultFilter
     {
         get => _todoSettings.DefaultFilter;
@@ -245,7 +229,9 @@ public partial class SettingsViewModel
         switch (kind)
         {
             case WidgetKind.QuickCapture:
-                QuickCaptureEnabled = enabled;
+                // The Quick Capture switch's write chain (persist + host
+                // widget apply) lives on the section editor (batch 46).
+                _quickCaptureSettingsEditor.SetFeatureEnabled(enabled);
                 return;
             case WidgetKind.Todo:
                 TodoEnabled = enabled;
@@ -300,19 +286,16 @@ public partial class SettingsViewModel
             switch (kind)
             {
                 case WidgetKind.QuickCapture:
-                    QuickCaptureClipboardEnabled = false;
-                    QuickCaptureImageClipboardEnabled = false;
-                    QuickCaptureEditorEnterBehavior = SettingsService.EditorEnterBehaviorCtrlEnterSaves;
-                    QuickCaptureEditorFormat = SettingsService.QuickCaptureFormatMarkdown;
-                    QuickCaptureWideLayout = SettingsService.QuickCaptureWideLayoutAuto;
-                    QuickCaptureWideOpenMode = SettingsService.QuickCaptureWideOpenReading;
-                    QuickCaptureAllowRemoteImages = false;
                     _quickCaptureSettings.ResetTabPreferences(scheduleSave: false);
                     _quickCaptureSettings.ResetPresentationPreferences(scheduleSave: false);
                     _quickCaptureSettings.ResetRecentLimit(scheduleSave: false);
                     recordingDrain = _quickCaptureSettings.ResetRecordingAsync();
                     _quickCaptureSettings.ResetEditorPreferences(scheduleSave: false);
-                    RefreshQuickCaptureClipboardDiagnostics();
+                    // The section editor re-projects from the coordinator's
+                    // reset state (the old shell mirror assignments and the
+                    // diagnostics rebuild folded into this sync).
+                    _quickCaptureSettingsEditor.SyncPresentation();
+                    _quickCaptureSettingsEditor.RefreshClipboardDiagnostics();
                     break;
                 case WidgetKind.Todo:
                     _todoSettings.ResetDisplayOptions(scheduleSave: false);
@@ -360,13 +343,11 @@ public partial class SettingsViewModel
         switch (kind)
         {
             case WidgetKind.QuickCapture:
-                OnPropertyChanged(nameof(QuickCaptureEnabled));
-                OnPropertyChanged(nameof(QuickCaptureStatusText));
-                OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
-                OnPropertyChanged(nameof(QuickCaptureRecentLimitText));
-                OnPropertyChanged(nameof(QuickCaptureRecentLimitInput));
-                OnPropertyChanged(nameof(SelectedQuickCaptureDefaultViewText));
-                OnPropertyChanged(nameof(SelectedQuickCaptureTabStyleText));
+                // The section editor re-projects the whole Quick Capture
+                // surface (the old per-property notifications are its own
+                // PropertyChanged broadcasts now).
+                _quickCaptureSettingsEditor.SyncPresentation();
+                _quickCaptureSettingsEditor.RefreshClipboardDiagnostics();
                 break;
             case WidgetKind.Todo:
                 OnPropertyChanged(nameof(TodoEnabled));
@@ -403,22 +384,11 @@ public partial class SettingsViewModel
         }
     }
 
-    public string[] AvailableQuickCaptureDefaultViews { get; } =
-    [
-        SettingsService.QuickCaptureDefaultViewRecords,
-        SettingsService.QuickCaptureDefaultViewPinned,
-        SettingsService.QuickCaptureDefaultViewRecent
-    ];
-
-    public string[] AvailableQuickCaptureDefaultViewDisplayNames => _cachedQuickCaptureDefaultViewDisplayNames ??= AvailableQuickCaptureDefaultViews.Select(GetQuickCaptureDefaultViewDisplayName).ToArray();
-
     public string[] AvailableWidgetTabStyles { get; } =
     [
         SettingsService.WidgetTabStylePivot,
         SettingsService.WidgetTabStyleButton
     ];
-
-    public string[] AvailableQuickCaptureTabStyleDisplayNames => _cachedQuickCaptureTabStyleDisplayNames ??= AvailableWidgetTabStyles.Select(GetWidgetTabStyleDisplayName).ToArray();
 
     public string[] AvailableTodoNewTaskPositions { get; } =
     [

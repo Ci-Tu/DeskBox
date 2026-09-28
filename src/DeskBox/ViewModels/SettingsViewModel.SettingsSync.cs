@@ -33,6 +33,9 @@ private void OnLanguageChanged()
     _groupNavigationSettings.RefreshLocalization();
     _capsuleSettings.RefreshLocalization();
     RefreshWidgetGroupSettings();
+    // The Quick Capture editor re-localizes its option tables, summaries and
+    // the clipboard-diagnostics line (batch 46).
+    _quickCaptureSettingsEditor.RefreshLocalization();
 }
 
 
@@ -65,8 +68,6 @@ private void OnLanguageChanged()
             ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
             QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
 
-            ApplyContentEditorSettingsSnapshot(settings);
-
             // The file-stack section (including its custom-rule collection)
             // and the file-widget overview's folder-open combo live on their
             // section editors now: re-project from the coordinator snapshots
@@ -74,13 +75,11 @@ private void OnLanguageChanged()
             _fileStackSettings.SyncPresentation();
             _featureWidgetsSettings.SyncPresentation();
 
-            SyncQuickCaptureSettingsFacade();
-            SyncQuickCapturePresentationFacade();
-            SyncQuickCaptureRecentLimitFacade();
-            SyncQuickCaptureTextSizeFacade();
+            // The Quick Capture section's whole presentation lives on its
+            // editor (batch 46): re-project from the coordinator snapshots.
+            _quickCaptureSettingsEditor.SyncPresentation();
             SelectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
             ApplyPerformanceSettingsSnapshot(settings);
-            SyncQuickCaptureTabsFacade();
 
             _todoSettings.Refresh();
             SyncTodoTabFacade();
@@ -170,8 +169,6 @@ private void OnLanguageChanged()
         RefreshSelectionProperties(refreshLocalizedOptions: false);
         RefreshGlobalHotkeyState();
         OnPropertyChanged(nameof(WeatherCityNameVisibility));
-        OnPropertyChanged(nameof(QuickCaptureStatusText));
-        OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
         OnPropertyChanged(nameof(FeatureWidgetEntries));
         NotifyCapsuleOverridePropertiesChanged();
         RefreshQuickCaptureClipboardDiagnostics();
@@ -204,9 +201,6 @@ private void OnLanguageChanged()
         // the shell refreshes it through the editor push instead of shell
         // property notifications.
         NotifyDragDropPermissionPropertiesChanged();
-        OnPropertyChanged(nameof(QuickCaptureStatusText));
-        OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
-        OnPropertyChanged(nameof(QuickCaptureRecentLimitText));
         OnPropertyChanged(nameof(FeatureWidgetEntries));
         NotifyCapsuleOverridePropertiesChanged();
         // The group-navigation editor rebuilds its option tables itself; the
@@ -230,8 +224,6 @@ private void OnLanguageChanged()
             _fileStackSettings.RefreshLocalization();
             _featureWidgetsSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
-            _cachedQuickCaptureDefaultViewDisplayNames = null;
-            _cachedQuickCaptureTabStyleDisplayNames = null;
             _cachedTodoNewTaskPositionDisplayNames = null;
             _cachedAttachmentStorageModeDisplayNames = null;
             _cachedTodoDefaultFilterDisplayNames = null;
@@ -246,8 +238,6 @@ private void OnLanguageChanged()
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
-            OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewDisplayNames));
-            OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
             OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalDisplayNames));
@@ -269,21 +259,15 @@ private void OnLanguageChanged()
         OnPropertyChanged(nameof(SelectedLanguageText));
         NotifyHoverButtonActionPropertiesChanged();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
-        OnPropertyChanged(nameof(SelectedQuickCaptureDefaultViewText));
-        OnPropertyChanged(nameof(SelectedQuickCaptureTabStyleText));
         OnPropertyChanged(nameof(SelectedTodoNewTaskPositionText));
         OnPropertyChanged(nameof(SelectedTodoDefaultFilterText));
         OnPropertyChanged(nameof(SelectedTodoTabStyleText));
         OnPropertyChanged(nameof(SelectedTodoReminderOffsetMinutesText));
-        OnPropertyChanged(nameof(QuickCaptureLayoutSummaryText));
-        OnPropertyChanged(nameof(QuickCaptureTabStyleIndex));
-        RefreshQuickCaptureTabsPresentation();
-        RefreshQuickCaptureContentPresentation();
+        RefreshTodoTabsPresentation();
+        RefreshTodoContentPresentation();
         OnPropertyChanged(nameof(TodoLayoutSummaryText));
         OnPropertyChanged(nameof(TodoWideOptionsVisibility));
         OnPropertyChanged(nameof(TodoTabStyleIndex));
-        RefreshTodoTabsPresentation();
-        RefreshTodoContentPresentation();
         OnPropertyChanged(nameof(TodoReminderSummaryText));
         OnPropertyChanged(nameof(TodoFooterDisplaySummaryText));
         OnPropertyChanged(nameof(WeatherDisplayOptionsSummaryText));

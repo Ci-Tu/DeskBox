@@ -253,10 +253,10 @@ public sealed class SettingsService
     public const int DefaultTodoItemPreviewLineCount = 2;
     [Obsolete("Use the feature-specific preview line defaults.")]
     public const int DefaultItemPreviewLineCount = DefaultQuickCaptureItemPreviewLineCount;
-    public const int MinItemPreviewLineCount = 1;
-    public const int MaxItemPreviewLineCount = 10;
-    public const string EditorEnterBehaviorCtrlEnterSaves = "CtrlEnterSaves";
-    public const string EditorEnterBehaviorEnterSaves = "EnterSaves";
+    public const int MinItemPreviewLineCount = QuickCaptureOptionKinds.MinItemPreviewLineCount;
+    public const int MaxItemPreviewLineCount = QuickCaptureOptionKinds.MaxItemPreviewLineCount;
+    public const string EditorEnterBehaviorCtrlEnterSaves = QuickCaptureOptionKinds.EnterBehaviorCtrlEnterSaves;
+    public const string EditorEnterBehaviorEnterSaves = QuickCaptureOptionKinds.EnterBehaviorEnterSaves;
     public const string LanguageSystem = "System";
     public const string LanguageChinese = "zh-CN";
     public const string LanguageChineseTraditional = "zh-TW";
@@ -283,8 +283,8 @@ public sealed class SettingsService
     public const double MinIconSize = 24;
     public const double MaxIconSize = 56;
     public const double DefaultTextSize = 11.5;
-    public const double MinTextSize = 10;
-    public const double MaxTextSize = 16;
+    public const double MinTextSize = QuickCaptureOptionKinds.MinTextSize;
+    public const double MaxTextSize = QuickCaptureOptionKinds.MaxTextSize;
     public const double DefaultLayoutDensityScale = 0.56;
     public const double MinLayoutDensityScale = 0.0;
     public const double MaxLayoutDensityScale = 1.0;
@@ -324,18 +324,18 @@ public sealed class SettingsService
     public const int DefaultTodoReminderOffsetMinutes = 5;
     public const int MinTodoReminderOffsetMinutes = 0;
     public const int MaxTodoReminderOffsetMinutes = 1440;
-    public const string QuickCaptureDefaultViewRecords = "Records";
-    public const string QuickCaptureDefaultViewPinned = "Pinned";
-    public const string QuickCaptureDefaultViewRecent = "Recent";
-    public const string QuickCaptureFormatMarkdown = "Markdown";
-    public const string QuickCaptureFormatPlainText = "PlainText";
-    public const string QuickCaptureWideLayoutAuto = "Auto";
-    public const string QuickCaptureWideLayoutSinglePane = "SinglePane";
-    public const string QuickCaptureWideLayoutDualPane = "DualPane";
-    public const string QuickCaptureWideOpenReading = "Reading";
-    public const string QuickCaptureWideOpenEditing = "Editing";
-    public const string WidgetTabStylePivot = "Pivot";
-    public const string WidgetTabStyleButton = "Button";
+    public const string QuickCaptureDefaultViewRecords = QuickCaptureOptionKinds.DefaultViewRecords;
+    public const string QuickCaptureDefaultViewPinned = QuickCaptureOptionKinds.DefaultViewPinned;
+    public const string QuickCaptureDefaultViewRecent = QuickCaptureOptionKinds.DefaultViewRecent;
+    public const string QuickCaptureFormatMarkdown = QuickCaptureOptionKinds.FormatMarkdown;
+    public const string QuickCaptureFormatPlainText = QuickCaptureOptionKinds.FormatPlainText;
+    public const string QuickCaptureWideLayoutAuto = QuickCaptureOptionKinds.WideLayoutAuto;
+    public const string QuickCaptureWideLayoutSinglePane = QuickCaptureOptionKinds.WideLayoutSinglePane;
+    public const string QuickCaptureWideLayoutDualPane = QuickCaptureOptionKinds.WideLayoutDualPane;
+    public const string QuickCaptureWideOpenReading = QuickCaptureOptionKinds.WideOpenReading;
+    public const string QuickCaptureWideOpenEditing = QuickCaptureOptionKinds.WideOpenEditing;
+    public const string WidgetTabStylePivot = QuickCaptureOptionKinds.TabStylePivot;
+    public const string WidgetTabStyleButton = QuickCaptureOptionKinds.TabStyleButton;
 public const string WeatherTemperatureUnitCelsius = "Celsius";
 public const string WeatherTemperatureUnitFahrenheit = "Fahrenheit";
 public const string WeatherWindSpeedUnitKmh = "kmh";
@@ -3111,15 +3111,10 @@ settings.FocusClickedWidgetOnRaise = false;
     }
 
     public static int NormalizeItemPreviewLineCount(int lineCount) =>
-        Math.Clamp(lineCount, MinItemPreviewLineCount, MaxItemPreviewLineCount);
+        QuickCaptureOptionKinds.NormalizeItemPreviewLineCount(lineCount);
 
     public static string NormalizeEditorEnterBehavior(string? behavior) =>
-        string.Equals(
-            behavior,
-            EditorEnterBehaviorEnterSaves,
-            StringComparison.OrdinalIgnoreCase)
-            ? EditorEnterBehaviorEnterSaves
-            : EditorEnterBehaviorCtrlEnterSaves;
+        QuickCaptureOptionKinds.NormalizeEnterBehavior(behavior);
 
     public static bool ShouldSubmitEditorOnEnter(string? behavior, bool controlPressed) =>
         NormalizeEditorEnterBehavior(behavior) == EditorEnterBehaviorEnterSaves
@@ -3131,44 +3126,25 @@ settings.FocusClickedWidgetOnRaise = false;
             ? TodoNewTaskPositionBottom
             : TodoNewTaskPositionTop;
 
-    public static string NormalizeWidgetTabStyle(string? style)
-    {
-        return style == WidgetTabStylePivot
-            ? WidgetTabStylePivot
-            : WidgetTabStyleButton;
-    }
+    public static string NormalizeWidgetTabStyle(string? style) =>
+        QuickCaptureOptionKinds.NormalizeTabStyle(style);
 
     public static string NormalizeQuickCaptureFormat(string? format) =>
-        string.Equals(format, QuickCaptureFormatPlainText, StringComparison.OrdinalIgnoreCase)
-            ? QuickCaptureFormatPlainText
-            : QuickCaptureFormatMarkdown;
+        QuickCaptureOptionKinds.NormalizeFormat(format);
 
     public static TextContentFormat ResolveQuickCaptureEditorContentFormat(string? format) =>
         NormalizeQuickCaptureFormat(format) == QuickCaptureFormatPlainText
             ? TextContentFormat.PlainText
             : TextContentFormat.Markdown;
 
-    public static string NormalizeQuickCaptureWideLayout(string? layout)
-    {
-        if (string.Equals(layout, QuickCaptureWideLayoutSinglePane, StringComparison.OrdinalIgnoreCase))
-        {
-            return QuickCaptureWideLayoutSinglePane;
-        }
-
-        return string.Equals(layout, QuickCaptureWideLayoutDualPane, StringComparison.OrdinalIgnoreCase)
-            ? QuickCaptureWideLayoutDualPane
-            : QuickCaptureWideLayoutAuto;
-    }
+    public static string NormalizeQuickCaptureWideLayout(string? layout) =>
+        QuickCaptureOptionKinds.NormalizeWideLayout(layout);
 
     public static string NormalizeQuickCaptureWideOpenMode(string? mode) =>
-        string.Equals(mode, QuickCaptureWideOpenEditing, StringComparison.OrdinalIgnoreCase)
-            ? QuickCaptureWideOpenEditing
-            : QuickCaptureWideOpenReading;
+        QuickCaptureOptionKinds.NormalizeWideOpenMode(mode);
 
-    public static string NormalizeQuickCaptureDefaultView(string? view) => view is
-        QuickCaptureDefaultViewPinned or QuickCaptureDefaultViewRecent
-            ? view
-            : QuickCaptureDefaultViewRecords;
+    public static string NormalizeQuickCaptureDefaultView(string? view) =>
+        QuickCaptureOptionKinds.NormalizeDefaultView(view);
 
     public static bool IsQuickCaptureTabVisible(AppSettings settings, string? view) => view switch
     {

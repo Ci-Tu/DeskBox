@@ -641,7 +641,7 @@ public sealed class SettingsCopyAndHierarchyTests
             "x:Name=\"TodoSettingsSection\"",
             "x:Name=\"MusicSettingsSection\"");
 
-        Assert.Contains("IsOn=\"{Binding QuickCaptureEnabled, Mode=TwoWay}\"", quickCapture, StringComparison.Ordinal);
+        Assert.Contains("IsOn=\"{Binding Enabled, Mode=TwoWay}\"", quickCapture, StringComparison.Ordinal);
         Assert.Contains("IsOn=\"{Binding TodoEnabled, Mode=TwoWay}\"", todo, StringComparison.Ordinal);
         Assert.Equal(5, CountOccurrences(quickCapture, "Loaded=\"FeatureSettingsExpander_Loaded\""));
         Assert.Equal(5, CountOccurrences(todo, "Loaded=\"FeatureSettingsExpander_Loaded\""));
@@ -664,13 +664,13 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.Contains("Click=\"QuickCaptureTabsDropDown_Click\"", quickCapture, StringComparison.Ordinal);
         Assert.Contains("Click=\"TodoTabsDropDown_Click\"", todo, StringComparison.Ordinal);
         Assert.Contains("Click=\"TodoFooterDisplayDropDown_Click\"", todo, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{Binding VisibleQuickCaptureDefaultViewOptions}\"", quickCapture, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding VisibleDefaultViewOptions}\"", quickCapture, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding VisibleTodoDefaultFilterOptions}\"", todo, StringComparison.Ordinal);
 
-        Assert.DoesNotContain("IsOn=\"{Binding QuickCaptureShowRecordsTab", quickCapture, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsOn=\"{Binding ShowRecordsTab", quickCapture, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding TodoShowAllTab", todo, StringComparison.Ordinal);
         Assert.Contains(
-            "controls:SettingsComboBox.Value=\"{Binding QuickCaptureEditorFormat, Mode=TwoWay}\"",
+            "controls:SettingsComboBox.Value=\"{Binding EditorFormat, Mode=TwoWay}\"",
             quickCapture,
             StringComparison.Ordinal);
         Assert.DoesNotContain("QuickCaptureDefaultFormat", quickCapture, StringComparison.Ordinal);

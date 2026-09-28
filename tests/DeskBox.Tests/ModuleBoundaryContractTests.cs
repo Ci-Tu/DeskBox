@@ -253,7 +253,10 @@ public sealed class ModuleBoundaryContractTests
         {
             "src/DeskBox/Features/QuickCapture/QuickCaptureClipboardRuntime.cs",
             "src/DeskBox/Services/QuickCaptureSettingsCoordinator.cs",
-            "src/DeskBox/ViewModels/SettingsViewModel.QuickCaptureSettings.cs"
+            "src/DeskBox/ViewModels/SettingsViewModel.QuickCaptureSettings.cs",
+            // Batch 46: the enablement/recording switch chain (the old
+            // OnQuickCapture*Changed partials) lives on the section editor.
+            "src/DeskBox/Features/QuickCapture/QuickCaptureSettingsViewModel.cs"
         })
         {
             string source = ProductionSource().Single(item => item.Path == path).Source;
@@ -263,12 +266,7 @@ public sealed class ModuleBoundaryContractTests
 
         string callbacks = ProductionSource().Single(item =>
             item.Path == "src/DeskBox/ViewModels/SettingsViewModel.FeatureCallbacks.cs").Source;
-        string enablement = callbacks[callbacks.IndexOf("partial void OnQuickCaptureEnabledChanged", StringComparison.Ordinal)..
-            callbacks.IndexOf("partial void OnQuickCaptureShowTabBarChanged", StringComparison.Ordinal)];
-        string recording = callbacks[callbacks.IndexOf("partial void OnQuickCaptureClipboardEnabledChanged", StringComparison.Ordinal)..
-            callbacks.IndexOf("partial void OnQuickCaptureRecentLimitChanged", StringComparison.Ordinal)];
-        Assert.DoesNotContain("App.Current", enablement, StringComparison.Ordinal);
-        Assert.DoesNotContain("App.Current", recording, StringComparison.Ordinal);
+        Assert.DoesNotContain("partial void OnQuickCapture", callbacks, StringComparison.Ordinal);
     }
 
     [Fact]

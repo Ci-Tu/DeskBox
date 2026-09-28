@@ -56,6 +56,8 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     private readonly SettingsService _settingsService;
     private readonly ThemeService _themeService;
+    private readonly DeskBox.Contracts.IQuickCaptureSettings _quickCaptureSettings;
+    private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsEditor;
     private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettings;
     private readonly DeskBox.Features.Capsule.CapsuleSettingsViewModel _capsuleSettings;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettings;
@@ -92,21 +94,16 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private string _managedStorageRootPath = SettingsService.GetDefaultManagedStorageRootPath();
     private QuickAccessPinState _quickAccessPinState = QuickAccessPinState.Unknown;
     private bool _isQuickAccessBusy;
-    private string _quickCaptureImageCacheText = string.Empty;
-    private string _quickCaptureClipboardDiagnosticsText = string.Empty;
     private StartupRegistrationState _autoStartState =
         StartupRegistrationState.NotRegistered;
     private DragDropPermissionDiagnostic? _dragDropPermissionDiagnostic;
     private string _dragDropPermissionRepairStatusText = string.Empty;
     private bool _isDragDropPermissionRepairing;
-    private bool _canClearQuickCaptureImageCache;
     private bool _isRestoringDefaults;
     private bool _isApplyingSettingsSnapshot;
     private bool _isUpdatingHoverButtonActionSelection;
 
     private string[]? _cachedLanguageDisplayNames;
-    private string[]? _cachedQuickCaptureDefaultViewDisplayNames;
-    private string[]? _cachedQuickCaptureTabStyleDisplayNames;
     private string[]? _cachedTodoNewTaskPositionDisplayNames;
     private string[]? _cachedAttachmentStorageModeDisplayNames;
     private string[]? _cachedTodoDefaultFilterDisplayNames;
@@ -167,11 +164,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool IdleWorkingSetTrimEnabled { get; set; } = true;
     [ObservableProperty] public partial bool ImmediateHiddenWorkingSetTrimEnabled { get; set; }
     [ObservableProperty] public partial bool QuiescenceWorkingSetTrimEnabled { get; set; } = true;
-    [ObservableProperty] public partial bool QuickCaptureEnabled { get; set; }
-    [ObservableProperty] public partial bool QuickCaptureShowTabBar { get; set; } = true;
-    [ObservableProperty] public partial bool QuickCaptureShowRecordsTab { get; set; } = true;
-    [ObservableProperty] public partial bool QuickCaptureShowPinnedTab { get; set; } = true;
-    [ObservableProperty] public partial bool QuickCaptureShowRecentTab { get; set; } = true;
     [ObservableProperty] public partial bool TodoShowTabBar { get; set; } = true;
     [ObservableProperty] public partial bool TodoShowAllTab { get; set; } = true;
     [ObservableProperty] public partial bool TodoShowActiveTab { get; set; }
@@ -196,12 +188,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool WeatherShowWind { get; set; } = true;
     [ObservableProperty] public partial bool WeatherShowPressure { get; set; }
 
-    [ObservableProperty] public partial bool QuickCaptureClipboardEnabled { get; set; }
-    [ObservableProperty] public partial bool QuickCaptureImageClipboardEnabled { get; set; }
-    [ObservableProperty] public partial int QuickCaptureRecentLimit { get; set; } = QuickCaptureService.DefaultRecentLimit;
-    [ObservableProperty] public partial bool QuickCaptureShowCreatedTime { get; set; } = true;
-    [ObservableProperty] public partial double QuickCaptureListTextSize { get; set; } = SettingsService.DefaultTextSize;
-    [ObservableProperty] public partial double QuickCaptureContentTextSize { get; set; } = SettingsService.DefaultTextSize;
     [ObservableProperty] public partial double TodoListTextSize { get; set; } = SettingsService.DefaultTextSize;
     [ObservableProperty] public partial double TodoContentTextSize { get; set; } = SettingsService.DefaultTextSize;
     [ObservableProperty] public partial bool IsCheckingForUpdates { get; set; }
@@ -216,6 +202,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         DeskBox.Features.Todo.TodoSettingsViewModel todoSettings,
         DeskBox.Features.Backup.BackupSettingsViewModel backupSettings,
         DeskBox.Contracts.IQuickCaptureSettings quickCaptureSettings,
+        DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel quickCaptureSettingsEditor,
         DeskBox.Contracts.ISearchFeatureSettings searchFeatureSettings,
         DeskBox.Features.Appearance.AppearanceSettingsViewModel appearanceSettings,
         DeskBox.Features.Capsule.CapsuleSettingsViewModel capsuleSettings,
@@ -236,6 +223,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _backupSettings = backupSettings;
         _backupSettings.PropertyChanged += OnBackupSettingsPropertyChanged;
         _quickCaptureSettings = quickCaptureSettings;
+        _quickCaptureSettingsEditor = quickCaptureSettingsEditor;
         _searchFeatureSettings = searchFeatureSettings;
         _appearanceSettings = appearanceSettings;
         _capsuleSettings = capsuleSettings;
@@ -252,8 +240,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _widgetContentFactory = new WidgetContentFactory(_localizationService);
         _appUpdateService = appUpdateService ?? new AppUpdateService();
         _isRestoringDefaults = true;
-        _quickCaptureImageCacheText = _localizationService.T("Settings.QuickCapture.ImageCacheLoading");
-        _quickCaptureClipboardDiagnosticsText = _localizationService.T("Settings.QuickCapture.ClipboardDiagnosticsUnavailable");
         _dragDropPermissionRepairStatusText = string.Empty;
         UpdateStatusText = _localizationService.T("Settings.Update.Status.Ready");
         UpdateDetailText = GetReadyUpdateDetailText();
@@ -279,7 +265,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         // section is entered.
         _fileStackPreviewEntries = BuildFileStackPreviewEntries(includeMappedFolders: false);
         _fileStackSettings.UpdatePreviewEntries(_fileStackPreviewEntries);
-        InitializeContentEditorSettings(settings);
         InitializePerformanceSettings(settings);
         // The capsule family's presentation lives on the capsule editor now
         // (batch 44); its constructor syncs itself from the coordinator
@@ -288,12 +273,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
         ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
         QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
-        SyncQuickCaptureSettingsFacade();
-        SyncQuickCapturePresentationFacade();
-        SyncQuickCaptureRecentLimitFacade();
-        SyncQuickCaptureTextSizeFacade();
         _selectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
-        SyncQuickCaptureTabsFacade();
         SyncTodoTabFacade();
         SyncTodoDisplayFacade();
         SyncTodoTextSizeFacade();
@@ -343,7 +323,14 @@ _ = RefreshQuickAccessStateAsync();
         _searchFeatureSettings.FeatureChanged += OnSearchFeatureChanged;
         _themeService.AppearanceChanged += OnAppearanceChanged;
         _localizationService.LanguageChanged += OnLanguageChanged;
-        RefreshQuickCaptureClipboardDiagnostics();
+
+        // Quick Capture-section host linkages: the editor owns the section's
+        // binding surface (its constructor syncs itself from the coordinator
+        // snapshots); the shell answers text-size commits with the shared
+        // appearance save pass (preview + debounced persistence, incl. the
+        // slider-drag suppression flags).
+        _quickCaptureSettingsEditor.ListTextSizeCommitted += OnQuickCaptureListTextSizeCommitted;
+        _quickCaptureSettingsEditor.ContentTextSizeCommitted += OnQuickCaptureContentTextSizeCommitted;
 
         // Interaction-section host linkages: the editor owns the section's
         // binding surface and persisted writes, the shell still owns the
@@ -461,36 +448,6 @@ _ = RefreshQuickAccessStateAsync();
         return string.Format(CultureInfo.CurrentCulture, 
             $"{value:0.#} {units[unitIndex]}", 
             CultureInfo.CurrentCulture);
-    }
-
-    private void ApplyQuickCaptureRecentLimitInput(string? value)
-    {
-        if (!TryParseNumberInput(value, out double parsedValue))
-        {
-            OnPropertyChanged(nameof(QuickCaptureRecentLimitInput));
-            return;
-        }
-
-        int normalizedValue = QuickCaptureService.NormalizeRecentLimit((int)Math.Round(parsedValue, MidpointRounding.AwayFromZero));
-        if (normalizedValue != QuickCaptureRecentLimit)
-        {
-            QuickCaptureRecentLimit = normalizedValue;
-        }
-
-        OnPropertyChanged(nameof(QuickCaptureRecentLimitInput));
-    }
-
-    private static bool TryParseNumberInput(string? value, out double result)
-    {
-        result = 0;
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
-
-        string trimmed = value.Trim();
-        return double.TryParse(trimmed, NumberStyles.Float, CultureInfo.CurrentCulture, out result) ||
-               double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out result);
     }
 
     private void SaveAppearanceChange()
