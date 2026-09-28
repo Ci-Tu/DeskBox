@@ -1306,6 +1306,35 @@ Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门�
 
 **门面退役二阶段（批 40-50）就此收官**：设置页 34 个节模板全部按节归属 DataContext（26 个节+两 General 跨域组合框经节级/元素级/类型化 DP 绑 16 个编辑器），壳 ViewModels 从 33 partial/11,495 行到 23 partial/3,941 行；留壳面全部为宿主生命线并在终态对账表注明理由。批 29 清点的 115 个平铺写入点+批 39 登记的 11 处 lambda 漏网族全部归零，设置页新增设置字段的唯一合法入口是各节协调器合同端口。
 
+## 第五十一批：AppSettings 门面 schema 等价收窄（消费者全量清点 + 三档裁决 + 棘轮对账收紧）
+
+实施基线：`fb51304d`（main，含批 40-50），worktree `codex/final2-appsettings-narrow`。对象是"完全拆完"计划最后一个结构项：2A 切片时代留下的 `AppSettings` 门面（`SchemaVersion` + 13 个 `[JsonIgnore]` 切片引用 + 220 个透传属性，共 234 个属性）。硬约束不变：磁盘 schema 字节级等价（`SettingsSliceContractBaselineTests` 预切默认值逐属性钉固 + JSON 成员顺序钉固 + 往返字节等价契约必须原样全绿）。
+
+### 清点：220 个透传的真实消费者分布
+
+清点口径与 `SettingsSliceOwnershipContractTests.FacadePassthroughAccess` 同一正则（大小写不敏感 `settings.<透传名>`，字母后视断言排除 `WidgetSettings.` 等假阳性），扫描范围 src/DeskBox 全部 .cs（排除 bin/obj/AppPackages）+ tests + 全部 XAML。结果：
+
+- **生产侧 129 文件 / 1,786 处访问**，分布（独占归类）：SettingsService 序列化根（加载/保存/归一化/默认值/还原保全映射）594/1 文件；其余 Services（策略/协调器/运行时）357/37 文件；widget ViewModels 179/19 文件；窗口/控件 code-behind 168/30 文件；WidgetManager 布局/表面链 201/7 文件；设置壳 SettingsViewModel*/SettingsWindow/SettingsSections 残面（读投影/同步快照/宿主生命线）97/13 文件；App 宿主/托盘/onboarding 85/12 文件；AOT 冒烟烟囱 App.Aot* 70/9 文件；SettingsMigrationService schema 迁移管线 35/1 文件。
+- **XAML 零直接消费**：SettingsWindow.xaml 等 XAML 里匹配到的 `Settings.X` 全部是本地化资源键字符串（`svc:Localized.HeaderKey="Settings.AutoStart.Title"` 式），`{Binding X}` 路径绑的是设置壳/编辑器 ViewModel 属性而非 AppSettings；`WidgetStyleBackupProjection` 与 `DeskBoxDataBackupService` 走 raw JsonNode/settings.json 文件名，不经门面。
+- **220 个透传中 207 个有生产访问**；**13 个零访问形**：CloudBackup 族 12 个 + QuiescenceWorkingSetTrimEnabled——但它们全部经切片路径消费（`Settings.CloudBackup.X`、`Settings.Performance.Quiescence…`），且 CloudBackup 族 10 个还是 SettingsService 还原默认值保全映射的 `nameof(AppSettings.X)` 键（编译级消费）。
+
+### 三档裁决（逐档证据）
+
+- **a 档（零引用透传，真删）**：**空集**。220 个透传全部是冻结磁盘 schema 的序列化成员（`SerializedMemberOrder_MatchesPreSliceDeclarationOrder` 钉固全部 221 个线成员：schemaVersion + 220 个 camelCase 名，`LegacyWidgetCapsuleModeEnabled` 以其 JsonPropertyName `widgetCapsuleModeEnabled` 在列）——删任何一个都是从每次落盘的 settings.json 里丢字段，直接违反硬约束；且 `EverySliceProperty_IsReachableThroughTheFacade` 要求切片属性与门面同名 1:1 对齐，切片属性在则门面透传必须在。
+- **b 档（仅序列化需要，评估"切片成员直接序列化"）**：**评估后放弃该路线，220 个全部保留并注明**。等价不可证的三重证据：①221 个线成员的平铺顺序跨全部 13 个切片交错（Core 7 个→Performance 14 个→Core 2 个→QuickCapture/Todo/WidgetLayout→QuickCapture 17 个→Todo 21 个→Music 3 个→QuickCapture 1 个→Core 8 个→WidgetShell/FileWidget 交替……），System.Text.Json source-gen 按序列化类型声明序出成员，切片要么嵌套对象（形状改变，非字节等价）要么自定义 converter 重放整个 writer（camelCase/字符串枚举/WriteIndented/WhenWritingNull 全量重实现、绕过 source-gen 元数据）——高风险零用户价值；②线级特性纠缠在门面上：`LegacyWidgetCapsuleModeEnabled` 携带 `[JsonPropertyName("widgetCapsuleModeEnabled")] + [JsonIgnore(Condition = WhenWritingNull)]`（迁移期旧键名+空值省略语义必须原样保真）；③生成器产出的基线测试直接读门面属性（223 处 `s.X`），"原样绿"要求测试文件不改不重编即绿，删除即编译失败。裁决落款：AppSettings 类头 remarks 注明"220 个透传=冻结线契约，增删都是磁盘 schema 变更、必须走 schema 版本化迁移"。
+- **c 档（有活消费者的）**：207 个透传的消费面（1,786 处/129 文件）经批 29-50 全部裁决过（设置页写入已归零；剩余=序列化根/迁移管线/壳读投影/同步快照/WidgetManager 存储链/AOT 烟囱/宿主生命线）。因 b 档已裁决透传不可删，单纯迁移读取点不缩门面（0 收益）只添回归面——本批不做消费者迁移。**实际收窄动作改为棘轮对账收紧**：`FacadeAccessManifest` 的 133 条预算按当前树重测，12 条陈旧余量全部收回（合计 268 单位：SettingsService 605→594、SettingsSync 133→6、SettingsViewModel.cs 94→14、Collapse 35→28、App.xaml.cs 31→28、WidgetManager.Groups 57→55、FileStackOptions 22→1、GroupNavigation 20→15），4 文件归零失条（QuickCaptureClipboardActivationHelper、SettingsViewModel.DisplayNames/PreferenceCommands/WidgetForeground）——此后任何新增门面访问立即红灯（此前 SettingsViewModel.cs 单文件就有 80 单位静默余量）。
+- **新增守卫**：`AppSettingsFacadeNarrowingContractTests` 4 用例——透传数钉固 220（增长=无迁移加字段、缩减=丢字段，双向都须有意为之并同步基线钉）；门面≡schema（序列化成员集恰为 schemaVersion+220 线名，证明无游离于线外的死透传、无无主线成员）；13 个切片访问器永不序列化（[JsonIgnore] get-only + 成员集缺席）；线级特性冻结在门面（唯一 JsonPropertyName+WhenWritingNull 对，且必须是 widgetCapsuleModeEnabled）。
+
+**对账结论**：门面属性数 234→234（220 透传全保留）；a 档 0、b 档 220（全部注明）、c 档 0 迁移（消费面经棘轮收紧代偿）。门面在本批从"待消解的 god façade"正式定性为"冻结的磁盘线契约"——2A 的"透传归零"目标在 schema 冻结约束下的终态就是：透传不再随触碰迁移消减，而是等未来一次 schema 版本化迁移（届时切片直序列化+顺序重排可一次性带版本号落地）整体取代。
+
+### 第五十一批验证记录
+
+- 本批运行时代码零改动（AppSettings.cs 仅增 remarks 注释，git diff 证全为文档）；restore Updater 后 `dotnet build src/DeskBox/DeskBox.csproj -p:Platform=x64`：**0 错误**、22 警告（存量位，与批 50 同数）；canonical 非平台 Debug（启动用）0 错误、22 警告。
+- 全量 x64 测试 `dotnet test ./tests/DeskBox.Tests/DeskBox.Tests.csproj --no-restore --verbosity:minimal -p:Platform=x64`：**4,487/4,487 通过**（批 50 基线 4,483 + 本批新增 `AppSettingsFacadeNarrowingContractTests` 4 用例）；**字节等价契约测试原样全绿未改动**（SettingsSliceContractBaselineTests 两用例 + SettingsSliceOwnershipContractTests 往返字节等价用例逐字未动；唯一触碰是 FacadeAccessManifest 预算收紧与清单头注记）。
+- AOT 定义编译检查（x64、`DefineConstants=TRACE;DEBUG;DESKBOX_NATIVE_AOT` 以 `%3B` 内码传递、`-getProperty:DefineConstants` 确认生效，`ArtifactsPath`/`RestorePackagesPath` 绝对路径隔离于 `.aotcheck/`，DeskBox 与 Updater 均随隔离 restore、`-t:Rebuild` 全量，隔离产物含 DeskBox.exe/DeskBox.Updater.exe/DeskBox.ThumbnailProxy.exe，检查后已清理）：**0 错误**、22 警告（码集与批 41-50 同位）。
+- 隔离 Debug 启动：数据根 `C:/Users/simon/AppData/Local/DeskBox-Dev/appsettings-narrow-51-022350`（DESKBOX_DEV_DATA_ROOT）预置 59 个非默认值覆盖全部 12 个内容切片组+legacy 键（Core 9/Performance 9/QuickCapture 4/Todo 3/Music 1/WidgetShell 8/FileWidget 4/Backup 3/DesktopOrganization 1/Weather 6/Search 4/CloudBackup 5/legacy 1）。canonical 路径启动 PID 7256，启动管线 **35 步（5 critical）、0 degraded、0 failed**；停机后磁盘 **59 个预置字段中 58 个逐字段原值保持**（schemaVersion 与全部内容值零漂移）。仅有的两处非保持均为既有按设计行为、与本批无关：①`widgetCapsuleModeEnabled=true` 被加载归一化消费（SettingsService.cs:1658-1674 迁移期旧键折叠进 widgetCollapseBehavior 后清空，WhenWritingNull 随之省略——本批 AppSettings 零运行时改动，main 同行为）；②11 个布局键（widgets/widgetGroups/…/featureWidgetEnabledStates）由 2B-3 领养剥离至 widget-layout.json（终态 settings.json 209 成员=221-11 布局键-1 已消费 legacy 键）。探针后已按路径停止本 worktree 实例（主检出 D:\project\wingezi 实例未触碰），数据根已清理。
+- `git diff --check` 通过。
+
 
 
 # 架构优化进度与下一批计划
