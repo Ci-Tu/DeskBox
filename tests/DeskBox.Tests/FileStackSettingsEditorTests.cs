@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using DeskBox.Contracts;
 using DeskBox.Features.FeatureWidgets;
 using DeskBox.Features.FileStack;
@@ -570,6 +570,6 @@ public sealed class FileStackSettingsEditorTests : IDisposable
         Assert.Contains("nameof(StacksEnabled)", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(AvailableOpenModeOptions)", bridge, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(CustomRules)", bridge, StringComparison.Ordinal);
-        Assert.Equal(112, Regex.Matches(bindableShell, @"nameof\(").Count);
+        Assert.Equal(89, Regex.Matches(bindableShell, @"nameof\(").Count);
     }
 }

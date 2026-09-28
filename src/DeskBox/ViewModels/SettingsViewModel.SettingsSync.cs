@@ -35,9 +35,14 @@ private void OnLanguageChanged()
     RefreshWidgetGroupSettings();
     // The Quick Capture editor re-localizes its option tables, summaries and
     // the clipboard-diagnostics line (batch 46); the Todo editor rebuilds
-    // its option tables, summaries and tab texts (batch 47).
+    // its option tables, summaries and tab texts (batch 47); the Weather
+    // editor rebuilds its option tables, summary, placeholder and no-results
+    // text, and its suggestion list is dropped so the popular cities
+    // repopulate in the new language (batch 48).
     _quickCaptureSettingsEditor.RefreshLocalization();
     _todoSettings.RefreshLocalization();
+    _weatherSettings.RefreshLocalization();
+    _weatherSettings.ClearCitySuggestions();
 }
 
 
@@ -84,8 +89,11 @@ private void OnLanguageChanged()
             ApplyPerformanceSettingsSnapshot(settings);
 
             // The Todo section's whole presentation lives on its editor
-            // (batch 47): re-project from the coordinator snapshots.
+            // (batch 47); the Weather section's whole presentation lives on
+            // its editor (batch 48): re-project from the coordinator
+            // snapshots instead of assigning shell facade properties.
             _todoSettings.Refresh();
+            _weatherSettings.Refresh();
 
             // Appearance presentation (material, density, window chrome, animation,
             // foreground, tray icon style) lives on the appearance editor now;
@@ -118,43 +126,16 @@ private void OnLanguageChanged()
             _interactionSettings.SyncPresentation();
             _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
 
-            // File-display and managed-storage presentation live on their
-            // section editors now: refresh the editor projections instead of
-            // assigning shell facade properties. The root-path working state
-            // below still feeds the shell's picker / migration /
-            // quick-access chains.
+            // The file-display and managed-storage section presentation
+            // (batch 48 note: the weather snapshot block that used to live
+            // here moved into the weather editor's Refresh above), the
+            // file-display and managed-storage editors' presentation live on
+            // their section editors now: refresh the editor projections
+            // instead of assigning shell facade properties. The root-path
+            // working state below still feeds the shell's picker /
+            // migration / quick-access chains.
             _fileDisplaySettings.SyncPresentation();
             _managedStorageSettings.SyncPresentation();
-
-            WeatherAutoLocation = settings.WeatherAutoLocation;
-            WeatherCityName = settings.WeatherCityName;
-            WeatherCitySearchText = settings.WeatherCityName;
-            SelectedWeatherTemperatureUnit = settings.WeatherTemperatureUnit == SettingsService.WeatherTemperatureUnitFahrenheit
-                ? SettingsService.WeatherTemperatureUnitFahrenheit
-                : SettingsService.WeatherTemperatureUnitCelsius;
-            SelectedWeatherWindSpeedUnit = settings.WeatherWindSpeedUnit is SettingsService.WeatherWindSpeedUnitMs or SettingsService.WeatherWindSpeedUnitMph
-                ? settings.WeatherWindSpeedUnit
-                : SettingsService.WeatherWindSpeedUnitKmh;
-            SelectedWeatherDefaultView = settings.WeatherDefaultView == SettingsService.WeatherDefaultViewWeek
-                ? SettingsService.WeatherDefaultViewWeek
-                : SettingsService.WeatherDefaultViewToday;
-            SelectedWeatherSkin = settings.WeatherSkin == SettingsService.WeatherSkinRich
-                ? SettingsService.WeatherSkinRich
-                : SettingsService.WeatherSkinStandard;
-            SelectedWeatherDataSource = settings.WeatherDataSource == SettingsService.WeatherDataSourceOpenMeteo
-                ? SettingsService.WeatherDataSourceOpenMeteo
-                : SettingsService.WeatherDataSourceMsn;
-            WeatherShowForecast = settings.WeatherShowForecast;
-            WeatherShowSunrise = settings.WeatherShowSunrise;
-            WeatherShowUvIndex = settings.WeatherShowUvIndex;
-            WeatherShowPrecipitation = settings.WeatherShowPrecipitation;
-            WeatherShowHumidity = settings.WeatherShowHumidity;
-            WeatherShowWind = settings.WeatherShowWind;
-            WeatherShowPressure = settings.WeatherShowPressure;
-            SelectedWeatherRefreshInterval = Math.Clamp(
-                settings.WeatherRefreshIntervalMinutes,
-                SettingsService.WeatherRefreshMinMinutes,
-                SettingsService.WeatherRefreshMaxMinutes);
 
             ManagedStorageRootPath = SettingsService.NormalizeManagedStorageRootPath(settings.DefaultManagedStorageRootPath);
             _backupSettings.RefreshState();
@@ -167,7 +148,6 @@ private void OnLanguageChanged()
 
         RefreshSelectionProperties(refreshLocalizedOptions: false);
         RefreshGlobalHotkeyState();
-        OnPropertyChanged(nameof(WeatherCityNameVisibility));
         OnPropertyChanged(nameof(FeatureWidgetEntries));
         NotifyCapsuleOverridePropertiesChanged();
         RefreshQuickCaptureClipboardDiagnostics();
@@ -205,9 +185,6 @@ private void OnLanguageChanged()
         // The group-navigation editor rebuilds its option tables itself; the
         // existing-groups projection rebuild follows.
         RefreshWidgetGroupSettings();
-        OnPropertyChanged(nameof(WeatherCitySearchPlaceholder));
-        OnPropertyChanged(nameof(WeatherCityNoResultsText));
-        RefreshWeatherCityPopularCities();
         RefreshQuickCaptureClipboardDiagnostics();
     }
 
@@ -224,22 +201,12 @@ private void OnLanguageChanged()
             _featureWidgetsSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
             _cachedAttachmentStorageModeDisplayNames = null;
-            _cachedWeatherTempUnitDisplayNames = null;
-            _cachedWeatherWindUnitDisplayNames = null;
-            _cachedWeatherDefaultViewDisplayNames = null;
-            _cachedWeatherSkinDisplayNames = null;
-            _cachedWeatherRefreshIntervalDisplayNames = null;
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
             OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalDisplayNames));
             OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionDisplayNames));
-            OnPropertyChanged(nameof(AvailableWeatherTemperatureUnitDisplayNames));
-            OnPropertyChanged(nameof(AvailableWeatherWindSpeedUnitDisplayNames));
-            OnPropertyChanged(nameof(AvailableWeatherDefaultViewDisplayNames));
-            OnPropertyChanged(nameof(AvailableWeatherSkinDisplayNames));
-            OnPropertyChanged(nameof(AvailableWeatherRefreshIntervalDisplayNames));
             NotifySelectionOptionsChanged();
         }
 
@@ -248,6 +215,5 @@ private void OnLanguageChanged()
         OnPropertyChanged(nameof(SelectedLanguageText));
         NotifyHoverButtonActionPropertiesChanged();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
-        OnPropertyChanged(nameof(WeatherDisplayOptionsSummaryText));
     }
 }

@@ -41,10 +41,41 @@ public sealed record MusicPresentationSettings(
     bool EnableCoverHoverMotion,
     string DisplayMode);
 
+/// <summary>
+/// Immutable read snapshot of the weather presentation preferences, mirroring
+/// the music read-port shape. The weather settings editor binds its XAML
+/// surface to a projection of this snapshot (values arrive normalized with
+/// the old shell-constructor semantics); external refresh paths re-read it.
+/// </summary>
+public sealed record WeatherPresentationSettings(
+    bool AutoLocation,
+    string CityName,
+    string TemperatureUnit,
+    string WindSpeedUnit,
+    string DefaultView,
+    string Skin,
+    string DataSource,
+    int RefreshIntervalMinutes,
+    bool ShowForecast,
+    bool ShowSunrise,
+    bool ShowUvIndex,
+    bool ShowPrecipitation,
+    bool ShowHumidity,
+    bool ShowWind,
+    bool ShowPressure);
+
 public interface IFeatureWidgetsSettings
 {
     /// <summary>Reads the current music presentation snapshot (raw stored values).</summary>
     MusicPresentationSettings ReadMusicPresentation();
+
+    /// <summary>
+    /// Reads the current weather presentation snapshot, normalized with the
+    /// old shell-constructor read semantics (units/view/skin/data source fall
+    /// back to their defaults on unknown values, the refresh interval is
+    /// clamped to its bounds).
+    /// </summary>
+    WeatherPresentationSettings ReadWeatherPresentation();
 
     /// <summary>
     /// Writes one feature card's persisted enable state (Music / Weather /

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using DeskBox.Contracts;
 using DeskBox.Features.QuickCapture;
 using DeskBox.Models;
@@ -510,6 +510,6 @@ public sealed class QuickCaptureSettingsEditorTests : IDisposable
         Assert.Contains("nameof(ImageClipboardEnabled)", bridge, StringComparison.Ordinal);
         Assert.Equal(35, Regex.Matches(bridge, @"nameof\(").Count);
         Assert.DoesNotContain("nameof(ShowRecordsTab)", bridge, StringComparison.Ordinal);
-        Assert.Equal(112, Regex.Matches(bindableShell, @"nameof\(").Count);
+        Assert.Equal(89, Regex.Matches(bindableShell, @"nameof\(").Count);
     }
 }

@@ -2926,6 +2926,11 @@ public partial class App : Application
                 LocalizationService.T,
                 (key, args) => LocalizationService.Format(key, args),
                 ex => Log($"[TodoSettings] Update failed: {ex}")),
+            new DeskBox.Features.Weather.WeatherSettingsViewModel(
+                _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized."),
+                LocalizationService.T,
+                (key, args) => LocalizationService.Format(key, args),
+                ex => Log($"[WeatherSettings] Update failed: {ex}")),
             new SearchSettingsViewModel(
                 _searchSettings ?? throw new InvalidOperationException("Search settings are not initialized."),
                 action => UiDispatcherQueue.TryEnqueue(() => action()),

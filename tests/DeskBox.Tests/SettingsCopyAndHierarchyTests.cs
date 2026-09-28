@@ -133,7 +133,7 @@ public sealed class SettingsCopyAndHierarchyTests
 
         Assert.Contains("{Binding FileOpenMethod, Mode=TwoWay}", windowXaml, StringComparison.Ordinal);
         Assert.Contains("{Binding ShowDesktopBehavior, Mode=TwoWay}", windowXaml, StringComparison.Ordinal);
-        Assert.Contains("SelectedWeatherLocationMode", windowXaml, StringComparison.Ordinal);
+        Assert.Contains("SelectedLocationMode", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding DoubleClickToOpen", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding KeepWidgetsVisibleOnShowDesktop", windowXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding WeatherAutoLocation", windowXaml, StringComparison.Ordinal);
@@ -509,12 +509,12 @@ public sealed class SettingsCopyAndHierarchyTests
             "x:Name=\"GeneralSection\"");
 
         Assert.Contains("Click=\"WeatherDisplayOptionsDropDown_Click\"", weather, StringComparison.Ordinal);
-        Assert.Contains("Content=\"{Binding WeatherDisplayOptionsSummaryText}\"", weather, StringComparison.Ordinal);
+        Assert.Contains("Content=\"{Binding DisplayOptionsSummaryText}\"", weather, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(weather, "Settings.Weather.Group.Display.Title"));
         Assert.DoesNotContain("IsOn=\"{Binding WeatherShowForecast", weather, StringComparison.Ordinal);
         Assert.DoesNotContain("IsOn=\"{Binding WeatherShowPressure", weather, StringComparison.Ordinal);
         Assert.Contains("SettingsMultiSelectMenu.Show(", navigation, StringComparison.Ordinal);
-        Assert.Contains("ViewModel.AvailableWeatherDisplayOptions", navigation, StringComparison.Ordinal);
+        Assert.Contains("weatherSettings.AvailableDisplayOptions", navigation, StringComparison.Ordinal);
     }
 
     [Fact]

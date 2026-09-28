@@ -133,6 +133,18 @@ public sealed partial class SettingsWindow
             section.DataContext = _todoSettingsViewModel;
         }
 
+        // The Weather section binds through the Weather editor (batch 48):
+        // {Binding} markup resolves through its generated custom property
+        // provider under Native AOT. The city-search state machine (the
+        // search service, the Windows location lookup, the debounced
+        // cancellation) stays on the shell and pushes the suggestion list
+        // and the location status into the editor; the editor answers
+        // user location-mode edits with the AutoLocationUserChanged event.
+        if (sectionTag == "WeatherSettings")
+        {
+            section.DataContext = _weatherSettingsViewModel;
+        }
+
         // The file-stack section binds through the file-stack editor
         // (batch 45): {Binding} markup resolves through its generated custom
         // property provider under Native AOT, and the template's compiled

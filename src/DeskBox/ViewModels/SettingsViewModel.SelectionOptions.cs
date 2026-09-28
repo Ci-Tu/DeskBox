@@ -11,24 +11,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions =>
         CreateSelectionOptions(AvailableAttachmentStorageModes, AvailableAttachmentStorageModeDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableWeatherTemperatureUnitOptions =>
-        CreateSelectionOptions(AvailableWeatherTemperatureUnits, AvailableWeatherTemperatureUnitDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWeatherWindSpeedUnitOptions =>
-        CreateSelectionOptions(AvailableWeatherWindSpeedUnits, AvailableWeatherWindSpeedUnitDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWeatherDefaultViewOptions =>
-        CreateSelectionOptions(AvailableWeatherDefaultViews, AvailableWeatherDefaultViewDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWeatherSkinOptions =>
-        CreateSelectionOptions(AvailableWeatherSkins, AvailableWeatherSkinDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWeatherDataSourceOptions =>
-        CreateSelectionOptions(AvailableWeatherDataSources, AvailableWeatherDataSourceDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWeatherRefreshIntervalOptions =>
-        CreateSelectionOptions(AvailableWeatherRefreshIntervals, AvailableWeatherRefreshIntervalDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableAutomaticBackupIntervalOptions =>
         CreateSelectionOptions(
             AvailableAutomaticBackupIntervals,
@@ -68,15 +50,8 @@ public partial class SettingsViewModel
 
     private void NotifySelectionOptionsChanged()
     {
-        OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
         OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
-        OnPropertyChanged(nameof(AvailableWeatherTemperatureUnitOptions));
-        OnPropertyChanged(nameof(AvailableWeatherWindSpeedUnitOptions));
-        OnPropertyChanged(nameof(AvailableWeatherDefaultViewOptions));
-        OnPropertyChanged(nameof(AvailableWeatherSkinOptions));
-        OnPropertyChanged(nameof(AvailableWeatherDataSourceOptions));
-        OnPropertyChanged(nameof(AvailableWeatherRefreshIntervalOptions));
         OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalOptions));
         OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionOptions));
     }

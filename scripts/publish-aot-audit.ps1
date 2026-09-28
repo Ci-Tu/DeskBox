@@ -3484,7 +3484,9 @@ $stage5B4B1SourceFiles = @(
     "src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs",
     "src/DeskBox/ViewModels/SettingsViewModel.FeatureOptions.cs",
     "src/DeskBox/ViewModels/SettingsViewModel.SelectionOptions.cs",
-    "src/DeskBox/ViewModels/SettingsViewModel.WeatherOptions.cs",
+    # Batch 48 moved the weather section's binding surface (incl. the city
+    # search suggestion projection) onto the section editor.
+    "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs",
     "src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs",
     # Deferred-section host owns the lazy typed-ViewModel bridges that used to
     # live eagerly in SettingsWindow.xaml.cs.
@@ -3645,7 +3647,7 @@ $stage5B4B1MissingBindableTypePatterns = @(
         }
     }
 )
-$stage5B4B1ExpectedBindableViewModelPropertyCount = 112
+$stage5B4B1ExpectedBindableViewModelPropertyCount = 89
 $stage5B4B1ActualBindableViewModelPropertyCount = [regex]::Matches(
     $stage5B4B1Sources[$stage5B4B1SourceFiles[9]],
     [regex]::Escape('nameof(')).Count
@@ -3763,21 +3765,20 @@ $stage5B4B1RequiredWeatherProjectionPatterns = @(
     [ordered]@{
         file = $stage5B4B1SourceFiles[20]
         patterns = @(
-            'ObservableCollection<WeatherCitySearchResult> WeatherCitySuggestions',
-            'public object[] WeatherCitySuggestionItems',
-            'WeatherCitySuggestions.Cast<object>().ToArray()',
-            'RefreshWeatherCitySuggestionItems()',
-            'WeatherCitySuggestions.Add(')
+            '_citySuggestions.Cast<object>().ToArray()',
+            'public object[] CitySuggestionItems',
+            'SetCitySuggestions(',
+            'SelectCity(_citySuggestions[0])')
     },
     [ordered]@{
         file = $stage5B4B1SourceFiles[21]
         patterns = @(
-            'WeatherCitySuggestions[0]')
+            '_weatherSettingsViewModel.TrySelectFirstCitySuggestion()')
     },
     [ordered]@{
         file = $stage5B4B1SourceFiles[8]
         patterns = @(
-            'ItemsSource="{Binding WeatherCitySuggestionItems}"')
+            'ItemsSource="{Binding CitySuggestionItems}"')
     }
 )
 $stage5B4B1MissingWeatherProjectionPatterns = @(
@@ -3879,7 +3880,7 @@ $stage5B4B1SourceWarningMessages = @(
         Where-Object {
             $line = $_
             $warningCodeRegex.IsMatch($line) -and
-                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions|WeatherOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
+                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|Features\.Weather\.WeatherSettingsViewModel|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
         } |
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique

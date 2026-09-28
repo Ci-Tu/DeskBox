@@ -321,7 +321,10 @@ public sealed class SettingsSliceOwnershipContractTests
         // only the city-name restore read remains; ContentEditorOptions
         // 24->10, only the constructor/snapshot reads remain; batch 47 then
         // deleted ContentEditorOptions/FeatureTextSize whole when the Todo
-        // section moved to its editor, and both lost their entries).
+        // section moved to its editor, and both lost their entries; batch 48
+        // deleted WeatherOptions whole when the Weather section moved to its
+        // editor — the city-name restore read went with the editor's
+        // coordinator read port).
         // FeatureOptions
         // 68->2: both remaining matches are localization-key string literals
         // ("Settings.AttachmentStorageMode.Copy"/".Link"), not facade
@@ -347,7 +350,6 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/ViewModels/SettingsViewModel.PreferenceCommands.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.RuntimeDiagnostics.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 133,
-        ["src/DeskBox/ViewModels/SettingsViewModel.WeatherOptions.cs"] = 1,
         ["src/DeskBox/ViewModels/SettingsViewModel.WidgetForeground.cs"] = 4,
         ["src/DeskBox/ViewModels/SettingsViewModel.cs"] = 94,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.DetailAndAttachments.cs"] = 1,

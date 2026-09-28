@@ -139,6 +139,7 @@ public sealed partial class SettingsWindow : Window
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
     private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsViewModel;
     private readonly TodoSettingsViewModel _todoSettingsViewModel;
+    private readonly DeskBox.Features.Weather.WeatherSettingsViewModel _weatherSettingsViewModel;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
     private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettingsViewModel;
     private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettingsViewModel;
@@ -174,7 +175,9 @@ public sealed partial class SettingsWindow : Window
         _fileStackSettingsViewModel;
 
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
-        TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
+        TodoSettingsViewModel todoSettings,
+        DeskBox.Features.Weather.WeatherSettingsViewModel weatherSettings,
+        SearchSettingsViewModel searchSettings,
         BackupSettingsViewModel backupSettings, BackupRestoreActions backupRestoreActions,
             IQuickCaptureSettings quickCaptureSettings,
             DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel quickCaptureSettingsEditor,
@@ -211,6 +214,7 @@ public sealed partial class SettingsWindow : Window
         _musicSettingsViewModel = musicSettings;
         _quickCaptureSettingsViewModel = quickCaptureSettingsEditor;
         _todoSettingsViewModel = todoSettings;
+        _weatherSettingsViewModel = weatherSettings;
         _interactionSettingsViewModel = interactionSettings;
         _fileStackSettingsViewModel = fileStackSettings;
         _featureWidgetsSettingsViewModel = featureWidgetsSettings;
@@ -221,7 +225,7 @@ public sealed partial class SettingsWindow : Window
         _groupNavigationSettingsViewModel = groupNavigationSettings;
         _themeService = themeService;
         _localizationService = localizationService;
-        ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,
+        ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings, weatherSettings,
             backupSettings, quickCaptureSettings, quickCaptureSettingsEditor, searchFeatureSettings, appearanceSettings,
             capsuleSettings, interactionSettings, fileDisplaySettings, fileStackSettings,
             groupNavigationSettings, featureWidgetsSettings, musicSettings,

@@ -240,22 +240,12 @@ public partial class SettingsViewModel
                     _musicSettings.SyncPresentation();
                     break;
                 case WidgetKind.Weather:
-                    WeatherAutoLocation = true;
-                    WeatherCityName = string.Empty;
-                    SelectedWeatherTemperatureUnit = SettingsService.WeatherTemperatureUnitCelsius;
-                    SelectedWeatherWindSpeedUnit = SettingsService.WeatherWindSpeedUnitKmh;
-                    SelectedWeatherDefaultView = SettingsService.WeatherDefaultViewToday;
-                    SelectedWeatherSkin = SettingsService.WeatherSkinRich;
-                    WeatherShowForecast = true;
-                    WeatherShowSunrise = true;
-                    WeatherShowUvIndex = true;
-                    WeatherShowPrecipitation = true;
-                    WeatherShowHumidity = true;
-                    WeatherShowWind = true;
-                    WeatherShowPressure = false;
-                    SelectedWeatherRefreshInterval = 60;
-
-                    _featureWidgetsSettings.ResetWeatherPreferences(scheduleSave: false);
+                    // The weather section editor owns the binding surface
+                    // (batch 48): the coordinator reset port writes the
+                    // fresh-install defaults and the editor's RunWrite
+                    // re-projects them (the old shell mirror assignments
+                    // are gone).
+                    _weatherSettings.ResetPreferences(scheduleSave: false);
                     break;
             }
         }
@@ -289,6 +279,10 @@ public partial class SettingsViewModel
             case WidgetKind.Music:
                 break;
             case WidgetKind.Weather:
+                // The section editor re-projects the whole Weather surface
+                // (the old per-property notifications are its own
+                // PropertyChanged broadcasts now).
+                _weatherSettings.Refresh();
                 break;
         }
     }
