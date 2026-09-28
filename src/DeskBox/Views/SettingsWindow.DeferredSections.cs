@@ -114,6 +114,15 @@ public sealed partial class SettingsWindow
             section.DataContext = _interactionSettingsViewModel;
         }
 
+        // The Quick Capture section binds through the Quick Capture editor
+        // (batch 46): {Binding} markup resolves through its generated custom
+        // property provider under Native AOT. The clipboard-diagnostics and
+        // image-cache lines are pushed in by the shell (host services).
+        if (sectionTag == "QuickCaptureSettings")
+        {
+            section.DataContext = _quickCaptureSettingsViewModel;
+        }
+
         // The file-stack section binds through the file-stack editor
         // (batch 45): {Binding} markup resolves through its generated custom
         // property provider under Native AOT, and the template's compiled

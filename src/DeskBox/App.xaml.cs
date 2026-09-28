@@ -2935,6 +2935,12 @@ public partial class App : Application
             _backupRestoreActions ?? throw new InvalidOperationException(
                 "Backup restore actions are not initialized."),
             _quickCaptureSettings ?? throw new InvalidOperationException("Quick Capture is not initialized."),
+            new DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel(
+                _quickCaptureSettings ?? throw new InvalidOperationException("Quick Capture is not initialized."),
+                LocalizationService.T,
+                (key, args) => LocalizationService.Format(key, args),
+                message => Log(message),
+                ex => Log($"[QuickCapture] Settings operation failed: {ex}")),
             _searchSettings ?? throw new InvalidOperationException("Search settings are not initialized."),
             _backupRuntime ?? throw new InvalidOperationException("Backup runtime is not initialized."),
             new DeskBox.Features.Appearance.AppearanceSettingsViewModel(

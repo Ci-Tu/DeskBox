@@ -232,11 +232,6 @@ public partial class SettingsViewModel
         return SettingsService.NormalizeTodoNewTaskPosition(position);
     }
 
-    private static string NormalizeQuickCaptureDefaultView(string? view)
-    {
-        return SettingsService.NormalizeQuickCaptureDefaultView(view);
-    }
-
     private static string NormalizeTodoDefaultFilter(string? filter)
     {
         return SettingsService.NormalizeTodoDefaultFilter(filter);

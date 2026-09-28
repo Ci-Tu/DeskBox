@@ -14,41 +14,6 @@ namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    partial void OnQuickCaptureEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            OnPropertyChanged(nameof(QuickCaptureStatusText));
-            OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
-            return;
-        }
-
-        TrackQuickCaptureAction(_quickCaptureSettings.SetEnabledAsync(value, reveal: value));
-        OnPropertyChanged(nameof(QuickCaptureStatusText));
-        OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
-        RefreshQuickCaptureClipboardDiagnostics();
-    }
-
-    partial void OnQuickCaptureShowTabBarChanged(bool value)
-    {
-        ApplyQuickCaptureTabBarVisibility(value);
-    }
-
-    partial void OnQuickCaptureShowRecordsTabChanged(bool value)
-    {
-        ApplyQuickCaptureTabVisibility(SettingsService.QuickCaptureDefaultViewRecords, value);
-    }
-
-    partial void OnQuickCaptureShowPinnedTabChanged(bool value)
-    {
-        ApplyQuickCaptureTabVisibility(SettingsService.QuickCaptureDefaultViewPinned, value);
-    }
-
-    partial void OnQuickCaptureShowRecentTabChanged(bool value)
-    {
-        ApplyQuickCaptureTabVisibility(SettingsService.QuickCaptureDefaultViewRecent, value);
-    }
-
     partial void OnTodoShowTabBarChanged(bool value)
     {
         ApplyTodoTabBarVisibility(value);
@@ -129,43 +94,5 @@ public partial class SettingsViewModel
         if (_isRestoringDefaults || _isApplyingSettingsSnapshot) return;
         _todoSettings.ShowClearCompletedButton = value;
         SyncTodoDisplayFacade();
-    }
-
-    partial void OnQuickCaptureClipboardEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        if (!value)
-        {
-            App.Log("[QuickCaptureClipboard] Disabled from settings");
-        }
-        TrackQuickCaptureAction(_quickCaptureSettings.SetClipboardEnabledAsync(
-            value, captureCurrent: value));
-        RefreshQuickCaptureClipboardDiagnostics();
-    }
-
-    partial void OnQuickCaptureImageClipboardEnabledChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        TrackQuickCaptureAction(_quickCaptureSettings.SetImageEnabledAsync(
-            value, captureCurrent: value));
-        RefreshQuickCaptureClipboardDiagnostics();
-    }
-
-    partial void OnQuickCaptureRecentLimitChanged(int value)
-    {
-        ApplyQuickCaptureRecentLimit(value);
-    }
-
-    partial void OnQuickCaptureShowCreatedTimeChanged(bool value)
-    {
-        ApplyQuickCaptureShowCreatedTime(value);
     }
 }

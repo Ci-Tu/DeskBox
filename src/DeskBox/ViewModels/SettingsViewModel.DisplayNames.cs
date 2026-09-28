@@ -37,16 +37,6 @@ public partial class SettingsViewModel
         };
     }
 
-    public string GetQuickCaptureDefaultViewDisplayName(string view)
-    {
-        return NormalizeQuickCaptureDefaultView(view) switch
-        {
-            SettingsService.QuickCaptureDefaultViewPinned => _localizationService.T("Settings.QuickCapture.DefaultView.Pinned"),
-            SettingsService.QuickCaptureDefaultViewRecent => _localizationService.T("Settings.QuickCapture.DefaultView.Recent"),
-            _ => _localizationService.T("Settings.QuickCapture.DefaultView.Records")
-        };
-    }
-
     public string GetWidgetTabStyleDisplayName(string style)
     {
         return SettingsService.NormalizeWidgetTabStyle(style) switch

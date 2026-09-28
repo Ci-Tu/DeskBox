@@ -4,24 +4,8 @@ namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    public string QuickCaptureListTextSizeValueText => $"{QuickCaptureListTextSize:0.#}pt";
-    public string QuickCaptureContentTextSizeValueText => $"{QuickCaptureContentTextSize:0.#}pt";
     public string TodoListTextSizeValueText => $"{TodoListTextSize:0.#}pt";
     public string TodoContentTextSizeValueText => $"{TodoContentTextSize:0.#}pt";
-
-    partial void OnQuickCaptureListTextSizeChanged(double value) =>
-        PersistOwnedTextSize(
-            value,
-            normalized => QuickCaptureListTextSize = normalized,
-            TrySetQuickCaptureListTextSize,
-            nameof(QuickCaptureListTextSizeValueText));
-
-    partial void OnQuickCaptureContentTextSizeChanged(double value) =>
-        PersistOwnedTextSize(
-            value,
-            normalized => QuickCaptureContentTextSize = normalized,
-            TrySetQuickCaptureContentTextSize,
-            nameof(QuickCaptureContentTextSizeValueText));
 
     partial void OnTodoListTextSizeChanged(double value) =>
         PersistOwnedTextSize(
