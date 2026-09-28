@@ -9,7 +9,7 @@ namespace DeskBox.Controls;
 /// Boolean-to-visibility converter for the settings sections whose editors
 /// keep a WinUI-free binding surface (the appearance family's slider gates).
 /// </summary>
-public sealed class SettingsBoolToVisibilityConverter : IValueConverter
+public sealed partial class SettingsBoolToVisibilityConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
@@ -28,7 +28,7 @@ public sealed class SettingsBoolToVisibilityConverter : IValueConverter
 /// Round-trips preserve the canonical uppercase format the persistence layer
 /// stores.
 /// </summary>
-public sealed class SettingsColorStringConverter : IValueConverter
+public sealed partial class SettingsColorStringConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, string language)
     {
