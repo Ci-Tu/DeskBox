@@ -202,7 +202,7 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(CanToggleHoverActionAdd));
         OnPropertyChanged(nameof(CanToggleHoverActionMore));
         OnPropertyChanged(nameof(CanToggleHoverActionDelete));
-        OnPropertyChanged(nameof(HoverButtonActionsSummaryText));
+        _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
     }
 
     private static string NormalizeWidgetAnimationEffect(string? effect) =>

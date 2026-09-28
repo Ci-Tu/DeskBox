@@ -394,7 +394,7 @@ public sealed partial class SettingsWindow
         {
             if (!_isRecordingHotkey)
             {
-                GlobalHotkeyCaptureButton.Content = ViewModel.GlobalHotkeyText;
+                GlobalHotkeyCaptureButton.Content = _interactionSettingsViewModel.HotkeyText;
             }
 
             GlobalHotkeyPresetF7Button.IsChecked =

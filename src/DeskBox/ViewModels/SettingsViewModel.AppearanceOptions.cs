@@ -594,7 +594,10 @@ public partial class SettingsViewModel
     public bool CanToggleHoverActionAdd => CanToggleHoverButtonAction(ShowHoverActionAdd);
     public bool CanToggleHoverActionMore => CanToggleHoverButtonAction(ShowHoverActionMore);
     public bool CanToggleHoverActionDelete => CanToggleHoverButtonAction(ShowHoverActionDelete);
-    public string HoverButtonActionsSummaryText => !ShowHoverButtons
+    // The hover-button action summary is owned by this shell's flyout
+    // selection state machine; the interaction editor binds the section's
+    // DropDownButton to a pushed projection of it.
+    internal string BuildHoverButtonActionsSummary() => !ShowHoverButtons
         ? _localizationService.T("Settings.HoverButtonActions.None")
         : string.Join(
             _localizationService.IsChinese ? "、" : ", ",
@@ -611,29 +614,13 @@ public partial class SettingsViewModel
         SettingsService.WidgetHoverActionDelete
     ];
 
-    public string SelectedWidgetLayerMode
+    // Host linkage for the interaction editor: the editor persists the layer
+    // mode through the coordinator; the desktop-layer refresh stays on the
+    // shell because it reaches the host's widget manager.
+    private void OnInteractionLayerModeUserChanged()
     {
-        get => _selectedWidgetLayerMode;
-        set
-        {
-            string normalizedValue = SettingsService.NormalizeWidgetLayerModeSetting(value);
-            if (!SetProperty(ref _selectedWidgetLayerMode, normalizedValue))
-            {
-                return;
-            }
-
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-
-            _interactionSettings.SetWidgetLayerMode(normalizedValue);
-            App.Current?.WidgetManager?.RefreshVisibleWidgetDesktopLayers("settings-layer-mode");
-            OnPropertyChanged(nameof(SelectedWidgetLayerModeText));
-        }
+        App.Current?.WidgetManager?.RefreshVisibleWidgetDesktopLayers("settings-layer-mode");
     }
-
-    public string SelectedWidgetLayerModeText => GetWidgetLayerModeDisplayName(SelectedWidgetLayerMode);
 
     [RelayCommand]
     public void ResetDisplayWidgetChromeOverrides()

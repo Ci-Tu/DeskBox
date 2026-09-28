@@ -276,43 +276,18 @@ public partial class SettingsViewModel
 
     public bool ShouldUnpinManagedStorageFromQuickAccess => ManagedStorageQuickAccessPinState == QuickAccessPinState.Pinned;
 
-    public bool GlobalHotkeyEnabled
+    // Host linkage for the interaction editor: the editor owns the hotkey
+    // enable switch's binding surface; the registration state machine stays
+    // on the shell because it reaches the host's hotkey service.
+    private void OnInteractionHotkeyEnabledUserChanged(bool value)
     {
-        get => _globalHotkeyEnabled;
-        set
+        if (_isRestoringDefaults)
         {
-            if (!SetProperty(ref _globalHotkeyEnabled, value))
-            {
-                return;
-            }
-
-            if (_isRestoringDefaults)
-            {
-                return;
-            }
-
-            App.Current?.GlobalHotkeyService?.SetEnabled(value);
-            RefreshGlobalHotkeyStatus();
-            OnPropertyChanged(nameof(CanShowGlobalHotkeyWarning));
+            return;
         }
-    }
 
-    public string GlobalHotkeyText
-    {
-        get => _globalHotkeyText;
-        private set => SetProperty(ref _globalHotkeyText, value);
-    }
-
-    public string GlobalHotkeyStatusText
-    {
-        get => _globalHotkeyStatusText;
-        private set => SetProperty(ref _globalHotkeyStatusText, value);
-    }
-
-    public string GlobalHotkeyStatusKind
-    {
-        get => _globalHotkeyStatusKind;
-        private set => SetProperty(ref _globalHotkeyStatusKind, value);
+        App.Current?.GlobalHotkeyService?.SetEnabled(value);
+        RefreshGlobalHotkeyState();
     }
 
     public string IconSizeValueText => $"{Math.Round(IconSize):0}px";
@@ -333,7 +308,6 @@ public partial class SettingsViewModel
     public string HorizontalSpacingValueText => $"{Math.Round(HorizontalSpacingScale * 100):0}%";
     public string VerticalSpacingValueText => $"{Math.Round(VerticalSpacingScale * 100):0}%";
     public string FileNameWidthValueText => $"{Math.Round(FileNameWidthScale * 100):0}%";
-    public string WidgetSnapSpacingText => $"{WidgetSnapSpacing:0.#} px";
     public string DefaultWidthInput
     {
         get => FormatNumber(DefaultWidth, 0);
@@ -422,39 +396,6 @@ set => WidgetOpacity = Math.Clamp(1.0 - value / 100d, SettingsService.MinWidgetO
         ? _localizationService.T("Settings.Accent.SystemDescription")
         : _localizationService.T("Settings.Accent.CustomDescription");
 
-    public string GlobalHotkeyDescription => _localizationService.T("Settings.GlobalHotkey.Description");
-    public string GlobalHotkeyWarningText
-    {
-        get
-        {
-            GlobalHotkeyActivation activation = GetCurrentGlobalHotkeyActivation();
-            if (activation.Kind == HotkeyActivationKind.WindowsTap)
-            {
-                return _localizationService.T("Settings.GlobalHotkey.WindowsTapWarning");
-            }
-
-            if (activation.Kind == HotkeyActivationKind.Chord &&
-                activation.Gesture.Modifiers == HotkeyModifierKeys.Alt &&
-                activation.Gesture.VirtualKey == (int)Windows.System.VirtualKey.Space)
-            {
-                return _localizationService.T("Settings.GlobalHotkey.AltSpaceWarning");
-            }
-
-            return _localizationService.T("Settings.GlobalHotkey.ReservedWarning");
-        }
-    }
-
-    public bool CanShowGlobalHotkeyWarning
-    {
-        get
-        {
-            GlobalHotkeyActivation activation = GetCurrentGlobalHotkeyActivation();
-            return GlobalHotkeyEnabled &&
-                   (activation.Kind == HotkeyActivationKind.WindowsTap ||
-                    (activation.Kind == HotkeyActivationKind.Chord &&
-                     GlobalHotkeyService.IsReservedSystemGesture(activation.Gesture)));
-        }
-    }
     public IEnumerable<FeatureWidgetEntry> FeatureWidgetEntries
     {
         get
@@ -779,14 +720,6 @@ set => WidgetOpacity = Math.Clamp(1.0 - value / 100d, SettingsService.MinWidgetO
 
     public string[] AvailableWidgetTitleIconModeDisplayNames => _cachedWidgetTitleIconModeDisplayNames ??= AvailableWidgetTitleIconModes.Select(GetWidgetTitleIconModeDisplayName).ToArray();
 
-    public string[] AvailableWidgetLayerModes { get; } =
-    [
-        SettingsService.WidgetLayerModeDynamic,
-        SettingsService.WidgetLayerModeDesktopPinned,
-        SettingsService.WidgetLayerModeQuickReveal
-    ];
-
-    public string[] AvailableWidgetLayerModeDisplayNames => _cachedWidgetLayerModeDisplayNames ??= AvailableWidgetLayerModes.Select(GetWidgetLayerModeDisplayName).ToArray();
 
     public string[] AvailableQuickCaptureDefaultViews { get; } =
     [

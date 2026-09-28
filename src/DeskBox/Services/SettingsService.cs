@@ -129,9 +129,11 @@ public sealed class SettingsService
 
     public static bool SupportsMaterialIntensity(string? materialType) =>
         IsMicaMaterial(materialType) || IsAcrylicMaterial(materialType);
-    public const string WidgetLayerModeDynamic = "Dynamic";
-    public const string WidgetLayerModeDesktopPinned = "DesktopPinned";
-    public const string WidgetLayerModeQuickReveal = "QuickReveal";
+    // Aliases of the contract-owned canonical values so the interaction
+    // editor can build its option list without referencing the adapter.
+    public const string WidgetLayerModeDynamic = Contracts.WidgetLayerModes.Dynamic;
+    public const string WidgetLayerModeDesktopPinned = Contracts.WidgetLayerModes.DesktopPinned;
+    public const string WidgetLayerModeQuickReveal = Contracts.WidgetLayerModes.QuickReveal;
     public const string WidgetChromeModeStandard = WidgetChromeModeNames.Standard;
     public const string WidgetChromeModeCompact = WidgetChromeModeNames.Compact;
     public const string WidgetChromeModeOverlay = WidgetChromeModeNames.Overlay;

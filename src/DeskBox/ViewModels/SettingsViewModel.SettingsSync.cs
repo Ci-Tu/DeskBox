@@ -18,6 +18,9 @@ public partial class SettingsViewModel
     {
         RefreshLocalizedProperties();
         _musicSettings.RefreshLocalization();
+        _interactionSettings.RefreshLocalization();
+        _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
+        RefreshGlobalHotkeyState();
     }
 
     private void OnSettingsChanged()
@@ -51,7 +54,6 @@ public partial class SettingsViewModel
                 StringComparison.OrdinalIgnoreCase);
 
             AutoCheckForUpdates = settings.AutoCheckForUpdates;
-            DoubleClickToOpen = settings.DoubleClickToOpen;
             FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;
             SelectedFileWidgetFolderOpenBehavior =
                 FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
@@ -61,10 +63,6 @@ public partial class SettingsViewModel
             HideShortcutArrowOverlay = settings.HideShortcutArrowOverlay;
             ShowImageFilesAsIcons = settings.ShowImageFilesAsIcons;
             ShowHoverButtons = settings.ShowHoverButtons;
-            ResizeSnapEnabled = settings.ResizeSnapEnabled;
-            WidgetSnapSpacing = SettingsService.NormalizeWidgetSnapSpacing(
-                settings.WidgetSnapSpacing);
-            KeepWidgetsVisibleOnShowDesktop = settings.KeepWidgetsVisibleOnShowDesktop;
             ShowListItemDetails = settings.ShowListItemDetails;
             ShowFileItemPathTooltips = settings.ShowFileItemPathTooltips;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
@@ -121,7 +119,6 @@ public partial class SettingsViewModel
                 settings.InteractiveWidgetChromeMode,
                 WidgetChromeMode.Standard);
             SelectedWidgetTitleIconMode = NormalizeWidgetTitleIconModeSetting(settings.WidgetTitleIconMode);
-            SelectedWidgetLayerMode = SettingsService.NormalizeWidgetLayerModeSetting(settings.WidgetLayerMode);
 
             IconSize = settings.IconSize;
             TextSize = settings.TextSize;
@@ -167,6 +164,13 @@ public partial class SettingsViewModel
             // editor projection instead of assigning shell facade properties.
             _musicSettings.SyncPresentation();
 
+            // Interaction presentation (layer mode, snap enable/spacing,
+            // open method, show-desktop behavior) lives on the section
+            // editor now; the pushed hover summary follows the flyout state
+            // re-projection above.
+            _interactionSettings.SyncPresentation();
+            _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
+
             WeatherAutoLocation = settings.WeatherAutoLocation;
             WeatherCityName = settings.WeatherCityName;
             WeatherCitySearchText = settings.WeatherCityName;
@@ -199,7 +203,6 @@ public partial class SettingsViewModel
 
             ManagedStorageRootPath = SettingsService.NormalizeManagedStorageRootPath(settings.DefaultManagedStorageRootPath);
             _backupSettings.RefreshState();
-            GlobalHotkeyEnabled = settings.GlobalHotkeyEnabled;
         }
         finally
         {
@@ -247,12 +250,9 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(PinQuickAccessToolTipText));
         OnPropertyChanged(nameof(AutoStartStatusText));
         OnPropertyChanged(nameof(AvailableAutoStartModeOptions));
-        OnPropertyChanged(nameof(GlobalHotkeyDescription));
-        OnPropertyChanged(nameof(GlobalHotkeyWarningText));
-        OnPropertyChanged(nameof(GlobalHotkeyText));
-        OnPropertyChanged(nameof(GlobalHotkeyStatusText));
-        OnPropertyChanged(nameof(GlobalHotkeyStatusKind));
-        OnPropertyChanged(nameof(CanShowGlobalHotkeyWarning));
+        // The global-hotkey card text lives on the interaction editor now;
+        // the shell refreshes it through the editor push instead of shell
+        // property notifications.
         NotifyDragDropPermissionPropertiesChanged();
         OnPropertyChanged(nameof(QuickCaptureStatusText));
         OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
@@ -301,7 +301,6 @@ public partial class SettingsViewModel
             _cachedDisplayWidgetChromeModeDisplayNames = null;
             _cachedInteractiveWidgetChromeModeDisplayNames = null;
             _cachedWidgetTitleIconModeDisplayNames = null;
-            _cachedWidgetLayerModeDisplayNames = null;
             _cachedQuickCaptureDefaultViewDisplayNames = null;
             _cachedQuickCaptureTabStyleDisplayNames = null;
             _cachedTodoNewTaskPositionDisplayNames = null;
@@ -344,7 +343,6 @@ public partial class SettingsViewModel
             OnPropertyChanged(nameof(AvailableDisplayWidgetChromeModeDisplayNames));
             OnPropertyChanged(nameof(AvailableInteractiveWidgetChromeModeDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetTitleIconModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetLayerModeDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
@@ -418,9 +416,8 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(SelectedDisplayWidgetChromeModeText));
         OnPropertyChanged(nameof(SelectedInteractiveWidgetChromeModeText));
         OnPropertyChanged(nameof(SelectedWidgetTitleIconModeText));
-        OnPropertyChanged(nameof(SelectedWidgetLayerModeText));
         NotifyHoverButtonActionPropertiesChanged();
-        OnPropertyChanged(nameof(HoverButtonActionsSummaryText));
+        _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
         OnPropertyChanged(nameof(SelectedQuickCaptureDefaultViewText));
         OnPropertyChanged(nameof(SelectedQuickCaptureTabStyleText));
         OnPropertyChanged(nameof(SelectedTodoNewTaskPositionText));

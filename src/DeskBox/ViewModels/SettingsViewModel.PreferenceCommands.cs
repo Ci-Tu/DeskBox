@@ -69,7 +69,9 @@ public partial class SettingsViewModel
 
             if (App.Current is { } app)
             {
-                app.ResizeGuideOverlay.IsSnapEnabled = _settingsService.Settings.ResizeSnapEnabled;
+                // ApplySettingsSnapshot above already re-projected the
+                // restored snap state onto the interaction editor.
+                app.ResizeGuideOverlay.IsSnapEnabled = _interactionSettings.SnapEnabled;
             }
 
             App.Current?.GlobalHotkeyService?.RefreshRegistration();

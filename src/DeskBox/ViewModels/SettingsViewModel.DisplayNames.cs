@@ -221,16 +221,6 @@ public partial class SettingsViewModel
         };
     }
 
-    public string GetWidgetLayerModeDisplayName(string mode)
-    {
-        return SettingsService.NormalizeWidgetLayerModeSetting(mode) switch
-        {
-            SettingsService.WidgetLayerModeDesktopPinned => _localizationService.T("Settings.WidgetLayerMode.DesktopPinned"),
-            SettingsService.WidgetLayerModeQuickReveal => _localizationService.T("Settings.WidgetLayerMode.QuickReveal"),
-            _ => _localizationService.T("Settings.WidgetLayerMode.Dynamic")
-        };
-    }
-
     public string GetQuickCaptureDefaultViewDisplayName(string view)
     {
         return NormalizeQuickCaptureDefaultView(view) switch
