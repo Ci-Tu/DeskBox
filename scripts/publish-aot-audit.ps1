@@ -3487,6 +3487,12 @@ $stage5B4B1SourceFiles = @(
     # Batch 48 moved the weather section's binding surface (incl. the city
     # search suggestion projection) onto the section editor.
     "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs",
+    # Batch 49 moved the backup family's binding surface (local/cloud
+    # backups and the compatibility-diagnostics texts) onto the backup
+    # editor; the shell keeps only the operation flows and diagnostics
+    # computation.
+    "src/DeskBox/Features/Backup/BackupSettingsViewModel.cs",
+    "src/DeskBox/Features/Backup/BackupSettingsViewModel.SettingsSurface.cs",
     "src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs",
     # Deferred-section host owns the lazy typed-ViewModel bridges that used to
     # live eagerly in SettingsWindow.xaml.cs.
@@ -3647,7 +3653,7 @@ $stage5B4B1MissingBindableTypePatterns = @(
         }
     }
 )
-$stage5B4B1ExpectedBindableViewModelPropertyCount = 89
+$stage5B4B1ExpectedBindableViewModelPropertyCount = 49
 $stage5B4B1ActualBindableViewModelPropertyCount = [regex]::Matches(
     $stage5B4B1Sources[$stage5B4B1SourceFiles[9]],
     [regex]::Escape('nameof(')).Count
@@ -3880,7 +3886,7 @@ $stage5B4B1SourceWarningMessages = @(
         Where-Object {
             $line = $_
             $warningCodeRegex.IsMatch($line) -and
-                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|Features\.Weather\.WeatherSettingsViewModel|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
+                $line -match "(?:App\.AotManagedUiSmoke|SettingsWindow\.(?:AotDeepSmoke|Navigation|Maintenance|HotkeyAndAppearance)|SettingsWindow\.xaml|FileStackCustomRuleEditor|Features\.Weather\.WeatherSettingsViewModel|Features\.Backup\.BackupSettingsViewModel(?:\.\w+)?|SettingsViewModel\.(?:AotBindableProperties|CapsuleOptions|GroupNavigation|FileStackOptions|FeatureOptions|SelectionOptions)|(?:CapsuleMode|FileWidget)SettingsSection\.xaml|SettingsOption|WeatherData)\.cs\("
         } |
         ForEach-Object { $_.Trim() } |
         Sort-Object -Unique

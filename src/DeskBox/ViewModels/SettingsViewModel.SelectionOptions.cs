@@ -11,16 +11,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableAttachmentStorageModeOptions =>
         CreateSelectionOptions(AvailableAttachmentStorageModes, AvailableAttachmentStorageModeDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableAutomaticBackupIntervalOptions =>
-        CreateSelectionOptions(
-            AvailableAutomaticBackupIntervals,
-            AvailableAutomaticBackupIntervalDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableAutomaticBackupRetentionOptions =>
-        CreateSelectionOptions(
-            AvailableAutomaticBackupRetentionCounts,
-            AvailableAutomaticBackupRetentionDisplayNames);
-
     internal static IReadOnlyList<SettingsOption> CreateSelectionOptions<T>(
         IReadOnlyList<T> values,
         IReadOnlyList<string> displayNames)
@@ -52,7 +42,5 @@ public partial class SettingsViewModel
     {
         OnPropertyChanged(nameof(AvailableLanguageOptions));
         OnPropertyChanged(nameof(AvailableAttachmentStorageModeOptions));
-        OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalOptions));
-        OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionOptions));
     }
 }

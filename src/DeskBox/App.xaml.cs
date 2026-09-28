@@ -2938,7 +2938,9 @@ public partial class App : Application
             new BackupSettingsViewModel(
                 _backupSettings ?? throw new InvalidOperationException("Backup settings are not initialized."),
                 action => UiDispatcherQueue.TryEnqueue(() => action()),
-                ex => Log($"[BackupSettings] Operation failed: {ex}")),
+                ex => Log($"[BackupSettings] Operation failed: {ex}"),
+                localize: LocalizationService.T,
+                format: (key, args) => LocalizationService.Format(key, args)),
             _backupRestoreActions ?? throw new InvalidOperationException(
                 "Backup restore actions are not initialized."),
             _quickCaptureSettings ?? throw new InvalidOperationException("Quick Capture is not initialized."),

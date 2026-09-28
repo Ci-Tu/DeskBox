@@ -187,11 +187,28 @@ public sealed class AotStage5B4B1ContractTests
             "ItemsSource=\"{Binding CitySuggestionItems}\"",
             xaml,
             StringComparison.Ordinal);
+        // Batch 49: the backup family (local/cloud/compat-diagnostics
+        // sections) binds through the backup editor; the remote snapshot
+        // projection keeps the code-behind object[] snapshot path.
+        string cloudBackup = ReadRepositoryFile(
+            "src/DeskBox/Views/SettingsWindow.CloudBackup.cs");
+        Assert.Contains(
+            "RemoteSnapshotItems.Cast<object>().ToArray()",
+            cloudBackup,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Text=\"{Binding LocalDirectoryDisplayText, Mode=OneWay}\"",
+            xaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "section.DataContext = _backupSettingsViewModel;",
+            ReadRepositoryFile("src/DeskBox/Views/SettingsWindow.DeferredSections.cs"),
+            StringComparison.Ordinal);
         Assert.Contains(
             "ItemsSource=\"{x:Bind CustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(89, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(49, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
@@ -358,7 +375,7 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 89", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 49", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);

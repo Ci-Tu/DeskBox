@@ -145,6 +145,21 @@ public sealed partial class SettingsWindow
             section.DataContext = _weatherSettingsViewModel;
         }
 
+        // The backup family (local backups, cloud backups and the
+        // compatibility-diagnostics section, batch 49) binds through the
+        // backup editor: {Binding} markup resolves through its generated
+        // custom property provider under Native AOT. The batch-4 visit
+        // state machine (endpoint-scoped reads, generations, cancellation)
+        // stays inside the editor; the manual backup/restore/delete flows
+        // and the drag-drop/runtime diagnostics computation stay on the
+        // shell (host services) and push their results into the editor.
+        if (sectionTag is "BackupRestoreSettings" or
+            "CloudBackupSettings" or
+            "CompatibilityDiagnosticsSettings")
+        {
+            section.DataContext = _backupSettingsViewModel;
+        }
+
         // The file-stack section binds through the file-stack editor
         // (batch 45): {Binding} markup resolves through its generated custom
         // property provider under Native AOT, and the template's compiled
