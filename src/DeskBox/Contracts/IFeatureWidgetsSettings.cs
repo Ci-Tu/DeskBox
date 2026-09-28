@@ -14,8 +14,38 @@ namespace DeskBox.Contracts;
 /// SettingsChanged chains owned by the host; the enable port only writes the
 /// persisted flag, exactly like the shell did before the migration.
 /// </summary>
+/// <summary>
+/// Canonical music display-mode values, owned here so the feature editor can
+/// build its option list without referencing the settings adapter.
+/// <see cref="Services.SettingsService"/> keeps its historical constants as
+/// aliases of these.
+/// </summary>
+public static class MusicDisplayModes
+{
+    public const string Auto = "Auto";
+    public const string Cover = "Cover";
+    public const string Controls = "Controls";
+    public const string RecordVertical = "RecordVertical";
+    public const string RecordHorizontal = "RecordHorizontal";
+}
+
+/// <summary>
+/// Immutable read snapshot of the music presentation preferences, mirroring
+/// the Quick Capture editor's read-port shape. The music settings editor
+/// binds its XAML surface to a projection of this snapshot; external refresh
+/// paths (settings broadcasts, default restores) re-read it. The display
+/// mode arrives already normalized.
+/// </summary>
+public sealed record MusicPresentationSettings(
+    bool UseArtworkBackdrop,
+    bool EnableCoverHoverMotion,
+    string DisplayMode);
+
 public interface IFeatureWidgetsSettings
 {
+    /// <summary>Reads the current music presentation snapshot (raw stored values).</summary>
+    MusicPresentationSettings ReadMusicPresentation();
+
     /// <summary>
     /// Writes one feature card's persisted enable state (Music / Weather /
     /// Glance / later feature kinds). Does not save: the caller's existing

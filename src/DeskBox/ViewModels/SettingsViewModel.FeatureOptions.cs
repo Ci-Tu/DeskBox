@@ -191,29 +191,6 @@ public partial class SettingsViewModel
 
     public string SelectedTodoReminderOffsetMinutesText => GetTodoReminderOffsetDisplayName(SelectedTodoReminderOffsetMinutes);
 
-    public string SelectedMusicDisplayMode
-    {
-        get => _selectedMusicDisplayMode;
-        set
-        {
-            string normalizedValue = SettingsService.NormalizeMusicDisplayMode(value);
-            if (!SetProperty(ref _selectedMusicDisplayMode, normalizedValue))
-            {
-                return;
-            }
-
-            OnPropertyChanged(nameof(SelectedMusicDisplayModeText));
-            if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-            {
-                return;
-            }
-
-            _featureWidgetsSettings.SetMusicDisplayMode(normalizedValue);
-        }
-    }
-
-    public string SelectedMusicDisplayModeText => GetMusicDisplayModeDisplayName(SelectedMusicDisplayMode);
-
     public string AccentColorHex
     {
         get => _accentColorHex;
@@ -582,10 +559,8 @@ set => WidgetOpacity = Math.Clamp(1.0 - value / 100d, SettingsService.MinWidgetO
                     _todoSettings.ResetReminderPreferences(scheduleSave: false);
                     break;
                 case WidgetKind.Music:
-                    MusicUseArtworkBackdrop = true;
-                    MusicEnableCoverHoverMotion = true;
-                    SelectedMusicDisplayMode = SettingsService.MusicDisplayModeAuto;
                     _featureWidgetsSettings.ResetMusicPresentationPreferences(scheduleSave: false);
+                    _musicSettings.SyncPresentation();
                     break;
                 case WidgetKind.Weather:
                     WeatherAutoLocation = true;
@@ -731,16 +706,6 @@ set => WidgetOpacity = Math.Clamp(1.0 - value / 100d, SettingsService.MinWidgetO
     ];
     public string[] AvailableLayoutDensityDisplayNames =>
         _cachedLayoutDensityDisplayNames ??= AvailableLayoutDensities.Select(GetLayoutDensityDisplayName).ToArray();
-    public string[] AvailableMusicDisplayModes { get; } =
-    [
-        SettingsService.MusicDisplayModeAuto,
-        SettingsService.MusicDisplayModeCover,
-        SettingsService.MusicDisplayModeControls,
-        SettingsService.MusicDisplayModeRecordVertical,
-        SettingsService.MusicDisplayModeRecordHorizontal
-    ];
-    public string[] AvailableMusicDisplayModeDisplayNames =>
-        _cachedMusicDisplayModeDisplayNames ??= AvailableMusicDisplayModes.Select(GetMusicDisplayModeDisplayName).ToArray();
     public string[] AvailableAnimationPresets { get; } =
     [
         AnimationPresetGentle,

@@ -91,6 +91,16 @@ public sealed partial class SettingsWindow
                 break;
         }
 
+        // Pilot pattern for retiring the shell binding facade: sections whose
+        // editor owns the binding surface get the editor as their DataContext,
+        // overriding the shell view model set above. {Binding} markup resolves
+        // through the editor's generated custom-property provider under
+        // Native AOT, so no per-property shell bridge is needed anymore.
+        if (sectionTag == "MusicSettings")
+        {
+            section.DataContext = _musicSettingsViewModel;
+        }
+
         if (sectionTag == "FileStorageSettings")
         {
             RefreshManagedStoragePathWarning();

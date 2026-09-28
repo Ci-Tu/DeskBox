@@ -302,11 +302,13 @@ public sealed class SettingsService
     public const string LayoutDensityStandard = "Standard";
     public const string LayoutDensityRelaxed = "Relaxed";
     public const string LayoutDensityCustom = "Custom";
-    public const string MusicDisplayModeAuto = "Auto";
-    public const string MusicDisplayModeCover = "Cover";
-    public const string MusicDisplayModeControls = "Controls";
-    public const string MusicDisplayModeRecordVertical = "RecordVertical";
-    public const string MusicDisplayModeRecordHorizontal = "RecordHorizontal";
+    // Aliases of the contract-owned canonical values so the feature editor
+    // can build its option list without referencing the settings adapter.
+    public const string MusicDisplayModeAuto = Contracts.MusicDisplayModes.Auto;
+    public const string MusicDisplayModeCover = Contracts.MusicDisplayModes.Cover;
+    public const string MusicDisplayModeControls = Contracts.MusicDisplayModes.Controls;
+    public const string MusicDisplayModeRecordVertical = Contracts.MusicDisplayModes.RecordVertical;
+    public const string MusicDisplayModeRecordHorizontal = Contracts.MusicDisplayModes.RecordHorizontal;
     public const int MaxRecentOrganizationHistoryCount = 24;
     public const string TodoNewTaskPositionTop = "Top";
     public const string TodoNewTaskPositionBottom = "Bottom";

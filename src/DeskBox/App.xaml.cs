@@ -2951,6 +2951,9 @@ public partial class App : Application
                 _groupNavigationSettings ?? throw new InvalidOperationException("Group navigation settings are not initialized.")),
             new DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel(
                 _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized.")),
+            new DeskBox.Features.Music.MusicSettingsViewModel(
+                _featureWidgetsSettings ?? throw new InvalidOperationException("Feature widgets settings are not initialized."),
+                LocalizationService.T),
             new DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel(
                 _managedStorageSettings ?? throw new InvalidOperationException("Managed storage settings are not initialized.")),
             new DeskBox.Features.Maintenance.MaintenanceSettingsViewModel(

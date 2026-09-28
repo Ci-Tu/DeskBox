@@ -924,6 +924,54 @@ Simon 拍板放弃"随触碰 ratchet"，对 Platform 域的 DllImport/LibraryImp
 
 Track A 就此收官：设置页（SettingsViewModel）不再有任何平铺门面直写，后续新增设置字段的唯一合法入口是各节协调器合同端口（FeatureSettingsBoundary 门禁 + SettingsSliceOwnership 棘轮双向锁）。
 
+## 第四十批：门面退役第二阶段试点（Music 节 XAML 绑定迁编辑器，模式定型批）
+
+实施基线：`5469123a`（main，Track A 收官后），worktree `codex/final2-facade-pilot`。对象是"把设置页 XAML 绑定从 SettingsViewModel 兼容门面迁到各 Features 编辑器 VM 并删除对应兼容属性"的第一节：**Music 节**（4 条绑定：显示模式 ComboBox + 封面背景/封面悬停两个 ToggleSwitch，全节字段最少、无联动）。磁盘 schema、文案零变化；{Binding} 标记形态保持（WMC1510=866 全部 runner/审计钉零触碰）。
+
+**模式定型决策（后续批量批次的施工基准）：路线 (a) 节级 DataContext 切到编辑器 VM，而非 (b) 壳挂编辑器属性 + `Path=Editor.X` 重路径。** 判据：①**真删除**——路线 (b) 要求壳永久保留 `Music` 一类编辑器暴露属性，与"删除兼容属性"目标冲突；②**AOT 证据**——{Binding} 在 NativeAOT 下走 ICustomPropertyProvider 生成桥（`[WinRT.GeneratedBindableCustomProperty]`），本仓已有非壳 VM 先例：`GlanceWidgetContent` 的 `DataContext = GlanceWidgetViewModel` + `{Binding TimeText}` + `GlanceWidgetViewModel.AotBindableProperties.cs` 生成桥，AOT 审计在案；而设置页 XAML 无任何 dotted-path {Binding} 先例，嵌套路径的中间/末端对象桥接未经验证；③**WMC1510 稳定**——两条路线都保持 {Binding} 标记数量不变，但路线 (a) 的桥只建在编辑器上（壳桥净删 4 条）；④**门面名棘轮**——`SettingsSliceOwnershipContractTests.FacadePassthroughAccess` 按 `settings.<平铺门面名>` 正则计数，编辑器可绑定属性若沿用 `MusicUseArtworkBackdrop` 等平铺门面名会新增命中；节级 DataContext 后属性名无需跨壳唯一，去掉 `Music` 前缀（`UseArtworkBackdrop`/`EnableCoverHoverMotion`/`DisplayMode`/`AvailableDisplayModeOptions`）同时解决唯一性与棘轮两个问题。
+
+| 职责 | 所有者 |
+|---|---|
+| Music 节 XAML 绑定面（4 属性：读投影 + TwoWay 写入 + 选项列表 + 本地化缓存重建） | `Features/Music/MusicSettingsViewModel`（ObservableObject，构造时经读快照自同步） |
+| NativeAOT {Binding} 桥（4 nameof 条目） | `Features/Music/MusicSettingsViewModel.AotBindableProperties.cs`（Glance 同款） |
+| 音乐呈现读快照 `MusicPresentationSettings`（显示模式归一化）与显示模式规范值 `MusicDisplayModes` | `Contracts/IFeatureWidgetsSettings`；`FeatureWidgetsSettingsCoordinator.ReadMusicPresentation` 实现（写入端口不变，仍为音乐/天气/杂项唯一写入者） |
+| Music 节 DataContext 切换 | `SettingsWindow.EnsureSettingsSectionCreated`：`sectionTag == "MusicSettings"` 时 `section.DataContext = _musicSettingsViewModel`（覆盖壳默认；ProcessBindings 对该节为 no-op，因节内无 x:Bind） |
+| 外部刷新路径（SettingsChanged 广播/功能卡重置/语言切换） | SettingsViewModel.ApplySettingsSnapshot → `_musicSettings.SyncPresentation()`（对齐既有 `_todoSettings.Refresh()` 形态）；OnLanguageChanged → `_musicSettings.RefreshLocalization()`；功能卡 Music 重置块保留协调器 Reset + 编辑器 Sync（原三行门面赋值删除） |
+| 壳兼容属性（已删除） | ~~`MusicUseArtworkBackdrop`/`MusicEnableCoverHoverMotion`（ObservableProperty）+ `SelectedMusicDisplayMode`(+Text) + `AvailableMusicDisplayModeOptions`/`AvailableMusicDisplayModes`(+DisplayNames) + 两个 Changed 回调 + 快照/构造/本地化/默认恢复处的全部读写~~ |
+
+门禁同步（本批实际触碰的钉，后续批次同款三件套）：①`AotStage5B4B1ContractTests` 的 nameof 计数 349→345 与 `Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 345")`；`publish-aot-audit.ps1` 同名变量 349→345（动态对账测试 `BindableSettingsViewModelInventory_CoversEveryDirectSettingsBinding` 因 XAML 属性名与壳属性集双侧同步收缩而自动平衡）；②`AotPublishContractTests` 的 SettingsViewModel.cs `[ObservableProperty]` 计数 75→73；③WMC1510=866 与全部 stage runner 零触碰（{Binding} 未转 x:Bind）。`SettingsSliceOwnership` 平铺清单/`FeatureSettingsBoundary` 写入门禁零触碰（本批只删壳代码，读棘轮自动收缩）；新编辑器文件 FacadePassthroughAccess 零命中。
+
+### 第四十批验证记录
+
+- canonical Debug（非平台）`dotnet build src/DeskBox/DeskBox.csproj -c Debug`：0 错误；x64 Debug 随测试构建 0 错误。
+- 新增 `MusicSettingsEditorPilotTests` 9 用例（构造投影/快照归一化/写穿透+广播计数/外部同步零回写/选项表/本地化重建/常量别名/壳反射面无残留/XAML+桥+接线文本钉）。全量 x64 测试：**4,338/4,338 通过**（批 39 基线 4,329 + 本批 9）。
+- AOT 定义编译检查（x64、`DefineConstants=DESKBOX_NATIVE_AOT`，`ArtifactsPath`/`RestorePackagesPath` 隔离，Updater 随同隔离 restore，检查后已清理 `.aotcheck/`）：11 警告（与批 32-39 同位）、**0 错误**。未执行 Native AOT publish/link 或发布包运行，仍为发版门禁。
+- **绑定实效验证（UIA 探针，非构建绿即绑定活的替代）**：隔离数据根 `facade-pilot-music-20260928-a1f3c2` 预置 `musicDisplayMode=Cover`、`musicUseArtworkBackdrop=false`、`musicEnableCoverHoverMotion=false`（camelCase 平铺键）、`hasCompletedOnboarding=true`、`language=zh-CN`。canonical Debug `--open-settings` 启动（跳转列表激活路径），UIA 经"功能格子"页音乐卡 drill-down 进入 Music 节：两个 ToggleSwitch 读到 **Off/Off**、显示模式 ComboBox 读到**封面模式**——预置非默认值经"磁盘→协调器读快照→编辑器→节级 DataContext {Binding}→控件"全链投影（绑定若死则控件呈编辑器默认 true/true/自动）。再经 TogglePattern 把"根据封面配色背景"拨到 On，2.5 秒后磁盘 `musicUseArtworkBackdrop=true`（另两字段不动）——TwoWay 经"控件→{Binding}→编辑器 setter→协调器→SaveDebounced→磁盘"回写贯通。启动管线 35 步、0 degraded、0 failed。探针后已按路径停止本 worktree 实例；探针脚本不入库。
+- `git diff --check` 通过。
+
+### 门面退役第二阶段施工图（侦察结论，后续批次照此复制）
+
+**DataContext 流向现状**：整窗单一 `SettingsRoot.DataContext = SettingsViewModel`；各节经 `EnsureSettingsSectionCreated` 的 `DataTemplate.LoadContent()` 延迟实例化后再赋节 DataContext（本批起允许按节覆盖为编辑器 VM）；Search 节已是"代码后置渲染"（无绑定）、Appearance/Capsule 节为独立 UserControl + `{Binding}`（仍指壳门面）、FileWidget 节为 `x:Bind ViewModel.*`（ViewModel DP 类型仍是壳门面——后续批次把 DP 类型换成编辑器即可沿用 x:Bind 形态，x:Bind 免 AOT 桥）。
+
+**每节迁移难度与推荐批次顺序**（唯一绑定属性数=该节门面绑定面规模；难度=属性数×联动面）：
+
+| 顺位 | 节 | 唯一绑定属性数 | 编辑器归属 | 难度点 |
+|---|---|---|---|---|
+| 已完成 | Music | 4 | 新建 `Features/Music/MusicSettingsViewModel` | 试点基准 |
+| 1 | Interaction 主节 | 3 | InteractionSettingsViewModel 补面 | 最小；先复制模式 |
+| 2 | InteractionWindow（高级） | 13 | 同上 | 全局热键状态机在壳（RefreshGlobalHotkeyControls 代码后置），先迁绑定再议状态机 |
+| 3 | FileDisplay | 6 | FileDisplaySettingsViewModel 补面 | 纯直保存族，低险 |
+| 4 | FileStorage(托管存储) | 7 | ManagedStorageSettingsViewModel 补面 | 快速访问状态/路径警告刷新链在壳 |
+| 5 | Appearance 四子节（材质/密度/窗口/动画） | 23+16+8+13 | AppearanceSettingsViewModel 补面 | 外观活预览链（RequestAppearancePreview/滑杆按压态）与全局主题联动，面最大 |
+| 6 | WidgetGroups | 9（另 20 行绑定已走 [GeneratedBindableCustomProperty] 项记录） | GroupNavigationSettingsViewModel 补面 | 既有组投影/成员记录已是独立 bindable 记录，壳只余 9 个节级属性 |
+| 7 | Capsule 四子节 | 5+6+3+7 | CapsuleSettingsViewModel 补面 | CapsuleModeSettingsSection.UserControl 的 ViewModel DP 需换型 |
+| 8 | QuickCapture/Todo | 35/29 | IQuickCaptureSettings 域/TodoSettingsViewModel（编辑器已有 ObservableObject 面） | 摘要投影量大；Todo 编辑器绑定面已半备 |
+| 9 | Weather | 26 | FeatureWidgets 域新建 Weather 编辑器 | 城市搜索状态机、定位状态、建议列表在壳 |
+| 10 | BackupRestore/CloudBackup/CompatibilityDiagnostics | 11+19+13 | BackupSettingsViewModel（已有 5 属性 ObservableObject 面）/MaintenanceSettingsViewModel 补面 | 云备份连接状态机、拖放诊断、快照 ListView 代码后置 ItemsSource |
+| 11 | General/About/Performance | 16/25/14 | 暂留壳（About 更新卡、自启注册、性能 lambda 门面写属宿主域，超出本阶段口径） | 收官批再定去留 |
+
+**共享钉资源表**：迁 N 个门面绑定属性时必同步——AotBindableProperties nameof 计数（345 起逐批递减，测试+审计 ps1 两处）；SettingsViewModel.cs ObservableProperty 计数（73 起，AotPublishContract InlineData）；{Binding} 不得转 x:Bind（否则 WMC1510 866 变更牵动 ~20 runner×2 处钉）；BindableSettingsViewModelInventory 动态测试自动平衡（勿在壳残留同名属性）；编辑器文件 FacadePassthroughAccess 零命中（可绑定属性名避开平铺门面名，去前缀即可）；ModuleBoundary 编译引用检查（Features/* 不得引用 DeskBox.Services/Platform/App——常量下沉 Contracts、本地化经 Func 委托）。
+
 
 # 架构优化进度与下一批计划
 

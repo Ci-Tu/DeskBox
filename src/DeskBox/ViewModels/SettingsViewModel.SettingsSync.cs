@@ -17,6 +17,7 @@ public partial class SettingsViewModel
     private void OnLanguageChanged()
     {
         RefreshLocalizedProperties();
+        _musicSettings.RefreshLocalization();
     }
 
     private void OnSettingsChanged()
@@ -162,9 +163,9 @@ public partial class SettingsViewModel
             TodoUseWideDetailPane = _todoSettings.LayoutMode != SettingsService.TodoLayoutModeSinglePane;
             TodoAutoSelectFirstInWideLayout = _todoSettings.AutoSelectFirstInWideLayout;
 
-            MusicUseArtworkBackdrop = settings.MusicUseArtworkBackdrop;
-            MusicEnableCoverHoverMotion = settings.MusicEnableCoverHoverMotion;
-            SelectedMusicDisplayMode = SettingsService.NormalizeMusicDisplayMode(settings.MusicDisplayMode);
+            // Music presentation lives on the section editor now: refresh the
+            // editor projection instead of assigning shell facade properties.
+            _musicSettings.SyncPresentation();
 
             WeatherAutoLocation = settings.WeatherAutoLocation;
             WeatherCityName = settings.WeatherCityName;
@@ -309,7 +310,6 @@ public partial class SettingsViewModel
             _cachedTodoLayoutModeDisplayNames = null;
             _cachedTodoTabStyleDisplayNames = null;
             _cachedTodoReminderOffsetDisplayNames = null;
-            _cachedMusicDisplayModeDisplayNames = null;
             _cachedWeatherTempUnitDisplayNames = null;
             _cachedWeatherWindUnitDisplayNames = null;
             _cachedWeatherDefaultViewDisplayNames = null;
@@ -355,7 +355,6 @@ public partial class SettingsViewModel
             OnPropertyChanged(nameof(AvailableTodoDefaultFilterDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoReminderOffsetDisplayNames));
-            OnPropertyChanged(nameof(AvailableMusicDisplayModeDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherTemperatureUnitDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherWindSpeedUnitDisplayNames));
             OnPropertyChanged(nameof(AvailableWeatherDefaultViewDisplayNames));
@@ -439,7 +438,6 @@ public partial class SettingsViewModel
         RefreshTodoContentPresentation();
         OnPropertyChanged(nameof(TodoReminderSummaryText));
         OnPropertyChanged(nameof(TodoFooterDisplaySummaryText));
-        OnPropertyChanged(nameof(SelectedMusicDisplayModeText));
         OnPropertyChanged(nameof(WeatherDisplayOptionsSummaryText));
     }
 }

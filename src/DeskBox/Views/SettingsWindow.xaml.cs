@@ -136,6 +136,7 @@ public sealed partial class SettingsWindow : Window
     private readonly BackupSettingsViewModel _backupSettingsViewModel;
     private readonly BackupRestoreActions _backupRestoreActions;
     private readonly IBackupCommands _backupCommands;
+    private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
 
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
         TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
@@ -150,6 +151,7 @@ public sealed partial class SettingsWindow : Window
         DeskBox.Features.FileStack.FileStackSettingsViewModel fileStackSettings,
         DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel groupNavigationSettings,
         DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel featureWidgetsSettings,
+        DeskBox.Features.Music.MusicSettingsViewModel musicSettings,
         DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel managedStorageSettings,
         DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings)
     {
@@ -170,13 +172,14 @@ public sealed partial class SettingsWindow : Window
         _searchSettingsViewModel = searchSettings;
         _backupSettingsViewModel = backupSettings;
         _backupRestoreActions = backupRestoreActions;
+        _musicSettingsViewModel = musicSettings;
         _themeService = themeService;
         _localizationService = localizationService;
         ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings,
             backupSettings, quickCaptureSettings, searchFeatureSettings, appearanceSettings,
             capsuleSettings, interactionSettings, fileDisplaySettings, fileStackSettings,
-            groupNavigationSettings, featureWidgetsSettings, managedStorageSettings,
-            maintenanceSettings, localizationService,
+            groupNavigationSettings, featureWidgetsSettings, musicSettings,
+            managedStorageSettings, maintenanceSettings, localizationService,
             App.Current.AppUpdateService);
         LogConstructionCheckpoint("view-model");
         _settingsRootPointerPressedHandler = SettingsRoot_PointerPressedHandled;

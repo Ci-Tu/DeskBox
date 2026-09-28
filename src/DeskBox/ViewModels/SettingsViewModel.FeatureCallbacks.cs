@@ -131,26 +131,6 @@ public partial class SettingsViewModel
         SyncTodoDisplayFacade();
     }
 
-    partial void OnMusicUseArtworkBackdropChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        _featureWidgetsSettings.SetMusicUseArtworkBackdrop(value);
-    }
-
-    partial void OnMusicEnableCoverHoverMotionChanged(bool value)
-    {
-        if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
-        {
-            return;
-        }
-
-        _featureWidgetsSettings.SetMusicEnableCoverHoverMotion(value);
-    }
-
     partial void OnQuickCaptureClipboardEnabledChanged(bool value)
     {
         if (_isRestoringDefaults || _isApplyingSettingsSnapshot)
