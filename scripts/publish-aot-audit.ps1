@@ -1664,7 +1664,7 @@ $stage4E4RequiredBehaviorPatterns = @(
     },
     [PSCustomObject]@{
         sourceFile = "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs"
-        pattern = "OnPropertyChanged(nameof(AutoStacking));"
+        pattern = "_settings.SetFileStackAutoStacking(value);"
     },
     [PSCustomObject]@{
         sourceFile = "src\DeskBox\Features\FileStack\FileStackSettingsViewModel.cs"
@@ -3477,8 +3477,10 @@ $stage5B4B1SourceFiles = @(
     "src/DeskBox/Views/SettingsSections/CapsuleModeSettingsSection.xaml",
     "src/DeskBox/Views/SettingsSections/CapsuleModeSettingsSection.xaml.cs",
     "src/DeskBox/Models/SettingsOption.cs",
-    "src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs",
-    "src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs",
+    # Batch 44 moved the capsule-override and widget-group projection records
+    # off the settings shell into the Models namespace.
+    "src/DeskBox/Models/CapsuleOverrideSettingsItem.cs",
+    "src/DeskBox/Models/WidgetGroupSettingsItems.cs",
     "src/DeskBox/Models/WeatherData.cs",
     "src/DeskBox/Views/SettingsSections/FileWidgetSettingsSection.xaml",
     "src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs",
@@ -3583,7 +3585,7 @@ $stage5B4B1RequiredProjectionPatterns = @(
 $stage5B4B1ProjectionSource =
     $stage5B4B1Sources[$stage5B4B1SourceFiles[5]] +
     "`n" +
-    $stage5B4B1Sources[$stage5B4B1SourceFiles[22]]
+    $stage5B4B1Sources[$stage5B4B1SourceFiles[26]]
 $stage5B4B1MissingProjectionPatterns = @(
     foreach ($pattern in $stage5B4B1RequiredProjectionPatterns) {
         if ($stage5B4B1ProjectionSource.IndexOf(
@@ -3618,7 +3620,6 @@ $stage5B4B1RequiredBindableTypePatterns = @(
         patterns = @(
             '#if DESKBOX_NATIVE_AOT',
             '[WinRT.GeneratedBindableCustomProperty([',
-            'nameof(SelectedWidgetCapsuleBarPlacement)',
             'public partial class SettingsViewModel')
     },
     [ordered]@{
@@ -3911,7 +3912,6 @@ $stage5B4B2ASourceFiles = @(
     "scripts/run-aot-managed-ui-smoke.ps1",
     "scripts/start-aot-preview.ps1",
     "src/DeskBox/ViewModels/SettingsViewModel.AppearanceOptions.cs",
-    "src/DeskBox/ViewModels/SettingsViewModel.AppearanceCallbacks.cs",
     "src/DeskBox/ViewModels/SettingsViewModel.PreferenceCallbacks.cs",
     "src/DeskBox/ViewModels/WidgetViewModel.Operations.cs",
     "src/DeskBox/Services/SettingsService.cs"
@@ -3927,11 +3927,13 @@ $stage5B4B2ARequiredRunnerPatterns = @(
     'AotManagedUiPersistenceVerifyRestorePhase',
     'AotManagedUiPersistencePostflightPhase',
     'CaptureAotManagedUiPersistenceAsync',
-    'settingsWindow.ViewModel',
+    # Batch 43 rerouted the AOT persistence chimney through the appearance
+    # editor (the shell facade properties are gone).
+    'settingsWindow.AppearanceSettings',
     'ShowFileExtensions',
     'FileNameLineCount',
     'TextSize',
-    'SelectedTrayIconStyle',
+    'appearanceSettings.TrayIconStyle',
     'FlushPendingSaveAsync(',
     'SettingsPersistenceFlushed',
     'ShutdownApplicationAsync()',
