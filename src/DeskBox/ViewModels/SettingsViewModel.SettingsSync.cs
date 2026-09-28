@@ -179,7 +179,9 @@ private void OnLanguageChanged()
         // The global-hotkey card text lives on the interaction editor now;
         // the shell refreshes it through the editor push instead of shell
         // property notifications.
-        NotifyDragDropPermissionPropertiesChanged();
+        // The drag-drop diagnostic texts re-localize through the editor
+        // push (batch 49), not through shell property notifications.
+        PushDragDropDiagnosticProjection();
         OnPropertyChanged(nameof(FeatureWidgetEntries));
         NotifyCapsuleOverridePropertiesChanged();
         // The group-navigation editor rebuilds its option tables itself; the
@@ -199,14 +201,14 @@ private void OnLanguageChanged()
             // through the section editor (batch 45).
             _fileStackSettings.RefreshLocalization();
             _featureWidgetsSettings.RefreshLocalization();
+            // The backup family's option tables and status lines live on the
+            // backup editor now (batch 49); its localization refresh clears
+            // the display-name caches and re-projects the pushed texts.
+            _backupSettings.RefreshLocalization();
             _cachedLanguageDisplayNames = null;
             _cachedAttachmentStorageModeDisplayNames = null;
-            _cachedAutomaticBackupIntervalDisplayNames = null;
-            _cachedAutomaticBackupRetentionDisplayNames = null;
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
             OnPropertyChanged(nameof(AvailableAttachmentStorageModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalDisplayNames));
-            OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionDisplayNames));
             NotifySelectionOptionsChanged();
         }
 

@@ -8,6 +8,7 @@
     xmlns:sections="using:DeskBox.Views.SettingsSections"
     xmlns:viewModels="using:DeskBox.ViewModels"
     xmlns:fileStack="using:DeskBox.Features.FileStack"
+    xmlns:backup="using:DeskBox.Features.Backup"
     xmlns:svc="using:DeskBox.Services"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -2547,7 +2548,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE823;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding AutomaticBackupEnabled, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsOn="{Binding LocalBackupEnabled, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2559,9 +2560,9 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                IsEnabled="{Binding AutomaticBackupEnabled}"
-                                ItemsSource="{Binding AvailableAutomaticBackupIntervalOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedAutomaticBackupIntervalMinutes, Mode=TwoWay}" />
+                                IsEnabled="{Binding LocalBackupEnabled}"
+                                ItemsSource="{Binding AvailableLocalIntervalOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedLocalIntervalMinutes, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2573,9 +2574,9 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                IsEnabled="{Binding AutomaticBackupEnabled}"
-                                ItemsSource="{Binding AvailableAutomaticBackupRetentionOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedAutomaticBackupRetentionCount, Mode=TwoWay}" />
+                                IsEnabled="{Binding LocalBackupEnabled}"
+                                ItemsSource="{Binding AvailableLocalRetentionOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedLocalRetentionCount, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2592,13 +2593,13 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     IsClosable="False"
                                     IsOpen="True"
                                     Severity="Warning"
-                                    Message="{Binding AutomaticBackupFallbackWarningText}"
-                                    Visibility="{Binding AutomaticBackupFallbackWarningVisibility}" />
+                                    Message="{Binding LocalFallbackWarningText}"
+                                    Visibility="{Binding ShowLocalFallbackWarning, Converter={StaticResource SettingsBoolToVisibilityConverter}}" />
                                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                     <TextBox
                                         Grid.Column="0"
                                         IsReadOnly="True"
-                                        Text="{Binding AutomaticBackupDirectoryDisplayText, Mode=OneWay}" />
+                                        Text="{Binding LocalDirectoryDisplayText, Mode=OneWay}" />
                                     <Button
                                         x:Name="ChangeAutomaticBackupDirectoryButton"
                                         Grid.Column="1"
@@ -2709,9 +2710,9 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                IsEnabled="{Binding CloudBackupActionsEnabled}"
-                                ItemsSource="{Binding AvailableCloudBackupProviderOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedCloudBackupProvider, Mode=TwoWay}" />
+                                IsEnabled="{Binding ActionsEnabled}"
+                                ItemsSource="{Binding AvailableProviderOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedProvider, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2719,44 +2720,44 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             HorizontalContentAlignment="Stretch"
                             svc:Localized.DescriptionKey="Settings.CloudBackup.Connection.Description"
                             svc:Localized.HeaderKey="Settings.CloudBackup.Connection.Title"
-                            Visibility="{Binding CloudBackupWebDavVisibility}">
+                            Visibility="{Binding ShowWebDavFields, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8B7;" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <StackPanel Spacing="10">
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" svc:Localized.Key="Settings.CloudBackup.ServerUrl.Label" />
-                                    <TextBox x:Name="CloudBackupServerUrlBox" IsEnabled="{Binding CloudBackupActionsEnabled}" Text="{Binding CloudBackupServerUrl, Mode=TwoWay}" />
+                                    <TextBox x:Name="CloudBackupServerUrlBox" IsEnabled="{Binding ActionsEnabled}" Text="{Binding ServerUrl, Mode=TwoWay}" />
                                 </StackPanel>
                                 <InfoBar
                                     IsClosable="False"
                                     IsOpen="True"
                                     Severity="Warning"
-                                    Message="{Binding CloudBackupHttpWarningText}"
-                                    Visibility="{Binding CloudBackupHttpWarningVisibility}" />
+                                    Message="{Binding HttpWarningText}"
+                                    Visibility="{Binding ShowHttpWarning, Converter={StaticResource SettingsBoolToVisibilityConverter}}" />
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" svc:Localized.Key="Settings.CloudBackup.RemotePath.Label" />
-                                    <TextBox x:Name="CloudBackupRemotePathBox" IsEnabled="{Binding CloudBackupActionsEnabled}" Text="{Binding CloudBackupRemotePath, Mode=TwoWay}" />
+                                    <TextBox x:Name="CloudBackupRemotePathBox" IsEnabled="{Binding ActionsEnabled}" Text="{Binding RemotePath, Mode=TwoWay}" />
                                 </StackPanel>
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" svc:Localized.Key="Settings.CloudBackup.Username.Label" />
-                                    <TextBox x:Name="CloudBackupUsernameBox" IsEnabled="{Binding CloudBackupActionsEnabled}" Text="{Binding CloudBackupUsername, Mode=TwoWay}" />
+                                    <TextBox x:Name="CloudBackupUsernameBox" IsEnabled="{Binding ActionsEnabled}" Text="{Binding Username, Mode=TwoWay}" />
                                 </StackPanel>
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" svc:Localized.Key="Settings.CloudBackup.Password.Label" />
                                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                        <PasswordBox x:Name="CloudBackupPasswordBox" Grid.Column="0" IsEnabled="{Binding CloudBackupActionsEnabled}" />
-                                        <Button x:Name="CloudBackupSavePasswordButton" Grid.Column="1" Click="CloudBackupSavePasswordButton_Click" IsEnabled="{Binding CloudBackupActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
+                                        <PasswordBox x:Name="CloudBackupPasswordBox" Grid.Column="0" IsEnabled="{Binding ActionsEnabled}" />
+                                        <Button x:Name="CloudBackupSavePasswordButton" Grid.Column="1" Click="CloudBackupSavePasswordButton_Click" IsEnabled="{Binding ActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
                                             <TextBlock svc:Localized.Key="Settings.CloudBackup.Password.Save" />
                                         </Button>
                                     </Grid>
-                                    <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding CloudBackupCredentialStatusText}" />
+                                    <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding CredentialStatusText}" />
                                 </StackPanel>
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                                    <Button x:Name="CloudBackupTestConnectionButton" Grid.Column="0" Click="CloudBackupTestConnectionButton_Click" IsEnabled="{Binding CloudBackupActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
+                                    <Button x:Name="CloudBackupTestConnectionButton" Grid.Column="0" Click="CloudBackupTestConnectionButton_Click" IsEnabled="{Binding ActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
                                         <TextBlock svc:Localized.Key="Settings.CloudBackup.TestConnection" />
                                     </Button>
-                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding CloudBackupConnectionStatusText}" TextWrapping="Wrap" />
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding ConnectionStatusText}" TextWrapping="Wrap" />
                                 </Grid>
                             </StackPanel>
                         </toolkit:SettingsCard>
@@ -2768,7 +2769,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8FD;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding CloudBackupActionsEnabled}" IsOn="{Binding CloudBackupTodoDataEnabled, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding ActionsEnabled}" IsOn="{Binding IncludeTodoData, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2778,7 +2779,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE8A5;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding CloudBackupActionsEnabled}" IsOn="{Binding CloudBackupQuickCaptureDataEnabled, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding ActionsEnabled}" IsOn="{Binding IncludeQuickCaptureData, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2788,37 +2789,37 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE790;" />
                             </toolkit:SettingsCard.HeaderIcon>
-                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding CloudBackupActionsEnabled}" IsOn="{Binding CloudBackupWidgetStyleEnabled, Mode=TwoWay}" />
+                            <ToggleSwitch OnContent="" OffContent="" MinWidth="0" IsEnabled="{Binding ActionsEnabled}" IsOn="{Binding IncludeWidgetStyle, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
                             svc:Localized.DescriptionKey="Settings.CloudBackup.Interval.Description"
                             svc:Localized.HeaderKey="Settings.CloudBackup.Interval.Title"
-                            Visibility="{Binding CloudBackupWebDavVisibility}">
+                            Visibility="{Binding ShowWebDavFields, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE823;" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                IsEnabled="{Binding CloudBackupActionsEnabled}"
-                                ItemsSource="{Binding AvailableCloudBackupIntervalOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedCloudBackupIntervalMinutes, Mode=TwoWay}" />
+                                IsEnabled="{Binding ActionsEnabled}"
+                                ItemsSource="{Binding AvailableIntervalOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedIntervalMinutes, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
                             svc:Localized.DescriptionKey="Settings.CloudBackup.Retention.Description"
                             svc:Localized.HeaderKey="Settings.CloudBackup.Retention.Title"
-                            Visibility="{Binding CloudBackupWebDavVisibility}">
+                            Visibility="{Binding ShowWebDavFields, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE823;" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                IsEnabled="{Binding CloudBackupActionsEnabled}"
-                                ItemsSource="{Binding AvailableCloudBackupRetentionOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedCloudBackupRetentionCount, Mode=TwoWay}" />
+                                IsEnabled="{Binding ActionsEnabled}"
+                                ItemsSource="{Binding AvailableRetentionOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedRetentionCount, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2826,24 +2827,24 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             HorizontalContentAlignment="Stretch"
                             svc:Localized.DescriptionKey="Settings.CloudBackup.Snapshots.Description"
                             svc:Localized.HeaderKey="Settings.CloudBackup.Snapshots.Title"
-                            Visibility="{Binding CloudBackupWebDavVisibility}">
+                            Visibility="{Binding ShowWebDavFields, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE74E;" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <StackPanel Spacing="12">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button x:Name="CloudBackupNowButton" Click="CloudBackupNowButton_Click" IsEnabled="{Binding CloudBackupActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
+                                    <Button x:Name="CloudBackupNowButton" Click="CloudBackupNowButton_Click" IsEnabled="{Binding ActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
                                         <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon FontSize="14" Glyph="&#xE74E;" /><TextBlock svc:Localized.Key="Settings.CloudBackup.BackupNow" /></StackPanel>
                                     </Button>
-                                    <Button x:Name="CloudBackupRefreshSnapshotsButton" Click="CloudBackupRefreshSnapshotsButton_Click" IsEnabled="{Binding CloudBackupActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
+                                    <Button x:Name="CloudBackupRefreshSnapshotsButton" Click="CloudBackupRefreshSnapshotsButton_Click" IsEnabled="{Binding ActionsEnabled}" Style="{StaticResource ActionButtonStyle}">
                                         <StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="Refresh" /><TextBlock svc:Localized.Key="Settings.CloudBackup.RefreshSnapshots" /></StackPanel>
                                     </Button>
                                 </StackPanel>
-                                <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding CloudBackupStatusText}" TextWrapping="Wrap" />
+                                <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding StatusText}" TextWrapping="Wrap" />
                                 <TextBlock x:Name="CloudBackupSnapshotsEmptyHint" Style="{StaticResource SettingDescriptionTextStyle}" Visibility="Collapsed" svc:Localized.Key="Settings.CloudBackup.SnapshotList.Empty" />
-                                <ListView x:Name="CloudBackupSnapshotsList" SelectionMode="None" IsItemClickEnabled="False" IsEnabled="{Binding CloudBackupActionsEnabled}">
+                                <ListView x:Name="CloudBackupSnapshotsList" SelectionMode="None" IsItemClickEnabled="False" IsEnabled="{Binding ActionsEnabled}">
                                     <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="viewModels:CloudBackupRemoteSnapshotItem">
+                                        <DataTemplate x:DataType="backup:CloudBackupRemoteSnapshotItem">
                                             <Border Padding="10,8" Margin="0,2" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="4">
                                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                                     <StackPanel Grid.Column="0" Spacing="2">
@@ -2950,10 +2951,10 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <TextBlock
                                     FontWeight="SemiBold"
                                     Style="{StaticResource SettingDescriptionTextStyle}"
-                                    Text="{Binding DragDropPermissionSummaryText}" />
+                                    Text="{Binding DragDropSummaryText}" />
                                 <TextBlock
                                     Style="{StaticResource SettingDescriptionTextStyle}"
-                                    Text="{Binding DragDropPermissionDetailText}" />
+                                    Text="{Binding DragDropDetailText}" />
 
                                 <Grid ColumnSpacing="16" RowSpacing="6">
                                     <Grid.RowDefinitions>
@@ -2970,22 +2971,22 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.ProcessLabel" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionProcessText}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropProcessText}" />
                                     <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.ExplorerLabel" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionExplorerText}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropExplorerText}" />
                                     <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.UacLabel" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionUacText}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropUacText}" />
                                     <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.AppCompatLabel" />
-                                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionAppCompatText}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropAppCompatText}" />
                                     <TextBlock Grid.Row="4" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.StartupLabel" />
-                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionStartupText}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropStartupText}" />
                                     <TextBlock Grid.Row="5" Grid.Column="0" Style="{StaticResource SettingValueTextStyle}" svc:Localized.Key="Settings.DragDropPermission.ShortcutLabel" />
-                                    <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropPermissionShortcutText}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Style="{StaticResource SettingDescriptionTextStyle}" Text="{Binding DragDropShortcutText}" />
                                 </Grid>
 
                                 <TextBlock
                                     Style="{StaticResource SettingDescriptionTextStyle}"
-                                    Text="{Binding DragDropPermissionRepairStatusText}" />
+                                    Text="{Binding DragDropRepairStatusText}" />
 
                                 <StackPanel
                                     HorizontalAlignment="Right"
@@ -3002,7 +3003,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     </Button>
                                     <Button
                                         Click="RepairDragDropPermissionButton_Click"
-                                        IsEnabled="{Binding CanRepairDragDropPermission}"
+                                        IsEnabled="{Binding CanRepairDragDrop}"
                                         Style="{StaticResource ActionButtonStyle}"
                                         svc:Localized.ToolTipKey="Settings.DragDropPermission.RepairTooltip">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -3034,10 +3035,10 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <TextBlock
                                     FontWeight="SemiBold"
                                     Style="{StaticResource SettingDescriptionTextStyle}"
-                                    Text="{Binding RuntimeHealthSummary}" />
+                                    Text="{Binding RuntimeSummaryText}" />
                                 <TextBlock
                                     Style="{StaticResource SettingDescriptionTextStyle}"
-                                    Text="{Binding RuntimeHealthDetail}"
+                                    Text="{Binding RuntimeDetailText}"
                                     TextWrapping="Wrap" />
                                 <StackPanel
                                     HorizontalAlignment="Right"
@@ -3055,7 +3056,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     </Button>
                                     <Button
                                         Click="ResyncRuntimeStateButton_Click"
-                                        IsEnabled="{Binding CanResyncRuntimeState}"
+                                        IsEnabled="{Binding CanResyncRuntime}"
                                         Style="{StaticResource ActionButtonStyle}"
                                         svc:Localized.ToolTipKey="Settings.RuntimeHealth.ResyncTooltip">
                                         <StackPanel Orientation="Horizontal" Spacing="8">

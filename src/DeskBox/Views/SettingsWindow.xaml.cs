@@ -442,7 +442,7 @@ public sealed partial class SettingsWindow : Window
         SettingsRoot.RemoveHandler(UIElement.PointerPressedEvent, _settingsRootPointerPressedHandler);
         SettingsRoot.RemoveHandler(UIElement.PointerReleasedEvent, _settingsRootPointerReleasedHandler);
         if (_cloudBackupCollectionChanged is not null)
-            ViewModel.CloudBackupRemoteSnapshots.CollectionChanged -= _cloudBackupCollectionChanged;
+            _backupSettingsViewModel.RemoteSnapshotItems.CollectionChanged -= _cloudBackupCollectionChanged;
 
         _resizeSettleTimer.Stop();
         _resizeSettleTimer.Tick -= ResizeSettleTimer_Tick;

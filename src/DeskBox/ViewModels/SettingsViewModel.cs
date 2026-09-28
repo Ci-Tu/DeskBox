@@ -67,6 +67,10 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettings;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettings;
     private readonly DeskBox.Features.Maintenance.MaintenanceSettingsViewModel _maintenanceSettings;
+    // The backup family's binding surface and visit state machine live on
+    // the backup editor (batch 49); the shell keeps it for the settings-
+    // broadcast refresh and the diagnostics pushes below.
+    private readonly DeskBox.Features.Backup.BackupSettingsViewModel _backupSettings;
     private readonly LocalizationService _localizationService;
     private readonly WidgetContentFactory _widgetContentFactory;
     private readonly IAppUpdateService _appUpdateService;
@@ -90,8 +94,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private StartupRegistrationState _autoStartState =
         StartupRegistrationState.NotRegistered;
     private DragDropPermissionDiagnostic? _dragDropPermissionDiagnostic;
-    private string _dragDropPermissionRepairStatusText = string.Empty;
-    private bool _isDragDropPermissionRepairing;
     private bool _isRestoringDefaults;
     private bool _isApplyingSettingsSnapshot;
     private bool _isUpdatingHoverButtonActionSelection;
@@ -179,7 +181,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _todoSettings = todoSettings;
         _todoSettings.PropertyChanged += OnTodoSettingsPropertyChanged;
         _backupSettings = backupSettings;
-        _backupSettings.PropertyChanged += OnBackupSettingsPropertyChanged;
         _quickCaptureSettings = quickCaptureSettings;
         _quickCaptureSettingsEditor = quickCaptureSettingsEditor;
         _weatherSettings = weatherSettings;
@@ -199,7 +200,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         _widgetContentFactory = new WidgetContentFactory(_localizationService);
         _appUpdateService = appUpdateService ?? new AppUpdateService();
         _isRestoringDefaults = true;
-        _dragDropPermissionRepairStatusText = string.Empty;
         UpdateStatusText = _localizationService.T("Settings.Update.Status.Ready");
         UpdateDetailText = GetReadyUpdateDetailText();
 
@@ -241,7 +241,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
         // coordinator snapshots.
         _isRestoringDefaults = false;
         _managedStorageRootPath = settings.DefaultManagedStorageRootPath;
-        SyncBackupSettingsFacade();
 
         ApplyCachedUpdateResult();
         RefreshAccentPreview();
@@ -326,7 +325,6 @@ _ = RefreshQuickAccessStateAsync();
         _isDisposed = true;
         _todoSettings.PropertyChanged -= OnTodoSettingsPropertyChanged;
         _todoSettings.Dispose();
-        _backupSettings.PropertyChanged -= OnBackupSettingsPropertyChanged;
         _backupSettings.Dispose();
         _lifetimeCts.Cancel();
         _updateOperationCts?.Cancel();
