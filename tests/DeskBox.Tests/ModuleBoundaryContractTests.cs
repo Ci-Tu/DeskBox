@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Reflection;
 using System.Reflection.Emit;
 using DeskBox.Models;
@@ -260,7 +260,10 @@ public sealed class ModuleBoundaryContractTests
             // Batch 47: the Todo switch chain (the old OnTodo*Changed
             // partials) lives on the Todo section editor as well.
             "src/DeskBox/Services/TodoSettingsCoordinator.cs",
-            "src/DeskBox/Features/Todo/TodoSettingsViewModel.cs"
+            "src/DeskBox/Features/Todo/TodoSettingsViewModel.cs",
+            // Batch 48: the Weather section's binding surface (incl. the
+            // pushed city-search projection) lives on the section editor.
+            "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs"
         })
         {
             string source = ProductionSource().Single(item => item.Path == path).Source;

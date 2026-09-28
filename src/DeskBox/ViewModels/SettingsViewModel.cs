@@ -43,8 +43,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private const string AnimationPresetStandard = "Standard";
     private const string AnimationPresetEmphasized = "Emphasized";
     private const string AnimationPresetCustom = "Custom";
-    private const string WeatherLocationModeAuto = "Auto";
-    private const string WeatherLocationModeManual = "Manual";
     private const string RepositoryUrl = "https://github.com/Tianyu199509/DeskBox";
     private const string OfficialWebsiteUrl = "https://deskbox.fun";
     private const string MicrosoftStoreProductId = "9PBZSNB4D69H";
@@ -58,6 +56,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly ThemeService _themeService;
     private readonly DeskBox.Contracts.IQuickCaptureSettings _quickCaptureSettings;
     private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsEditor;
+    private readonly DeskBox.Features.Weather.WeatherSettingsViewModel _weatherSettings;
     private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettings;
     private readonly DeskBox.Features.Capsule.CapsuleSettingsViewModel _capsuleSettings;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettings;
@@ -84,12 +83,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     private Color _currentAccentColor;
     private string _selectedLanguage = SettingsService.LanguageSystem;
     private string _selectedAttachmentStorageMode = SettingsService.AttachmentStorageModeLink;
-    private string _selectedWeatherTemperatureUnit = SettingsService.WeatherTemperatureUnitCelsius;
-    private string _selectedWeatherWindSpeedUnit = SettingsService.WeatherWindSpeedUnitKmh;
-    private string _selectedWeatherDefaultView = SettingsService.WeatherDefaultViewToday;
-    private string _selectedWeatherSkin = SettingsService.WeatherSkinRich;
-    private string _selectedWeatherDataSource = SettingsService.WeatherDataSourceMsn;
-    private int _selectedWeatherRefreshInterval = 60;
     private bool _useSystemAccentColor;
     private string _managedStorageRootPath = SettingsService.GetDefaultManagedStorageRootPath();
     private QuickAccessPinState _quickAccessPinState = QuickAccessPinState.Unknown;
@@ -105,12 +98,6 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
 
     private string[]? _cachedLanguageDisplayNames;
     private string[]? _cachedAttachmentStorageModeDisplayNames;
-private string[]? _cachedWeatherTempUnitDisplayNames;
-private string[]? _cachedWeatherWindUnitDisplayNames;
-private string[]? _cachedWeatherDefaultViewDisplayNames;
-private string[]? _cachedWeatherSkinDisplayNames;
-private string[]? _cachedWeatherDataSourceDisplayNames;
-private string[]? _cachedWeatherRefreshIntervalDisplayNames;
 
     [ObservableProperty] public partial bool AutoStart { get; set; }
     private bool _autoStartUsedFallback;
@@ -159,15 +146,6 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
     [ObservableProperty] public partial bool IdleWorkingSetTrimEnabled { get; set; } = true;
     [ObservableProperty] public partial bool ImmediateHiddenWorkingSetTrimEnabled { get; set; }
     [ObservableProperty] public partial bool QuiescenceWorkingSetTrimEnabled { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherAutoLocation { get; set; } = true;
-    [ObservableProperty] public partial string WeatherCityName { get; set; } = string.Empty;
-    [ObservableProperty] public partial bool WeatherShowForecast { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowSunrise { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowUvIndex { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowPrecipitation { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowHumidity { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowWind { get; set; } = true;
-    [ObservableProperty] public partial bool WeatherShowPressure { get; set; }
 
     [ObservableProperty] public partial bool IsCheckingForUpdates { get; set; }
     [ObservableProperty] public partial bool IsDownloadingUpdate { get; set; }
@@ -179,6 +157,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         SettingsService settingsService,
         ThemeService themeService,
         DeskBox.Features.Todo.TodoSettingsViewModel todoSettings,
+        DeskBox.Features.Weather.WeatherSettingsViewModel weatherSettings,
         DeskBox.Features.Backup.BackupSettingsViewModel backupSettings,
         DeskBox.Contracts.IQuickCaptureSettings quickCaptureSettings,
         DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel quickCaptureSettingsEditor,
@@ -203,6 +182,7 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         _backupSettings.PropertyChanged += OnBackupSettingsPropertyChanged;
         _quickCaptureSettings = quickCaptureSettings;
         _quickCaptureSettingsEditor = quickCaptureSettingsEditor;
+        _weatherSettings = weatherSettings;
         _searchFeatureSettings = searchFeatureSettings;
         _appearanceSettings = appearanceSettings;
         _capsuleSettings = capsuleSettings;
@@ -254,35 +234,11 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
         QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
         _selectedAttachmentStorageMode = SettingsService.NormalizeAttachmentStorageMode(settings.AttachmentStorageMode);
         // The Todo section's presentation (layout, tabs, content editor,
-        // reminders, footer display) lives on the section editor now
-        // (batch 47); its constructor syncs itself from the coordinator
-        // snapshots.
-        WeatherAutoLocation = settings.WeatherAutoLocation;
-        WeatherCityName = settings.WeatherCityName;
-        _weatherCitySearchText = settings.WeatherCityName;
-        _selectedWeatherTemperatureUnit = settings.WeatherTemperatureUnit == SettingsService.WeatherTemperatureUnitFahrenheit
-            ? SettingsService.WeatherTemperatureUnitFahrenheit
-            : SettingsService.WeatherTemperatureUnitCelsius;
-        _selectedWeatherWindSpeedUnit = settings.WeatherWindSpeedUnit is SettingsService.WeatherWindSpeedUnitMs or SettingsService.WeatherWindSpeedUnitMph
-            ? settings.WeatherWindSpeedUnit
-            : SettingsService.WeatherWindSpeedUnitKmh;
-        _selectedWeatherDefaultView = settings.WeatherDefaultView == SettingsService.WeatherDefaultViewWeek
-            ? SettingsService.WeatherDefaultViewWeek
-            : SettingsService.WeatherDefaultViewToday;
-        _selectedWeatherSkin = settings.WeatherSkin == SettingsService.WeatherSkinRich
-            ? SettingsService.WeatherSkinRich
-            : SettingsService.WeatherSkinStandard;
-        WeatherShowForecast = settings.WeatherShowForecast;
-        WeatherShowSunrise = settings.WeatherShowSunrise;
-        WeatherShowUvIndex = settings.WeatherShowUvIndex;
-        WeatherShowPrecipitation = settings.WeatherShowPrecipitation;
-        WeatherShowHumidity = settings.WeatherShowHumidity;
-        WeatherShowWind = settings.WeatherShowWind;
-        WeatherShowPressure = settings.WeatherShowPressure;
-        _selectedWeatherRefreshInterval = Math.Clamp(
-            settings.WeatherRefreshIntervalMinutes,
-            SettingsService.WeatherRefreshMinMinutes,
-            SettingsService.WeatherRefreshMaxMinutes);
+        // reminders, footer display) and the Weather section's presentation
+        // (location mode, city search, units, view, skin, data source,
+        // refresh interval, display toggles) live on their section editors
+        // now (batches 47/48); their constructors sync themselves from the
+        // coordinator snapshots.
         _isRestoringDefaults = false;
         _managedStorageRootPath = settings.DefaultManagedStorageRootPath;
         SyncBackupSettingsFacade();
@@ -293,7 +249,9 @@ private string[]? _cachedWeatherRefreshIntervalDisplayNames;
 // The managed-storage editor shows the quick-access card; project the initial
 // unknown state now and let the async refresh push the live pin state.
 PushQuickAccessPresentation();
-_ = PopulateNearbyPopularCitiesAsync();
+// The weather editor's suggestion list starts with the nearby popular
+// cities so the search box's dropdown is populated on first focus.
+_ = PopulateWeatherNearbyCitiesAsync();
 _ = RefreshQuickAccessStateAsync();
         _settingsService.SettingsChanged += OnSettingsChanged;
         _quickCaptureSettings.Changed += OnQuickCaptureSettingsChanged;
@@ -309,6 +267,12 @@ _ = RefreshQuickAccessStateAsync();
         // slider-drag suppression flags).
         _quickCaptureSettingsEditor.ListTextSizeCommitted += OnQuickCaptureListTextSizeCommitted;
         _quickCaptureSettingsEditor.ContentTextSizeCommitted += OnQuickCaptureContentTextSizeCommitted;
+
+        // Weather-section host linkage (batch 48): the editor owns the
+        // section's binding surface and persisted writes; the shell answers
+        // user location-mode edits by re-running the Windows location
+        // lookup and pushing the status line back into the editor.
+        _weatherSettings.AutoLocationUserChanged += OnWeatherAutoLocationUserChanged;
 
         // Interaction-section host linkages: the editor owns the section's
         // binding surface and persisted writes, the shell still owns the
@@ -374,6 +338,7 @@ _ = RefreshQuickAccessStateAsync();
         _settingsService.SettingsChanged -= OnSettingsChanged;
         _themeService.AppearanceChanged -= OnAppearanceChanged;
         _localizationService.LanguageChanged -= OnLanguageChanged;
+        _weatherSettings.AutoLocationUserChanged -= OnWeatherAutoLocationUserChanged;
         _citySearchCts?.Cancel();
         _citySearchCts?.Dispose();
         _citySearchService?.Dispose();

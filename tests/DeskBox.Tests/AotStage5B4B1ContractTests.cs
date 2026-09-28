@@ -117,7 +117,7 @@ public sealed class AotStage5B4B1ContractTests
         string selectionOptions = ReadRepositoryFile(
             "src/DeskBox/ViewModels/SettingsViewModel.SelectionOptions.cs");
         string weatherOptions = ReadRepositoryFile(
-            "src/DeskBox/ViewModels/SettingsViewModel.WeatherOptions.cs");
+            "src/DeskBox/Features/Weather/WeatherSettingsViewModel.cs");
         string hotkeyAndAppearance = ReadRepositoryFile(
             "src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs");
         string xaml = ReadRepositoryFile("src/DeskBox/Views/SettingsWindow.xaml");
@@ -175,24 +175,23 @@ public sealed class AotStage5B4B1ContractTests
             fileWidgetXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ObservableCollection<WeatherCitySearchResult> WeatherCitySuggestions",
+            "_citySuggestions.Cast<object>().ToArray()",
             weatherOptions,
             StringComparison.Ordinal);
         Assert.Contains(
-            "WeatherCitySuggestions.Cast<object>().ToArray()",
+            "SelectCity(_citySuggestions[0])",
             weatherOptions,
             StringComparison.Ordinal);
-        Assert.Contains("RefreshWeatherCitySuggestionItems()", weatherOptions, StringComparison.Ordinal);
-        Assert.Contains("WeatherCitySuggestions[0]", hotkeyAndAppearance, StringComparison.Ordinal);
+        Assert.Contains("_weatherSettingsViewModel.TrySelectFirstCitySuggestion()", hotkeyAndAppearance, StringComparison.Ordinal);
         Assert.Contains(
-            "ItemsSource=\"{Binding WeatherCitySuggestionItems}\"",
+            "ItemsSource=\"{Binding CitySuggestionItems}\"",
             xaml,
             StringComparison.Ordinal);
         Assert.Contains(
             "ItemsSource=\"{x:Bind CustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(112, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(89, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
@@ -359,7 +358,7 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 112", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 89", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);

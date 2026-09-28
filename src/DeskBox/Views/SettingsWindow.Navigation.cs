@@ -1012,13 +1012,17 @@ public sealed partial class SettingsWindow
             return;
         }
 
+        // The weather display flyout's selection surface lives on the
+        // section editor (batch 48); the section reaches it through its
+        // DataContext.
+        var weatherSettings = _weatherSettingsViewModel;
         SettingsMultiSelectMenu.Show(
             button,
-            ViewModel.AvailableWeatherDisplayOptions,
-            ViewModel.GetWeatherDisplayOptionName,
-            ViewModel.IsWeatherDisplayOptionSelected,
+            weatherSettings.AvailableDisplayOptions,
+            weatherSettings.GetDisplayOptionName,
+            weatherSettings.IsDisplayOptionSelected,
             _ => true,
-            ViewModel.ToggleWeatherDisplayOption);
+            weatherSettings.ToggleDisplayOption);
     }
 
     private void ContinuousDecorativeAnimationsDropDown_Click(

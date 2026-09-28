@@ -543,7 +543,7 @@ public sealed class AotPublishContractTests
 
     [Theory]
     [InlineData("src/DeskBox/ViewModels/SearchPopupViewModel.cs", 15)]
-    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 26)]
+    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 17)]
     public void AotSensitiveViewModels_UseObservablePartialProperties(
         string relativePath,
         int expectedCount)
@@ -625,7 +625,7 @@ public sealed class AotPublishContractTests
 
         int firstMigratedAssignment = source.IndexOf("AutoStart = StartupService.IsEnabled();", constructorStart, StringComparison.Ordinal);
         int lastMigratedAssignment = source.IndexOf(
-            "WeatherShowPressure = settings.WeatherShowPressure;",
+            "IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;",
             constructorStart,
             StringComparison.Ordinal);
         int suppressionEnd = source.IndexOf("_isRestoringDefaults = false;", suppressionStart, StringComparison.Ordinal);

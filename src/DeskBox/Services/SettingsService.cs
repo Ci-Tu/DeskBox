@@ -336,19 +336,19 @@ public sealed class SettingsService
     public const string QuickCaptureWideOpenEditing = QuickCaptureOptionKinds.WideOpenEditing;
     public const string WidgetTabStylePivot = QuickCaptureOptionKinds.TabStylePivot;
     public const string WidgetTabStyleButton = QuickCaptureOptionKinds.TabStyleButton;
-public const string WeatherTemperatureUnitCelsius = "Celsius";
-public const string WeatherTemperatureUnitFahrenheit = "Fahrenheit";
-public const string WeatherWindSpeedUnitKmh = "kmh";
-public const string WeatherWindSpeedUnitMs = "ms";
-public const string WeatherWindSpeedUnitMph = "mph";
-public const string WeatherDefaultViewToday = "Today";
-public const string WeatherDefaultViewWeek = "Week";
-public const string WeatherSkinStandard = "Standard";
-public const string WeatherSkinRich = "Rich";
-public const string WeatherDataSourceMsn = "MSN";
-public const string WeatherDataSourceOpenMeteo = "OpenMeteo";
-public const int WeatherRefreshMinMinutes = 15;
-public const int WeatherRefreshMaxMinutes = 180;
+public const string WeatherTemperatureUnitCelsius = WeatherOptionKinds.TemperatureUnitCelsius;
+public const string WeatherTemperatureUnitFahrenheit = WeatherOptionKinds.TemperatureUnitFahrenheit;
+public const string WeatherWindSpeedUnitKmh = WeatherOptionKinds.WindSpeedUnitKmh;
+public const string WeatherWindSpeedUnitMs = WeatherOptionKinds.WindSpeedUnitMs;
+public const string WeatherWindSpeedUnitMph = WeatherOptionKinds.WindSpeedUnitMph;
+public const string WeatherDefaultViewToday = WeatherOptionKinds.DefaultViewToday;
+public const string WeatherDefaultViewWeek = WeatherOptionKinds.DefaultViewWeek;
+public const string WeatherSkinStandard = WeatherOptionKinds.SkinStandard;
+public const string WeatherSkinRich = WeatherOptionKinds.SkinRich;
+public const string WeatherDataSourceMsn = WeatherOptionKinds.DataSourceMsn;
+public const string WeatherDataSourceOpenMeteo = WeatherOptionKinds.DataSourceOpenMeteo;
+public const int WeatherRefreshMinMinutes = WeatherOptionKinds.RefreshMinMinutes;
+public const int WeatherRefreshMaxMinutes = WeatherOptionKinds.RefreshMaxMinutes;
 public const int DefaultSearchMaxResults = 100;
 
     internal static IReadOnlyDictionary<string, DefaultPreferencePreservationReason>

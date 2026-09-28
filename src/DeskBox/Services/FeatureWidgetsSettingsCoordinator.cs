@@ -41,6 +41,27 @@ public sealed class FeatureWidgetsSettingsCoordinator : IFeatureWidgetsSettings
             SettingsService.NormalizeMusicDisplayMode(music.MusicDisplayMode));
     }
 
+    public WeatherPresentationSettings ReadWeatherPresentation()
+    {
+        WeatherSettingsSlice weather = _settings.Settings.Weather;
+        return new WeatherPresentationSettings(
+            weather.WeatherAutoLocation,
+            weather.WeatherCityName,
+            WeatherOptionKinds.NormalizeTemperatureUnit(weather.WeatherTemperatureUnit),
+            WeatherOptionKinds.NormalizeWindSpeedUnit(weather.WeatherWindSpeedUnit),
+            WeatherOptionKinds.NormalizeDefaultView(weather.WeatherDefaultView),
+            WeatherOptionKinds.NormalizeSkin(weather.WeatherSkin),
+            WeatherOptionKinds.NormalizeDataSource(weather.WeatherDataSource),
+            WeatherOptionKinds.NormalizeRefreshInterval(weather.WeatherRefreshIntervalMinutes),
+            weather.WeatherShowForecast,
+            weather.WeatherShowSunrise,
+            weather.WeatherShowUvIndex,
+            weather.WeatherShowPrecipitation,
+            weather.WeatherShowHumidity,
+            weather.WeatherShowWind,
+            weather.WeatherShowPressure);
+    }
+
     public void SetFeatureWidgetEnabled(WidgetKind kind, bool enabled)
     {
         ThrowIfStopped();

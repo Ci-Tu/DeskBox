@@ -2169,8 +2169,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableWeatherLocationModeOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherLocationMode, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableLocationModeOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedLocationMode, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <!-- P0-1: Location status feedback -->
@@ -2178,14 +2178,14 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             Margin="4,2,0,4"
                             FontSize="12"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="{Binding WeatherLocationStatusText}"
-                            Visibility="{Binding WeatherLocationStatusVisibility}" />
+                            Text="{Binding LocationStatusText}"
+                            Visibility="{Binding ShowLocationStatus, Converter={StaticResource SettingsBoolToVisibilityConverter}}" />
 
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
                             svc:Localized.DescriptionKey="Settings.Weather.CityName.Description"
                             svc:Localized.HeaderKey="Settings.Weather.CityName.Title"
-                            Visibility="{Binding WeatherCityNameVisibility}">
+                            Visibility="{Binding ShowCitySearch, Converter={StaticResource SettingsBoolToVisibilityConverter}}">
                             <toolkit:SettingsCard.HeaderIcon>
                                 <FontIcon Glyph="&#xE71D;" />
                             </toolkit:SettingsCard.HeaderIcon>
@@ -2193,9 +2193,9 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <!-- AutoSuggestBox: unified search + dropdown -->
                                 <AutoSuggestBox
                                     x:Name="WeatherCitySearchBox"
-                                    PlaceholderText="{Binding WeatherCitySearchPlaceholder}"
-                                    Text="{Binding WeatherCitySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                    ItemsSource="{Binding WeatherCitySuggestionItems}"
+                                    PlaceholderText="{Binding CitySearchPlaceholder}"
+                                    Text="{Binding CitySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    ItemsSource="{Binding CitySuggestionItems}"
                                     TextChanged="WeatherCitySearchBox_TextChanged"
                                     SuggestionChosen="WeatherCitySearchBox_SuggestionChosen"
                                     QuerySubmitted="WeatherCitySearchBox_QuerySubmitted"
@@ -2225,8 +2225,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     Margin="0,2,0,0"
                                     FontSize="12"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    Text="{Binding WeatherCityNoResultsText}"
-                                    Visibility="{Binding HasNoCitySearchResultsVisibility}" />
+                                    Text="{Binding NoCityResultsText}"
+                                    Visibility="{Binding ShowNoCityResults, Converter={StaticResource SettingsBoolToVisibilityConverter}}" />
                             </StackPanel>
                         </toolkit:SettingsCard>
 
@@ -2239,8 +2239,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="180"
-                                ItemsSource="{Binding AvailableWeatherDataSourceOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherDataSource, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableDataSourceOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedDataSource, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2252,8 +2252,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                ItemsSource="{Binding AvailableWeatherTemperatureUnitOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherTemperatureUnit, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableTemperatureUnitOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedTemperatureUnit, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2265,8 +2265,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                ItemsSource="{Binding AvailableWeatherWindSpeedUnitOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherWindSpeedUnit, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableWindSpeedUnitOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedWindSpeedUnit, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2278,8 +2278,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                ItemsSource="{Binding AvailableWeatherDefaultViewOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherDefaultView, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableDefaultViewOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedDefaultView, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2291,8 +2291,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                ItemsSource="{Binding AvailableWeatherSkinOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherSkin, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableSkinOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedSkin, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2304,8 +2304,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="150"
-                                ItemsSource="{Binding AvailableWeatherRefreshIntervalOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWeatherRefreshInterval, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableRefreshIntervalOptions}"
+                                controls:SettingsComboBox.Value="{Binding SelectedRefreshInterval, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard
@@ -2320,7 +2320,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 MaxWidth="280"
                                 HorizontalAlignment="Right"
                                 Click="WeatherDisplayOptionsDropDown_Click"
-                                Content="{Binding WeatherDisplayOptionsSummaryText}" />
+                                Content="{Binding DisplayOptionsSummaryText}" />
                         </toolkit:SettingsCard>
 
                     </StackPanel>

@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using DeskBox.Contracts;
 using DeskBox.Features.Todo;
 using DeskBox.Models;
@@ -628,6 +628,6 @@ public sealed class TodoSettingsEditorTests : IDisposable
         Assert.Contains("nameof(DefaultFilter)", bridge, StringComparison.Ordinal);
         Assert.Equal(29, Regex.Matches(bridge, @"nameof\(").Count);
         Assert.DoesNotContain("nameof(ShowAllTab)", bridge, StringComparison.Ordinal);
-        Assert.Equal(112, Regex.Matches(bindableShell, @"nameof\(").Count);
+        Assert.Equal(89, Regex.Matches(bindableShell, @"nameof\(").Count);
     }
 }
