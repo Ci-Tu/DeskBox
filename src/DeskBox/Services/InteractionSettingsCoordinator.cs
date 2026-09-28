@@ -58,7 +58,8 @@ public sealed class InteractionSettingsCoordinator : IInteractionSettings
             shell.ResizeSnapEnabled,
             SettingsService.NormalizeWidgetSnapSpacing(shell.WidgetSnapSpacing),
             _settings.Settings.FileWidget.DoubleClickToOpen,
-            shell.KeepWidgetsVisibleOnShowDesktop);
+            shell.KeepWidgetsVisibleOnShowDesktop,
+            _settings.Settings.FileWidget.FileItemSystemContextMenuEnabled);
     }
 
     public void SetAutoStart(bool value)

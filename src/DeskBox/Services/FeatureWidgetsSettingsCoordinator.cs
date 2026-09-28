@@ -334,6 +334,10 @@ public sealed class FeatureWidgetsSettingsCoordinator : IFeatureWidgetsSettings
         return true;
     }
 
+    public string ReadFileWidgetFolderOpenBehavior() =>
+        FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
+            _settings.Settings.FileWidget.FileWidgetFolderOpenBehavior);
+
     public bool SetFileWidgetFolderOpenBehavior(string? behavior)
     {
         ThrowIfStopped();

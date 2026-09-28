@@ -47,6 +47,7 @@ public sealed partial class InteractionSettingsViewModel : ObservableObject
     private string _layerMode = WidgetLayerModes.Dynamic;
     private string _fileOpenMethod = FileOpenMethods.SingleClick;
     private string _showDesktopBehavior = ShowDesktopBehaviors.HideWithWindows;
+    private bool _fileItemContextMenuEnabled;
     private string _hoverButtonActionsSummary = string.Empty;
     private string _hotkeyText = string.Empty;
     private string _hotkeyStatusText = string.Empty;
@@ -82,6 +83,13 @@ public sealed partial class InteractionSettingsViewModel : ObservableObject
     /// the updated presentation back.
     /// </summary>
     public event Action<bool>? HotkeyEnabledUserChanged;
+
+    /// <summary>
+    /// Host linkage: the user toggled the file-item system context menu
+    /// (bound through the file-widget overview's typed editor dependency
+    /// property). The shell owns the native context-menu server prewarm.
+    /// </summary>
+    public event Action<bool>? FileItemContextMenuEnabledUserChanged;
 
     // --- Main interaction section binding surface ---
 
@@ -188,6 +196,31 @@ public sealed partial class InteractionSettingsViewModel : ObservableObject
             new(ShowDesktopBehaviors.HideWithWindows, _localize("Settings.ShowDesktopBehavior.HideWithWindows"))
         };
 
+    /// <summary>
+    /// The file-item system context-menu toggle. Its own section page
+    /// consumer is the file-widget overview, which re-binds it through the
+    /// typed editor dependency property (batch 45).
+    /// </summary>
+    public bool FileItemContextMenuEnabled
+    {
+        get => _fileItemContextMenuEnabled;
+        set
+        {
+            if (!SetProperty(ref _fileItemContextMenuEnabled, value))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetFileItemSystemContextMenuEnabled(value);
+            FileItemContextMenuEnabledUserChanged?.Invoke(value);
+        }
+    }
+
     [ObservableProperty]
     public partial bool SnapEnabled { get; set; } = true;
 
@@ -285,6 +318,7 @@ public sealed partial class InteractionSettingsViewModel : ObservableObject
             ShowDesktopBehavior = snapshot.KeepWidgetsVisibleOnShowDesktop
                 ? ShowDesktopBehaviors.KeepVisible
                 : ShowDesktopBehaviors.HideWithWindows;
+            FileItemContextMenuEnabled = snapshot.FileItemContextMenuEnabled;
         }
         finally
         {

@@ -69,16 +69,19 @@ public readonly record struct InteractionSettingsSnapshot(
 /// <summary>
 /// Immutable read snapshot of the interaction presentation fields the
 /// section editor binds its XAML surface to (layer mode, resize snap enable
-/// plus spacing, and the two combo projections). Values arrive already
-/// normalized, mirroring the music editor's read-port shape; external
-/// refresh paths (settings broadcasts, default restores) re-read it.
+/// plus spacing, the two combo projections, and the file-item context-menu
+/// toggle the file-widget overview re-binds through its typed editor
+/// dependency property). Values arrive already normalized, mirroring the
+/// music editor's read-port shape; external refresh paths (settings
+/// broadcasts, default restores) re-read it.
 /// </summary>
 public sealed record InteractionPresentationSettings(
     string LayerMode,
     bool SnapEnabled,
     double SnapSpacing,
     bool DoubleClickToOpen,
-    bool KeepWidgetsVisibleOnShowDesktop);
+    bool KeepWidgetsVisibleOnShowDesktop,
+    bool FileItemContextMenuEnabled);
 
 /// <summary>
 /// Immutable presentation snapshot of the global-hotkey card, computed by

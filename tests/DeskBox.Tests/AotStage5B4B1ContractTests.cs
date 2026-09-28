@@ -156,22 +156,23 @@ public sealed class AotStage5B4B1ContractTests
             weatherData,
             StringComparison.Ordinal);
         Assert.Contains(
-            "IsOn=\"{x:Bind ViewModel.FileStacksEnabled, Mode=TwoWay}\"",
+            "IsOn=\"{x:Bind FileStack.StacksEnabled, Mode=TwoWay}\"",
             fileWidgetXaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ItemsSource=\"{x:Bind ViewModel.AvailableFileWidgetFolderOpenBehaviorOptionItems, Mode=OneWay}\"",
+            "ItemsSource=\"{x:Bind FeatureWidgets.AvailableFolderOpenBehaviorOptionItems, Mode=OneWay}\"",
             fileWidgetXaml,
             StringComparison.Ordinal);
-        Assert.Contains("AvailableFileStackPopoverLayoutOptions", fileStackOptions, StringComparison.Ordinal);
+        string fileStackEditor = ReadRepositoryFile(
+            "src/DeskBox/Features/FileStack/FileStackSettingsViewModel.cs");
+        Assert.Contains("AvailablePopoverLayoutOptions", fileStackEditor, StringComparison.Ordinal);
         Assert.Contains(
-            "AvailableFileWidgetFolderOpenBehaviorOptions.Cast<object>().ToArray()",
-            featureOptions,
+            "AvailableFolderOpenBehaviorOptions.Cast<object>().ToArray()",
+            ReadRepositoryFile("src/DeskBox/Features/FeatureWidgets/FeatureWidgetsSettingsViewModel.cs"),
             StringComparison.Ordinal);
-        Assert.Contains("nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems)", selectionOptions, StringComparison.Ordinal);
         Assert.Contains(
-            "nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems)",
-            selectionOptions,
+            "controls:SettingsComboBox.Value=\"{x:Bind FeatureWidgets.FolderOpenBehavior, Mode=TwoWay}\"",
+            fileWidgetXaml,
             StringComparison.Ordinal);
         Assert.Contains(
             "ObservableCollection<WeatherCitySearchResult> WeatherCitySuggestions",
@@ -188,10 +189,10 @@ public sealed class AotStage5B4B1ContractTests
             xaml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "ItemsSource=\"{x:Bind FileStackCustomRules, Mode=OneWay}\"",
+            "ItemsSource=\"{x:Bind CustomRules, Mode=OneWay}\"",
             xaml,
             StringComparison.Ordinal);
-        Assert.Equal(192, CountOccurrences(bindableViewModel, "nameof("));
+        Assert.Equal(174, CountOccurrences(bindableViewModel, "nameof("));
         Assert.Contains("nameof(AvailableAutoStartModeOptions)", bindableViewModel, StringComparison.Ordinal);
         Assert.Contains("nameof(ImmediateHiddenWorkingSetTrimEnabled)", bindableViewModel, StringComparison.Ordinal);
         Assert.DoesNotContain("nameof(WidgetCapsuleModeEnabled)", bindableViewModel, StringComparison.Ordinal);
@@ -358,7 +359,7 @@ public sealed class AotStage5B4B1ContractTests
         Assert.Contains("stage5B4B1RequiredCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCommandXamlPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredCapsuleCodeBehindPatterns", audit, StringComparison.Ordinal);
-        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 192", audit, StringComparison.Ordinal);
+        Assert.Contains("stage5B4B1ExpectedBindableViewModelPropertyCount = 174", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1RequiredSmokeScriptPatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1MissingRoutePatterns", audit, StringComparison.Ordinal);
         Assert.Contains("stage5B4B1UnsafeMutationPatterns", audit, StringComparison.Ordinal);

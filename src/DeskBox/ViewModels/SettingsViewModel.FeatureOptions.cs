@@ -63,47 +63,6 @@ public partial class SettingsViewModel
     }
 
 
-    public string SelectedFileWidgetFolderOpenBehavior
-    {
-        get => _selectedFileWidgetFolderOpenBehavior;
-        set
-        {
-            string normalized =
-                FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(value);
-            if (!SetProperty(
-                    ref _selectedFileWidgetFolderOpenBehavior,
-                    normalized))
-            {
-                return;
-            }
-
-            if (_isRestoringDefaults)
-            {
-                return;
-            }
-
-            _featureWidgetsSettings.SetFileWidgetFolderOpenBehavior(normalized);
-        }
-    }
-
-    public IReadOnlyList<SettingsOption>
-        AvailableFileWidgetFolderOpenBehaviorOptions =>
-        WrapOptions(
-        [
-            new(
-                FileWidgetFolderOpenBehaviorNames.Explorer,
-                _localizationService.T(
-                    "Settings.FileWidget.FolderOpenBehavior.Explorer")),
-            new(
-                FileWidgetFolderOpenBehaviorNames.Embedded,
-                _localizationService.T(
-                    "Settings.FileWidget.FolderOpenBehavior.Embedded"))
-        ]);
-
-    public object[] AvailableFileWidgetFolderOpenBehaviorOptionItems =>
-        AvailableFileWidgetFolderOpenBehaviorOptions.Cast<object>().ToArray();
-
-
     public string SelectedQuickCaptureDefaultView
     {
         get => _quickCaptureSettings.ReadTabs().DefaultView;

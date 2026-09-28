@@ -73,7 +73,13 @@ public sealed partial class SettingsWindow
         section.DataContext = ViewModel;
         // LoadContent is used outside an ItemsControl, so initialize the
         // template's generated compiled bindings with the actual view model.
-        XamlBindingHelper.GetDataTemplateComponent(section)?.ProcessBindings(ViewModel, 0, 0, out _);
+        // The file-stack template keeps its compiled x:Bind surface typed to
+        // the section editor (batch 45), so its bindings initialize with the
+        // editor instead of the shell view model.
+        object compiledBindingsRoot = sectionTag == "FileStackSettings"
+            ? _fileStackSettingsViewModel
+            : ViewModel;
+        XamlBindingHelper.GetDataTemplateComponent(section)?.ProcessBindings(compiledBindingsRoot, 0, 0, out _);
 
         switch (section)
         {
@@ -81,7 +87,9 @@ public sealed partial class SettingsWindow
                 searchSettings.Configure(_searchSettingsViewModel, _localizationService, _hWnd);
                 break;
             case FileWidgetSettingsSection fileSettings:
-                fileSettings.ViewModel = ViewModel;
+                fileSettings.FileStack = _fileStackSettingsViewModel;
+                fileSettings.FeatureWidgets = _featureWidgetsSettingsViewModel;
+                fileSettings.Interaction = _interactionSettingsViewModel;
                 break;
             case CapsuleModeSettingsSection capsuleSettings:
                 capsuleSettings.ViewModel = ViewModel;
@@ -104,6 +112,16 @@ public sealed partial class SettingsWindow
         if (sectionTag is "Interaction" or "InteractionWindowSettings")
         {
             section.DataContext = _interactionSettingsViewModel;
+        }
+
+        // The file-stack section binds through the file-stack editor
+        // (batch 45): {Binding} markup resolves through its generated custom
+        // property provider under Native AOT, and the template's compiled
+        // x:Bind paths (open-mode combo and the rule list) are typed to the
+        // editor as well.
+        if (sectionTag == "FileStackSettings")
+        {
+            section.DataContext = _fileStackSettingsViewModel;
         }
 
         if (sectionTag == "FileDisplaySettings")

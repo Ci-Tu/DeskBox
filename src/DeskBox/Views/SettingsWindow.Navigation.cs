@@ -855,14 +855,14 @@ public sealed partial class SettingsWindow
 
     private void AddFileStackRuleButton_Click(object sender, RoutedEventArgs e)
     {
-        ViewModel.AddFileStackCustomRule();
+        _fileStackSettingsViewModel.AddRule();
     }
 
     private void RemoveFileStackRuleButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: FileStackCustomRuleEditor editor })
         {
-            ViewModel.RemoveFileStackCustomRule(editor);
+            _fileStackSettingsViewModel.RemoveRule(editor);
         }
     }
 
@@ -870,7 +870,7 @@ public sealed partial class SettingsWindow
     {
         if (sender is Button { DataContext: FileStackCustomRuleEditor editor })
         {
-            ViewModel.MoveFileStackCustomRule(editor, -1);
+            _fileStackSettingsViewModel.MoveRule(editor, -1);
         }
     }
 
@@ -878,7 +878,7 @@ public sealed partial class SettingsWindow
     {
         if (sender is Button { DataContext: FileStackCustomRuleEditor editor })
         {
-            ViewModel.MoveFileStackCustomRule(editor, 1);
+            _fileStackSettingsViewModel.MoveRule(editor, 1);
         }
     }
 
@@ -886,7 +886,7 @@ public sealed partial class SettingsWindow
         ListViewBase sender,
         DragItemsCompletedEventArgs args)
     {
-        ViewModel.CommitFileStackCustomRuleOrder();
+        _fileStackSettingsViewModel.CommitRuleOrder();
     }
 
     private void FeatureSettingsExpander_Loaded(object sender, RoutedEventArgs e)

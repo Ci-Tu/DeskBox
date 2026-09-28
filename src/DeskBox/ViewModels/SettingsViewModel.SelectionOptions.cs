@@ -65,18 +65,6 @@ public partial class SettingsViewModel
     public IReadOnlyList<SettingsOption> AvailableWeatherRefreshIntervalOptions =>
         CreateSelectionOptions(AvailableWeatherRefreshIntervals, AvailableWeatherRefreshIntervalDisplayNames);
 
-    public IReadOnlyList<SettingsOption> AvailableFileStackGroupByOptions =>
-        CreateSelectionOptions(AvailableFileStackGroupBys, AvailableFileStackGroupByDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableFileStackThresholdOptions =>
-        CreateSelectionOptions(AvailableFileStackThresholds, AvailableFileStackThresholdDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableFileStackOrderByOptions =>
-        CreateSelectionOptions(AvailableFileStackOrderBys, AvailableFileStackOrderByDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableFileStackUnmatchedBehaviorOptions =>
-        CreateSelectionOptions(AvailableFileStackUnmatchedBehaviors, AvailableFileStackUnmatchedBehaviorDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableAutomaticBackupIntervalOptions =>
         CreateSelectionOptions(
             AvailableAutomaticBackupIntervals,
@@ -116,8 +104,6 @@ public partial class SettingsViewModel
 
     private void NotifySelectionOptionsChanged()
     {
-        OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptions));
-        OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems));
         OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewOptions));
@@ -139,10 +125,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(AvailableWeatherSkinOptions));
         OnPropertyChanged(nameof(AvailableWeatherDataSourceOptions));
         OnPropertyChanged(nameof(AvailableWeatherRefreshIntervalOptions));
-        OnPropertyChanged(nameof(AvailableFileStackGroupByOptions));
-        OnPropertyChanged(nameof(AvailableFileStackThresholdOptions));
-        OnPropertyChanged(nameof(AvailableFileStackOrderByOptions));
-        OnPropertyChanged(nameof(AvailableFileStackUnmatchedBehaviorOptions));
         OnPropertyChanged(nameof(AvailableAutomaticBackupIntervalOptions));
         OnPropertyChanged(nameof(AvailableAutomaticBackupRetentionOptions));
     }

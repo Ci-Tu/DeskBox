@@ -94,18 +94,16 @@ public partial class SettingsViewModel
         _interactionSettings.SetAutoCheckForUpdates(value);
     }
 
-    partial void OnFileItemSystemContextMenuEnabledChanged(bool value)
+    /// <summary>
+    /// Host linkage for the interaction editor: the user toggled the
+    /// file-item context menu (the editor persisted the value through the
+    /// coordinator). Warm the native context-menu server so the first
+    /// right-click in a widget does not pay the cold handler-loading cost.
+    /// </summary>
+    private void OnInteractionFileItemContextMenuUserChanged(bool value)
     {
-        if (_isRestoringDefaults)
-        {
-            return;
-        }
-
-        _interactionSettings.SetFileItemSystemContextMenuEnabled(value);
         if (value)
         {
-            // Warm the native context-menu server so the first right-click in
-            // a widget does not pay the cold handler-loading cost.
             ShellContextMenuProxy.Prewarm();
         }
     }

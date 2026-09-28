@@ -1,23 +1,124 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using DeskBox.Contracts;
 using DeskBox.Models;
 
 namespace DeskBox.Features.FeatureWidgets;
 
 /// <summary>
-/// Feature-section editor seam. The legacy settings shell keeps every
-/// XAML/AOT binding, the summary projections, the feature-card list and the
-/// host-side WidgetManager sync chains; this editor is the forwarding target
-/// over <see cref="IFeatureWidgetsSettings"/> and owns no duplicated state.
-/// All persistence rules (normalization through the shared normalizers,
-/// unchanged-write skip, the debounced save) live in the coordinator.
+/// Feature-section settings editor. Owns the file-widget overview combo's
+/// binding surface (the global folder-open behavior, re-bound through the
+/// overview's typed editor dependency property in batch 45): the persisted
+/// projection reads through <see cref="IFeatureWidgetsSettings"/>, user
+/// edits write through the same coordinator ports the legacy shell used,
+/// and external refresh paths (settings broadcasts, default restores,
+/// language changes) re-sync the projection instead of writing back. The
+/// rest of the seam stays a forwarding surface for the shell's unmigrated
+/// feature sections; the shell keeps the feature-card list and the
+/// host-side WidgetManager sync chains. All persistence rules
+/// (normalization through the shared normalizers, unchanged-write skip, the
+/// debounced save) live in the coordinator. The bindable property names
+/// drop the legacy <c>FileWidget</c>/<c>Selected</c> prefixes to keep clear
+/// of the flat <c>AppSettings</c> facade-name ratchet. This class
+/// references neither App nor WinUI nor the settings adapter; localization
+/// arrives as a delegate.
 /// </summary>
-public sealed class FeatureWidgetsSettingsViewModel
+public sealed partial class FeatureWidgetsSettingsViewModel : ObservableObject
 {
     private readonly IFeatureWidgetsSettings _settings;
+    private readonly Func<string, string> _localize;
+    private bool _isSyncingPresentation;
+    private string _folderOpenBehavior = FileWidgetFolderOpenBehaviors.Explorer;
+    private string[]? _cachedFolderOpenBehaviorNames;
 
-    public FeatureWidgetsSettingsViewModel(IFeatureWidgetsSettings settings)
+    public FeatureWidgetsSettingsViewModel(
+        IFeatureWidgetsSettings settings,
+        Func<string, string> localize)
     {
         _settings = settings;
+        _localize = localize;
+        SyncPresentation();
+    }
+
+    public string FolderOpenBehavior
+    {
+        get => _folderOpenBehavior;
+        set
+        {
+            string normalized = FileWidgetFolderOpenBehaviors.NormalizeGlobal(value);
+            if (!SetProperty(ref _folderOpenBehavior, normalized))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetFileWidgetFolderOpenBehavior(normalized);
+        }
+    }
+
+    public IReadOnlyList<SettingsOption> AvailableFolderOpenBehaviorOptions
+    {
+        get
+        {
+            // Build a real SettingsOption[] (not a collection expression): the
+            // hidden read-only-array type cannot marshal across the WinRT ABI
+            // in Native AOT builds and would leave the ItemsSource empty.
+            _cachedFolderOpenBehaviorNames ??=
+            [
+                _localize("Settings.FileWidget.FolderOpenBehavior.Explorer"),
+                _localize("Settings.FileWidget.FolderOpenBehavior.Embedded")
+            ];
+            return
+            [
+                new SettingsOption(
+                    FileWidgetFolderOpenBehaviors.Explorer,
+                    _cachedFolderOpenBehaviorNames[0]),
+                new SettingsOption(
+                    FileWidgetFolderOpenBehaviors.Embedded,
+                    _cachedFolderOpenBehaviorNames[1])
+            ];
+        }
+    }
+
+    /// <summary>
+    /// The overview combo's ItemsSource: an object[] projection because the
+    /// hidden read-only-array type behind a collection expression cannot
+    /// marshal across the WinRT ABI in Native AOT builds.
+    /// </summary>
+    public object[] AvailableFolderOpenBehaviorOptionItems =>
+        AvailableFolderOpenBehaviorOptions.Cast<object>().ToArray();
+
+    /// <summary>
+    /// Re-projects the persisted folder-open behavior onto the binding
+    /// surface without writing back. Called on construction, settings
+    /// broadcasts and default restores.
+    /// </summary>
+    public void SyncPresentation()
+    {
+        _isSyncingPresentation = true;
+        try
+        {
+            FolderOpenBehavior = _settings.ReadFileWidgetFolderOpenBehavior();
+        }
+        finally
+        {
+            _isSyncingPresentation = false;
+        }
+    }
+
+    /// <summary>
+    /// Drops the localized option-name cache after a language change so the
+    /// options list re-projects in the new language.
+    /// </summary>
+    public void RefreshLocalization()
+    {
+        _cachedFolderOpenBehaviorNames = null;
+        OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptions));
+        OnPropertyChanged(nameof(AvailableFolderOpenBehaviorOptionItems));
+        OnPropertyChanged(nameof(FolderOpenBehavior));
     }
 
     public void SetFeatureWidgetEnabled(WidgetKind kind, bool enabled) =>

@@ -109,4 +109,11 @@ public interface IFeatureWidgetsSettings
     bool SetManagedDropAction(string? action);
 
     bool SetFileWidgetFolderOpenBehavior(string? behavior);
+
+    /// <summary>
+    /// Reads the persisted global folder-open behavior, normalized through
+    /// <see cref="FileWidgetFolderOpenBehaviors"/> (batch 45 read port for
+    /// the file-widget overview combo).
+    /// </summary>
+    string ReadFileWidgetFolderOpenBehavior();
 }

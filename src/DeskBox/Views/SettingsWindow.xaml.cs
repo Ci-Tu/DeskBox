@@ -138,6 +138,8 @@ public sealed partial class SettingsWindow : Window
     private readonly IBackupCommands _backupCommands;
     private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
     private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
+    private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettingsViewModel;
+    private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettingsViewModel;
     private readonly DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel _fileDisplaySettingsViewModel;
     private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettingsViewModel;
     private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettingsViewModel;
@@ -160,6 +162,14 @@ public sealed partial class SettingsWindow : Window
     /// </summary>
     public DeskBox.Features.Appearance.AppearanceSettingsViewModel AppearanceSettings =>
         _appearanceSettingsViewModel;
+
+    /// <summary>
+    /// The file-stack section's editor. Exposed for the AOT deep-settings
+    /// smoke and the section's code-behind rule handlers; the section itself
+    /// reaches the editor through its DataContext.
+    /// </summary>
+    public DeskBox.Features.FileStack.FileStackSettingsViewModel FileStackSettings =>
+        _fileStackSettingsViewModel;
 
     public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
         TodoSettingsViewModel todoSettings, SearchSettingsViewModel searchSettings,
@@ -197,6 +207,8 @@ public sealed partial class SettingsWindow : Window
         _backupRestoreActions = backupRestoreActions;
         _musicSettingsViewModel = musicSettings;
         _interactionSettingsViewModel = interactionSettings;
+        _fileStackSettingsViewModel = fileStackSettings;
+        _featureWidgetsSettingsViewModel = featureWidgetsSettings;
         _fileDisplaySettingsViewModel = fileDisplaySettings;
         _managedStorageSettingsViewModel = managedStorageSettings;
         _appearanceSettingsViewModel = appearanceSettings;
@@ -449,7 +461,9 @@ public sealed partial class SettingsWindow : Window
 
         if (AppearanceDetailSection is not null)
         {
-            AppearanceDetailSection.ViewModel = null;
+            AppearanceDetailSection.FileStack = null;
+            AppearanceDetailSection.FeatureWidgets = null;
+            AppearanceDetailSection.Interaction = null;
         }
         if (CapsuleModeSection is not null)
         {
