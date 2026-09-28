@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -543,7 +543,7 @@ public sealed class AotPublishContractTests
 
     [Theory]
     [InlineData("src/DeskBox/ViewModels/SearchPopupViewModel.cs", 15)]
-    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 63)]
+    [InlineData("src/DeskBox/ViewModels/SettingsViewModel.cs", 53)]
     public void AotSensitiveViewModels_UseObservablePartialProperties(
         string relativePath,
         int expectedCount)

@@ -1,24 +1,18 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Runtime.CompilerServices;
 using DeskBox.Core.Persistence;
+using DeskBox.Contracts;
 using DeskBox.FileSafety;
+using LayoutDensityPresetValues = DeskBox.Contracts.LayoutDensityPresetValues;
 using DeskBox.Helpers;
 using DeskBox.Models;
 
 [assembly: InternalsVisibleTo("DeskBox.Tests")]
 
 namespace DeskBox.Services;
-
-public readonly record struct LayoutDensityPresetValues(
-    double IconSize,
-    double TextSize,
-    double DensityScale,
-    double HorizontalSpacingScale,
-    double VerticalSpacingScale,
-    double FileNameWidthScale);
 
 internal enum DefaultPreferencePreservationReason
 {
@@ -74,49 +68,49 @@ public sealed class SettingsService
     public const double DefaultWidgetMaterialIntensity = 0.65;
     public const double MinWidgetMaterialIntensity = 0.0;
     public const double MaxWidgetMaterialIntensity = 1.0;
-    public const string WidgetMaterialTypeMica = "Mica";
-    public const string WidgetMaterialTypeMicaAlt = "MicaAlt";
-    public const string WidgetMaterialTypeAcrylic = "Acrylic";
-    public const string WidgetMaterialTypeAcrylicBase = "AcrylicBase";
-    public const string WidgetMaterialTypeSolid = "Solid";
-    public const string WidgetBorderColorModeNeutral = "Neutral";
-    public const string WidgetBorderColorModeAccent = "Accent";
-    public const string WidgetBorderColorModeNone = "None";
-    public const string WidgetBorderStyleNone = "None";
-    public const string WidgetBorderStyleThin = "Thin";
-    public const string WidgetBorderStyleMedium = "Medium";
-    public const string WidgetBorderStyleThick = "Thick";
-    public const string WidgetCornerPreferenceSquare = "Square";
-    public const string WidgetCornerPreferenceSmall = "Small";
-    public const string WidgetCornerPreferenceRound = "Round";
-    public const string WidgetAnimationEffectNone = "None";
-    public const string WidgetAnimationEffectFade = "Fade";
-    public const string WidgetAnimationEffectSlideRight = "SlideRight";
-    public const string WidgetAnimationEffectSlideLeft = "SlideLeft";
-    public const string WidgetAnimationEffectSlideUp = "SlideUp";
-    public const string WidgetAnimationEffectSlideDown = "SlideDown";
-    public const string WidgetAnimationEffectScaleFade = "ScaleFade";
-    public const string WidgetAnimationEffectSlideFade = "SlideFade";
-    public const string WidgetAnimationEffectZoom = "Zoom";
-    public const string WidgetAnimationEffectSlideUpFade = "SlideUpFade";
-    public const string WidgetAnimationEffectSlideDownFade = "SlideDownFade";
-    public const string WidgetAnimationEffectSlideLeftFade = "SlideLeftFade";
-    public const string WidgetAnimationEffectSlideRightFade = "SlideRightFade";
-    public const string WidgetAnimationEffectScaleSlide = "ScaleSlide";
-    public const string WidgetAnimationSpeedVeryFast = "VeryFast";
-    public const string WidgetAnimationSpeedFast = "Fast";
-    public const string WidgetAnimationSpeedStandard = "Standard";
-    public const string WidgetAnimationSpeedRelaxed = "Relaxed";
-    public const string WidgetAnimationSpeedSlow = "Slow";
-    public const string WidgetAnimationSlideDirectionNone = "None";
-    public const string WidgetAnimationSlideDirectionLeft = "Left";
-    public const string WidgetAnimationSlideDirectionRight = "Right";
-    public const string WidgetAnimationSlideDirectionUp = "Up";
-    public const string WidgetAnimationSlideDirectionDown = "Down";
-    public const string WidgetAnimationEasingNone = "None";
-    public const string WidgetAnimationEasingLight = "Light";
-    public const string WidgetAnimationEasingStandard = "Standard";
-    public const string WidgetAnimationEasingStrong = "Strong";
+    public const string WidgetMaterialTypeMica = Contracts.WidgetMaterialKinds.Mica;
+    public const string WidgetMaterialTypeMicaAlt = Contracts.WidgetMaterialKinds.MicaAlt;
+    public const string WidgetMaterialTypeAcrylic = Contracts.WidgetMaterialKinds.Acrylic;
+    public const string WidgetMaterialTypeAcrylicBase = Contracts.WidgetMaterialKinds.AcrylicBase;
+    public const string WidgetMaterialTypeSolid = Contracts.WidgetMaterialKinds.Solid;
+    public const string WidgetBorderColorModeNeutral = Contracts.WidgetBorderKinds.ColorNeutral;
+    public const string WidgetBorderColorModeAccent = Contracts.WidgetBorderKinds.ColorAccent;
+    public const string WidgetBorderColorModeNone = Contracts.WidgetBorderKinds.ColorNone;
+    public const string WidgetBorderStyleNone = Contracts.WidgetBorderKinds.StyleNone;
+    public const string WidgetBorderStyleThin = Contracts.WidgetBorderKinds.StyleThin;
+    public const string WidgetBorderStyleMedium = Contracts.WidgetBorderKinds.StyleMedium;
+    public const string WidgetBorderStyleThick = Contracts.WidgetBorderKinds.StyleThick;
+    public const string WidgetCornerPreferenceSquare = Contracts.WidgetCornerKinds.Square;
+    public const string WidgetCornerPreferenceSmall = Contracts.WidgetCornerKinds.Small;
+    public const string WidgetCornerPreferenceRound = Contracts.WidgetCornerKinds.Round;
+    public const string WidgetAnimationEffectNone = Contracts.WidgetAnimationKinds.EffectNone;
+    public const string WidgetAnimationEffectFade = Contracts.WidgetAnimationKinds.EffectFade;
+    public const string WidgetAnimationEffectSlideRight = Contracts.WidgetAnimationKinds.EffectSlideRight;
+    public const string WidgetAnimationEffectSlideLeft = Contracts.WidgetAnimationKinds.EffectSlideLeft;
+    public const string WidgetAnimationEffectSlideUp = Contracts.WidgetAnimationKinds.EffectSlideUp;
+    public const string WidgetAnimationEffectSlideDown = Contracts.WidgetAnimationKinds.EffectSlideDown;
+    public const string WidgetAnimationEffectScaleFade = Contracts.WidgetAnimationKinds.EffectScaleFade;
+    public const string WidgetAnimationEffectSlideFade = Contracts.WidgetAnimationKinds.EffectSlideFade;
+    public const string WidgetAnimationEffectZoom = Contracts.WidgetAnimationKinds.EffectZoom;
+    public const string WidgetAnimationEffectSlideUpFade = Contracts.WidgetAnimationKinds.EffectSlideUpFade;
+    public const string WidgetAnimationEffectSlideDownFade = Contracts.WidgetAnimationKinds.EffectSlideDownFade;
+    public const string WidgetAnimationEffectSlideLeftFade = Contracts.WidgetAnimationKinds.EffectSlideLeftFade;
+    public const string WidgetAnimationEffectSlideRightFade = Contracts.WidgetAnimationKinds.EffectSlideRightFade;
+    public const string WidgetAnimationEffectScaleSlide = Contracts.WidgetAnimationKinds.EffectScaleSlide;
+    public const string WidgetAnimationSpeedVeryFast = Contracts.WidgetAnimationKinds.SpeedVeryFast;
+    public const string WidgetAnimationSpeedFast = Contracts.WidgetAnimationKinds.SpeedFast;
+    public const string WidgetAnimationSpeedStandard = Contracts.WidgetAnimationKinds.SpeedStandard;
+    public const string WidgetAnimationSpeedRelaxed = Contracts.WidgetAnimationKinds.SpeedRelaxed;
+    public const string WidgetAnimationSpeedSlow = Contracts.WidgetAnimationKinds.SpeedSlow;
+    public const string WidgetAnimationSlideDirectionNone = Contracts.WidgetAnimationKinds.DirectionNone;
+    public const string WidgetAnimationSlideDirectionLeft = Contracts.WidgetAnimationKinds.DirectionLeft;
+    public const string WidgetAnimationSlideDirectionRight = Contracts.WidgetAnimationKinds.DirectionRight;
+    public const string WidgetAnimationSlideDirectionUp = Contracts.WidgetAnimationKinds.DirectionUp;
+    public const string WidgetAnimationSlideDirectionDown = Contracts.WidgetAnimationKinds.DirectionDown;
+    public const string WidgetAnimationEasingNone = Contracts.WidgetAnimationKinds.EasingNone;
+    public const string WidgetAnimationEasingLight = Contracts.WidgetAnimationKinds.EasingLight;
+    public const string WidgetAnimationEasingStandard = Contracts.WidgetAnimationKinds.EasingStandard;
+    public const string WidgetAnimationEasingStrong = Contracts.WidgetAnimationKinds.EasingStrong;
 
     public static bool IsMicaMaterial(string? materialType) =>
         materialType is WidgetMaterialTypeMica or WidgetMaterialTypeMicaAlt;
@@ -125,10 +119,10 @@ public sealed class SettingsService
         materialType is WidgetMaterialTypeAcrylic or WidgetMaterialTypeAcrylicBase;
 
     public static bool SupportsWidgetOpacity(string? materialType) =>
-        IsAcrylicMaterial(materialType) || materialType == WidgetMaterialTypeSolid;
+        Contracts.WidgetMaterialKinds.SupportsOpacity(materialType);
 
     public static bool SupportsMaterialIntensity(string? materialType) =>
-        IsMicaMaterial(materialType) || IsAcrylicMaterial(materialType);
+        Contracts.WidgetMaterialKinds.SupportsMaterialIntensity(materialType);
     // Aliases of the contract-owned canonical values so the interaction
     // editor can build its option list without referencing the adapter.
     public const string WidgetLayerModeDynamic = Contracts.WidgetLayerModes.Dynamic;
@@ -294,16 +288,16 @@ public sealed class SettingsService
     public const double DefaultHorizontalSpacingScale = 0.40;
     public const double DefaultVerticalSpacingScale = 0.60;
     public const double DefaultFileNameWidthScale = 0.36;
-    public const int HiddenFileNameLineCount = 0;
-    public const int DefaultFileNameLineCount = 2;
-    public const int MinFileNameLineCount = 1;
-    public const int MaxFileNameLineCount = 2;
+    public const int HiddenFileNameLineCount = Contracts.LayoutDensityKinds.HiddenFileNameLineCount;
+    public const int DefaultFileNameLineCount = Contracts.LayoutDensityKinds.DefaultFileNameLineCount;
+    public const int MinFileNameLineCount = Contracts.LayoutDensityKinds.MinFileNameLineCount;
+    public const int MaxFileNameLineCount = Contracts.LayoutDensityKinds.MaxFileNameLineCount;
     public const double MinSpacingScale = 0.0;
     public const double MaxSpacingScale = 1.0;
-    public const string LayoutDensityCompact = "Compact";
-    public const string LayoutDensityStandard = "Standard";
-    public const string LayoutDensityRelaxed = "Relaxed";
-    public const string LayoutDensityCustom = "Custom";
+    public const string LayoutDensityCompact = Contracts.LayoutDensityKinds.Compact;
+    public const string LayoutDensityStandard = Contracts.LayoutDensityKinds.Standard;
+    public const string LayoutDensityRelaxed = Contracts.LayoutDensityKinds.Relaxed;
+    public const string LayoutDensityCustom = Contracts.LayoutDensityKinds.Custom;
     // Aliases of the contract-owned canonical values so the feature editor
     // can build its option list without referencing the settings adapter.
     public const string MusicDisplayModeAuto = Contracts.MusicDisplayModes.Auto;
@@ -2050,36 +2044,8 @@ settings.FocusClickedWidgetOnRaise = false;
 
     public static bool TryGetLayoutDensityPresetValues(
         string? preset,
-        out LayoutDensityPresetValues values)
-    {
-        values = preset switch
-        {
-            LayoutDensityCompact => new LayoutDensityPresetValues(
-                IconSize: 26,
-                TextSize: 10.5,
-                DensityScale: 0.20,
-                HorizontalSpacingScale: 0.20,
-                VerticalSpacingScale: 0.28,
-                FileNameWidthScale: 0.30),
-            LayoutDensityStandard => new LayoutDensityPresetValues(
-                IconSize: DefaultIconSize,
-                TextSize: DefaultTextSize,
-                DensityScale: DefaultLayoutDensityScale,
-                HorizontalSpacingScale: DefaultHorizontalSpacingScale,
-                VerticalSpacingScale: DefaultVerticalSpacingScale,
-                FileNameWidthScale: DefaultFileNameWidthScale),
-            LayoutDensityRelaxed => new LayoutDensityPresetValues(
-                IconSize: 36,
-                TextSize: 13,
-                DensityScale: 0.84,
-                HorizontalSpacingScale: 0.68,
-                VerticalSpacingScale: 0.82,
-                FileNameWidthScale: 0.50),
-            _ => default
-        };
-
-        return preset is LayoutDensityCompact or LayoutDensityStandard or LayoutDensityRelaxed;
-    }
+        out LayoutDensityPresetValues values) =>
+        Contracts.LayoutDensityKinds.TryGetPresetValues(preset, out values);
 
     public static void ApplyLayoutDensityPreset(AppSettings settings, string preset)
     {
@@ -2101,30 +2067,20 @@ settings.FocusClickedWidgetOnRaise = false;
     public static string ResolveLayoutDensityPreset(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        foreach (string preset in new[] { LayoutDensityCompact, LayoutDensityStandard, LayoutDensityRelaxed })
-        {
-            TryGetLayoutDensityPresetValues(preset, out LayoutDensityPresetValues values);
-            if (NearlyEqual(settings.IconSize, values.IconSize) &&
-                NearlyEqual(settings.TextSize, values.TextSize) &&
-                NearlyEqual(settings.LayoutDensityScale, values.DensityScale) &&
-                NearlyEqual(settings.HorizontalSpacingScale, values.HorizontalSpacingScale) &&
-                NearlyEqual(settings.VerticalSpacingScale, values.VerticalSpacingScale) &&
-                NearlyEqual(settings.FileNameWidthScale, values.FileNameWidthScale))
-            {
-                return preset;
-            }
-        }
-
-        return LayoutDensityCustom;
+        return Contracts.LayoutDensityKinds.ResolvePreset(
+            settings.IconSize,
+            settings.TextSize,
+            settings.LayoutDensityScale,
+            settings.HorizontalSpacingScale,
+            settings.VerticalSpacingScale,
+            settings.FileNameWidthScale);
     }
 
     private static bool NearlyEqual(double left, double right) =>
         Math.Abs(left - right) <= 0.0001;
 
     public static int NormalizeFileNameLineCount(int value) =>
-        value is HiddenFileNameLineCount or MinFileNameLineCount or MaxFileNameLineCount
-            ? value
-            : DefaultFileNameLineCount;
+        Contracts.LayoutDensityKinds.NormalizeFileNameLineCount(value);
 
     public static string NormalizeWidgetChromeModeSetting(string? value, WidgetChromeMode fallback)
     {
@@ -2137,60 +2093,17 @@ settings.FocusClickedWidgetOnRaise = false;
             WidgetCollapseBehaviorNames.Normalize(value));
     }
 
-    public static string NormalizeWidgetAnimationEffect(string? effect)
-    {
-        return effect is
-            WidgetAnimationEffectFade or
-            WidgetAnimationEffectSlideRight or
-            WidgetAnimationEffectSlideLeft or
-            WidgetAnimationEffectSlideUp or
-            WidgetAnimationEffectSlideDown or
-            WidgetAnimationEffectScaleFade or
-            WidgetAnimationEffectSlideFade or
-            WidgetAnimationEffectZoom or
-            WidgetAnimationEffectSlideUpFade or
-            WidgetAnimationEffectSlideDownFade or
-            WidgetAnimationEffectSlideLeftFade or
-            WidgetAnimationEffectSlideRightFade or
-            WidgetAnimationEffectScaleSlide
-            ? effect
-            : WidgetAnimationEffectSlideFade;
-    }
+    public static string NormalizeWidgetAnimationEffect(string? effect) =>
+        Contracts.WidgetAnimationKinds.NormalizeEffect(effect);
 
-    public static string NormalizeWidgetAnimationSpeed(string? speed)
-    {
-        return speed is
-            WidgetAnimationSpeedVeryFast or
-            WidgetAnimationSpeedFast or
-            WidgetAnimationSpeedStandard or
-            WidgetAnimationSpeedRelaxed or
-            WidgetAnimationSpeedSlow
-            ? speed
-            : WidgetAnimationSpeedStandard;
-    }
+    public static string NormalizeWidgetAnimationSpeed(string? speed) =>
+        Contracts.WidgetAnimationKinds.NormalizeSpeed(speed);
 
-    public static string NormalizeWidgetAnimationSlideDirection(string? direction)
-    {
-        return direction is
-            WidgetAnimationSlideDirectionNone or
-            WidgetAnimationSlideDirectionLeft or
-            WidgetAnimationSlideDirectionRight or
-            WidgetAnimationSlideDirectionUp or
-            WidgetAnimationSlideDirectionDown
-            ? direction
-            : WidgetAnimationSlideDirectionRight;
-    }
+    public static string NormalizeWidgetAnimationSlideDirection(string? direction) =>
+        Contracts.WidgetAnimationKinds.NormalizeSlideDirection(direction);
 
-    public static string NormalizeWidgetAnimationEasingIntensity(string? intensity)
-    {
-        return intensity is
-            WidgetAnimationEasingNone or
-            WidgetAnimationEasingLight or
-            WidgetAnimationEasingStandard or
-            WidgetAnimationEasingStrong
-            ? intensity
-            : WidgetAnimationEasingStandard;
-    }
+    public static string NormalizeWidgetAnimationEasingIntensity(string? intensity) =>
+        Contracts.WidgetAnimationKinds.NormalizeEasingIntensity(intensity);
 
     public static string NormalizeWidgetCompactWidthMode(string? value)
     {

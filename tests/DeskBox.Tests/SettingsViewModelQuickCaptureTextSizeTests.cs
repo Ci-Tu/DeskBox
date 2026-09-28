@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 using DeskBox.Features.QuickCapture;
 using DeskBox.Features.Todo;
@@ -34,12 +34,20 @@ public sealed class SettingsViewModelQuickCaptureTextSizeTests
                 .SetValue(viewModel, todo);
             typeof(SettingsViewModel).GetField("_quickCaptureSettings", flags)!
                 .SetValue(viewModel, quickCapture);
+            var editor = new DeskBox.Features.Appearance.AppearanceSettingsViewModel(
+                new AppearanceSettingsCoordinator(settings),
+                _ => string.Empty);
             typeof(SettingsViewModel).GetField("_appearanceSettings", flags)!
-                .SetValue(viewModel, new DeskBox.Features.Appearance.AppearanceSettingsViewModel(
-                    new AppearanceSettingsCoordinator(settings)));
+                .SetValue(viewModel, editor);
 
             MethodInfo sync = typeof(SettingsViewModel).GetMethod(
                 "SyncQuickCaptureTextSizeFacade", flags)!;
+            MethodInfo textSizeCommitted = typeof(SettingsViewModel).GetMethod(
+                "OnAppearanceTextSizeCommitted", flags)!;
+            // Mirror the production wiring: the editor raises the commit
+            // event, the shell handler runs the save pass plus the Todo and
+            // Quick Capture refreshes.
+            editor.TextSizeCommitted += () => textSizeCommitted.Invoke(viewModel, null);
             int quickCaptureRefreshes = 0;
             quickCapture.Changed += () =>
             {
@@ -51,7 +59,7 @@ public sealed class SettingsViewModelQuickCaptureTextSizeTests
             Assert.Equal(12.5, viewModel.QuickCaptureContentTextSize);
             viewModel.SuppressAppearanceNotifications = true;
             viewModel.DeferAppearancePersistence = true;
-            viewModel.TextSize = 14.5;
+            editor.TextSize = 14.5;
 
             Assert.Equal(1, quickCaptureRefreshes);
             Assert.Equal(14.5, viewModel.QuickCaptureListTextSize);

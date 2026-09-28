@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -134,42 +134,6 @@ public partial class SettingsViewModel
     {
         App.Current?.WidgetManager?.RefreshVisibleWidgetDesktopLayers(
             "settings-show-desktop-visibility");
-    }
-
-    partial void OnDefaultWidthChanged(double value)
-    {
-        if (_isRestoringDefaults)
-        {
-            OnPropertyChanged(nameof(DefaultWidthInput));
-            return;
-        }
-
-        var update = _appearanceSettings.UpdateDefaultWidgetWidth(value);
-        if (!update.Committed)
-        {
-            DefaultWidth = update.Value;
-            return;
-        }
-
-        OnPropertyChanged(nameof(DefaultWidthInput));
-    }
-
-    partial void OnDefaultHeightChanged(double value)
-    {
-        if (_isRestoringDefaults)
-        {
-            OnPropertyChanged(nameof(DefaultHeightInput));
-            return;
-        }
-
-        var update = _appearanceSettings.UpdateDefaultWidgetHeight(value);
-        if (!update.Committed)
-        {
-            DefaultHeight = update.Value;
-            return;
-        }
-
-        OnPropertyChanged(nameof(DefaultHeightInput));
     }
 
     partial void OnShowHoverButtonsChanged(bool value)

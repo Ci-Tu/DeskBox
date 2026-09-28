@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -15,6 +15,16 @@ namespace DeskBox.ViewModels;
 public partial class SettingsViewModel
 {
     public Color GetCurrentAccentColor() => _currentAccentColor;
+
+    // Host-side working state for the accent card. The XAML binding surface
+    // lives on the appearance editor (section-level DataContext switch); the
+    // shell keeps the accent-mode flag its theme-service write chain needs
+    // and pushes the accent presentation onto the editor on every change.
+    internal bool UseSystemAccentColor
+    {
+        get => _useSystemAccentColor;
+        private set => SetProperty(ref _useSystemAccentColor, value);
+    }
 
     public bool SuppressAppearanceNotifications { get; set; }
     public bool DeferAppearancePersistence { get; set; }
@@ -35,10 +45,7 @@ public partial class SettingsViewModel
 
         if (UseSystemAccentColor)
         {
-            _useSystemAccentColor = false;
-            OnPropertyChanged(nameof(UseSystemAccentColor));
-            OnPropertyChanged(nameof(CanEditCustomAccent));
-            OnPropertyChanged(nameof(AccentColorDescription));
+            UseSystemAccentColor = false;
         }
 
         RefreshAccentPreview();

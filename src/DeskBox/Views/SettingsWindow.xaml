@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="DeskBox.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -28,6 +28,8 @@
             <Thickness x:Key="NavigationViewItemButtonMargin">4,1,4,1</Thickness>
 
             <!-- Shared settings-page metrics keep top-level and drill-down pages aligned. -->
+            <controls:SettingsBoolToVisibilityConverter x:Key="SettingsBoolToVisibilityConverter" />
+            <controls:SettingsColorStringConverter x:Key="SettingsColorStringConverter" />
             <x:Double x:Key="SettingsContentMaxWidth">760</x:Double>
             <x:Double x:Key="SettingsControlMinWidth">176</x:Double>
             <x:Double x:Key="SettingsCardSpacing">4</x:Double>
@@ -436,10 +438,10 @@ Text="DeskBox" />
                     <StackPanel Margin="0,8,0,0" Spacing="4">
                         <InfoBar
                             IsClosable="False"
-                            IsOpen="{Binding IsWindows10VisualCompatibilityMode}"
-                            Message="{Binding Windows10VisualCompatibilityMessage}"
+                            IsOpen="{Binding Windows10Compatibility}"
+                            Message="{Binding Windows10CompatibilityMessage}"
                             Severity="Informational"
-                            Title="{Binding Windows10VisualCompatibilityTitle}" />
+                            Title="{Binding Windows10CompatibilityTitle}" />
                         <toolkit:SettingsCard
                             HorizontalContentAlignment="Right"
                             svc:Localized.DescriptionKey="Settings.Material.GroupDescription"
@@ -449,12 +451,12 @@ Text="DeskBox" />
                             </toolkit:SettingsCard.HeaderIcon>
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
-                                ItemsSource="{Binding AvailableWidgetMaterialTypeOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedWidgetMaterialType, Mode=TwoWay}" />
+                                ItemsSource="{Binding AvailableMaterialTypeOptions}"
+                                controls:SettingsComboBox.Value="{Binding MaterialType, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
-                                    Visibility="{Binding WidgetOpacityVisibility}"
+                                    Visibility="{Binding ShowOpacitySlider, Converter={StaticResource SettingsBoolToVisibilityConverter}}"
                                     svc:Localized.DescriptionKey="Settings.Opacity.Description"
                                     svc:Localized.HeaderKey="Settings.Opacity.Title">
                                     <StackPanel
@@ -480,20 +482,20 @@ Text="DeskBox" />
 
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
-                                    Visibility="{Binding MaterialIntensityVisibility}"
+                                    Visibility="{Binding ShowMaterialIntensitySlider, Converter={StaticResource SettingsBoolToVisibilityConverter}}"
                                     svc:Localized.DescriptionKey="Settings.MaterialIntensity.Description"
                                     svc:Localized.HeaderKey="Settings.MaterialIntensity.Title">
                                     <StackPanel
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal"
                                         Spacing="8">
-                                        <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding WidgetMaterialIntensityValueText}" />
+                                        <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding MaterialIntensityValueText}" />
                                         <Slider
                                             Maximum="1"
                                             Minimum="0"
                                             StepFrequency="0.02"
                                             Style="{StaticResource InlineMetricSliderStyle}"
-                                            Value="{Binding WidgetMaterialIntensity, Mode=TwoWay}"
+                                            Value="{Binding MaterialIntensity, Mode=TwoWay}"
                                             ManipulationMode="TranslateX"
                                             ManipulationStarted="AppearanceSlider_ManipulationStarted"
                                             ManipulationCompleted="AppearanceSlider_ManipulationCompleted"
@@ -513,13 +515,13 @@ Text="DeskBox" />
                                     </toolkit:SettingsCard.HeaderIcon>
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetForegroundModeOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetForegroundMode, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableForegroundModeOptions}"
+                                        controls:SettingsComboBox.Value="{Binding ForegroundMode, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
-                                    Visibility="{Binding WidgetForegroundCustomColorVisibility}"
+                                    Visibility="{Binding ShowForegroundCustomColor, Converter={StaticResource SettingsBoolToVisibilityConverter}}"
                                     svc:Localized.DescriptionKey="Settings.WidgetForeground.CustomColor.Description"
                                     svc:Localized.HeaderKey="Settings.WidgetForeground.CustomColor.Title">
                                     <toolkit:SettingsCard.HeaderIcon>
@@ -530,7 +532,7 @@ Text="DeskBox" />
                                         Height="34"
                                         MinWidth="72"
                                         HorizontalAlignment="Right"
-                                        SelectedColor="{Binding SelectedWidgetForegroundColor, Mode=TwoWay}" />
+                                        SelectedColor="{Binding ForegroundColorHex, Mode=TwoWay, Converter={StaticResource SettingsColorStringConverter}}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
@@ -539,30 +541,30 @@ Text="DeskBox" />
                                     svc:Localized.HeaderKey="Settings.BorderColor.Title">
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetBorderColorModeOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetBorderColorMode, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableBorderColorModeOptions}"
+                                        controls:SettingsComboBox.Value="{Binding BorderColorMode, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
-                                    IsEnabled="{Binding IsWidgetBorderStyleEnabled}"
+                                    IsEnabled="{Binding IsBorderStyleEnabled}"
                                     svc:Localized.DescriptionKey="Settings.Border.Description"
                                     svc:Localized.HeaderKey="Settings.Border.Title">
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetBorderStyleOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetBorderStyle, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableBorderStyleOptions}"
+                                        controls:SettingsComboBox.Value="{Binding BorderStyle, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
-                                    IsEnabled="{Binding SupportsNativeWidgetCorners}"
+                                    IsEnabled="{Binding NativeCornersSupported}"
                                     svc:Localized.DescriptionKey="Settings.Corner.Description"
                                     svc:Localized.HeaderKey="Settings.Corner.Title">
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetCornerPreferenceOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetCornerPreference, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableCornerPreferenceOptions}"
+                                        controls:SettingsComboBox.Value="{Binding CornerPreference, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
                     </StackPanel>
                 </StackPanel>
@@ -583,7 +585,7 @@ Text="DeskBox" />
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
                                 ItemsSource="{Binding AvailableLayoutDensityOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedLayoutDensity, Mode=TwoWay}" />
+                                controls:SettingsComboBox.Value="{Binding LayoutDensity, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
@@ -709,8 +711,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     svc:Localized.HeaderKey="Settings.WidgetTitleIcon.Title">
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetTitleIconModeOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetTitleIconMode, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableTitleIconModeOptions}"
+                                        controls:SettingsComboBox.Value="{Binding TitleIconMode, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
@@ -721,7 +723,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         <Button Command="{x:Bind ResetDisplayWidgetChromeOverridesCommand, Mode=OneWay}" Style="{StaticResource IconActionButtonStyle}" svc:Localized.ToolTipKey="Settings.DisplayWidgetChrome.ResetTooltip">
                                             <FontIcon FontSize="14" Glyph="&#xE72C;" />
                                         </Button>
-                                        <ComboBox MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableDisplayWidgetChromeModeOptions}" controls:SettingsComboBox.Value="{Binding SelectedDisplayWidgetChromeMode, Mode=TwoWay}" />
+                                        <ComboBox MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableDisplayChromeModeOptions}" controls:SettingsComboBox.Value="{Binding DisplayChromeMode, Mode=TwoWay}" />
                                     </StackPanel>
                                 </toolkit:SettingsCard>
 
@@ -733,7 +735,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         <Button Command="{x:Bind ResetInteractiveWidgetChromeOverridesCommand, Mode=OneWay}" Style="{StaticResource IconActionButtonStyle}" svc:Localized.ToolTipKey="Settings.InteractiveWidgetChrome.ResetTooltip">
                                             <FontIcon FontSize="14" Glyph="&#xE72C;" />
                                         </Button>
-                                        <ComboBox MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableInteractiveWidgetChromeModeOptions}" controls:SettingsComboBox.Value="{Binding SelectedInteractiveWidgetChromeMode, Mode=TwoWay}" />
+                                        <ComboBox MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableInteractiveChromeModeOptions}" controls:SettingsComboBox.Value="{Binding InteractiveChromeMode, Mode=TwoWay}" />
                                     </StackPanel>
                                 </toolkit:SettingsCard>
                     </StackPanel>
@@ -755,7 +757,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                             <ComboBox
                                 MinWidth="{StaticResource SettingsControlMinWidth}"
                                 ItemsSource="{Binding AvailableAnimationPresetOptions}"
-                                controls:SettingsComboBox.Value="{Binding SelectedAnimationPreset, Mode=TwoWay}" />
+                                controls:SettingsComboBox.Value="{Binding AnimationPreset, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
                                 <toolkit:SettingsCard
                                     HorizontalContentAlignment="Right"
@@ -763,8 +765,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     svc:Localized.HeaderKey="Settings.Animation.Effect.Title">
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
-                                        ItemsSource="{Binding AvailableWidgetAnimationEffectOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetAnimationEffect, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableAnimationEffectOptions}"
+                                        controls:SettingsComboBox.Value="{Binding AnimationEffect, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
@@ -774,8 +776,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
                                         IsEnabled="{Binding IsSpeedEnabled}"
-                                        ItemsSource="{Binding AvailableWidgetAnimationSpeedOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetAnimationSpeed, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableAnimationSpeedOptions}"
+                                        controls:SettingsComboBox.Value="{Binding AnimationSpeed, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
@@ -785,8 +787,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
                                         IsEnabled="{Binding IsDirectionEnabled}"
-                                        ItemsSource="{Binding AvailableWidgetAnimationSlideDirectionOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetAnimationSlideDirection, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableAnimationSlideDirectionOptions}"
+                                        controls:SettingsComboBox.Value="{Binding AnimationSlideDirection, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                                 <toolkit:SettingsCard
@@ -796,8 +798,8 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <ComboBox
                                         MinWidth="{StaticResource SettingsControlMinWidth}"
                                         IsEnabled="{Binding IsEasingEnabled}"
-                                        ItemsSource="{Binding AvailableWidgetAnimationEasingIntensityOptions}"
-                                        controls:SettingsComboBox.Value="{Binding SelectedWidgetAnimationEasingIntensity, Mode=TwoWay}" />
+                                        ItemsSource="{Binding AvailableAnimationEasingIntensityOptions}"
+                                        controls:SettingsComboBox.Value="{Binding AnimationEasingIntensity, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
                     </StackPanel>

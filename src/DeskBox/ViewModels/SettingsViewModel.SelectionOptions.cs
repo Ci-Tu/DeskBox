@@ -1,30 +1,12 @@
-using DeskBox.Models;
+﻿using DeskBox.Models;
 using DeskBox.Services;
 
 namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    public IReadOnlyList<SettingsOption> AvailableThemeOptions =>
-        CreateSelectionOptions(AvailableThemes, AvailableThemeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableTrayIconStyleOptions =>
-        CreateSelectionOptions(AvailableTrayIconStyles, AvailableTrayIconStyleDisplayNames);
-
     public IReadOnlyList<SettingsOption> AvailableLanguageOptions =>
         CreateSelectionOptions(AvailableLanguages, AvailableLanguageDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetCornerPreferenceOptions =>
-        CreateSelectionOptions(AvailableWidgetCornerPreferences, AvailableWidgetCornerPreferenceDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetMaterialTypeOptions =>
-        CreateSelectionOptions(AvailableWidgetMaterialTypes, AvailableWidgetMaterialTypeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetBorderColorModeOptions =>
-        CreateSelectionOptions(AvailableWidgetBorderColorModes, AvailableWidgetBorderColorModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetBorderStyleOptions =>
-        CreateSelectionOptions(AvailableWidgetBorderStyles, AvailableWidgetBorderStyleDisplayNames);
 
     public IReadOnlyList<SettingsOption> AvailableWidgetCollapseBehaviorOptions =>
         CreateSelectionOptions(AvailableWidgetCollapseBehaviors, AvailableWidgetCollapseBehaviorDisplayNames);
@@ -65,41 +47,6 @@ public partial class SettingsViewModel
 
     public IReadOnlyList<SettingsOption> AvailableWidgetCompactMediaCornerOptions =>
         CreateSelectionOptions(AvailableWidgetCompactMediaCornerModes, AvailableWidgetCompactMediaCornerDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableLayoutDensityOptions =>
-        CreateSelectionOptions(AvailableLayoutDensities, AvailableLayoutDensityDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableFileNameLineCountOptions =>
-        WrapOptions(
-        [
-            new(SettingsService.HiddenFileNameLineCount, _localizationService.T("Settings.FileNameLines.Hidden")),
-            new(SettingsService.MinFileNameLineCount, _localizationService.T("Settings.FileNameLines.Single")),
-            new(SettingsService.MaxFileNameLineCount, _localizationService.T("Settings.FileNameLines.Double"))
-        ]);
-
-    public IReadOnlyList<SettingsOption> AvailableAnimationPresetOptions =>
-        CreateSelectionOptions(AvailableAnimationPresets, AvailableAnimationPresetDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetAnimationEffectOptions =>
-        CreateSelectionOptions(AvailableWidgetAnimationEffects, AvailableWidgetAnimationEffectDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetAnimationSpeedOptions =>
-        CreateSelectionOptions(AvailableWidgetAnimationSpeeds, AvailableWidgetAnimationSpeedDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetAnimationSlideDirectionOptions =>
-        CreateSelectionOptions(AvailableWidgetAnimationSlideDirections, AvailableWidgetAnimationSlideDirectionDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetAnimationEasingIntensityOptions =>
-        CreateSelectionOptions(AvailableWidgetAnimationEasingIntensities, AvailableWidgetAnimationEasingIntensityDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableDisplayWidgetChromeModeOptions =>
-        CreateSelectionOptions(AvailableDisplayWidgetChromeModes, AvailableDisplayWidgetChromeModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableInteractiveWidgetChromeModeOptions =>
-        CreateSelectionOptions(AvailableInteractiveWidgetChromeModes, AvailableInteractiveWidgetChromeModeDisplayNames);
-
-    public IReadOnlyList<SettingsOption> AvailableWidgetTitleIconModeOptions =>
-        CreateSelectionOptions(AvailableWidgetTitleIconModes, AvailableWidgetTitleIconModeDisplayNames);
 
     public IReadOnlyList<SettingsOption> AvailableQuickCaptureDefaultViewOptions =>
         CreateSelectionOptions(AvailableQuickCaptureDefaultViews, AvailableQuickCaptureDefaultViewDisplayNames);
@@ -209,17 +156,10 @@ public partial class SettingsViewModel
 
     private void NotifySelectionOptionsChanged()
     {
-        OnPropertyChanged(nameof(AvailableThemeOptions));
-        OnPropertyChanged(nameof(AvailableAccentColorSourceOptions));
         OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptions));
         OnPropertyChanged(nameof(AvailableFileWidgetFolderOpenBehaviorOptionItems));
         OnPropertyChanged(nameof(AvailableWeatherLocationModeOptions));
-        OnPropertyChanged(nameof(AvailableTrayIconStyleOptions));
         OnPropertyChanged(nameof(AvailableLanguageOptions));
-        OnPropertyChanged(nameof(AvailableWidgetCornerPreferenceOptions));
-        OnPropertyChanged(nameof(AvailableWidgetMaterialTypeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetBorderColorModeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetBorderStyleOptions));
         OnPropertyChanged(nameof(AvailableWidgetCollapseBehaviorOptions));
         OnPropertyChanged(nameof(AvailableWidgetCompactWidthModeOptions));
         OnPropertyChanged(nameof(AvailableWidgetCompactExpansionDirectionOptions));
@@ -230,16 +170,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(AvailableWidgetCompactAnimationEffectOptions));
         OnPropertyChanged(nameof(AvailableWidgetCompactHoverResponseOptions));
         OnPropertyChanged(nameof(AvailableWidgetCompactMediaCornerOptions));
-        OnPropertyChanged(nameof(AvailableLayoutDensityOptions));
-        OnPropertyChanged(nameof(AvailableFileNameLineCountOptions));
-        OnPropertyChanged(nameof(AvailableAnimationPresetOptions));
-        OnPropertyChanged(nameof(AvailableWidgetAnimationEffectOptions));
-        OnPropertyChanged(nameof(AvailableWidgetAnimationSpeedOptions));
-        OnPropertyChanged(nameof(AvailableWidgetAnimationSlideDirectionOptions));
-        OnPropertyChanged(nameof(AvailableWidgetAnimationEasingIntensityOptions));
-        OnPropertyChanged(nameof(AvailableDisplayWidgetChromeModeOptions));
-        OnPropertyChanged(nameof(AvailableInteractiveWidgetChromeModeOptions));
-        OnPropertyChanged(nameof(AvailableWidgetTitleIconModeOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewOptions));
         OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleOptions));
         OnPropertyChanged(nameof(AvailableItemPreviewLineCountOptions));

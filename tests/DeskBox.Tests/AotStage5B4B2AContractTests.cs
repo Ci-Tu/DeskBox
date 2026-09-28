@@ -1,4 +1,4 @@
-namespace DeskBox.Tests;
+﻿namespace DeskBox.Tests;
 
 public sealed class AotStage5B4B2AContractTests
 {
@@ -22,11 +22,11 @@ public sealed class AotStage5B4B2AContractTests
     {
         string source = ReadRepositoryFile("src/DeskBox/App.AotManagedUiSmoke.cs");
 
-        Assert.Contains("settingsWindow.ViewModel", source, StringComparison.Ordinal);
+        Assert.Contains("settingsWindow.FileDisplaySettings", source, StringComparison.Ordinal);
         Assert.Contains("ShowFileExtensions", source, StringComparison.Ordinal);
         Assert.Contains("FileNameLineCount", source, StringComparison.Ordinal);
         Assert.Contains("TextSize", source, StringComparison.Ordinal);
-        Assert.Contains("SelectedTrayIconStyle", source, StringComparison.Ordinal);
+        Assert.Contains("TrayIconStyle", source, StringComparison.Ordinal);
         Assert.Contains("FlushPendingSaveAsync(", source, StringComparison.Ordinal);
         Assert.Contains("notifySubscribers: false", source, StringComparison.Ordinal);
         Assert.Contains("SettingsPersistenceFlushed", source, StringComparison.Ordinal);

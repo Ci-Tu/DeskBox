@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Collections.ObjectModel;
 using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,18 +14,24 @@ namespace DeskBox.ViewModels;
 
 public partial class SettingsViewModel
 {
-    private void OnLanguageChanged()
-    {
-        RefreshLocalizedProperties();
-        _musicSettings.RefreshLocalization();
-        _interactionSettings.RefreshLocalization();
-        _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
-        RefreshGlobalHotkeyState();
-        // The managed-storage editor's option list re-localizes itself and
-        // the quick-access card is re-pushed in the new language.
-        _managedStorageSettings.RefreshLocalization();
-        PushQuickAccessPresentation();
-    }
+private void OnLanguageChanged()
+{
+    RefreshLocalizedProperties();
+    _musicSettings.RefreshLocalization();
+    _interactionSettings.RefreshLocalization();
+    _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
+    RefreshGlobalHotkeyState();
+    // The managed-storage editor's option list re-localizes itself and
+    // the quick-access card is re-pushed in the new language.
+    _managedStorageSettings.RefreshLocalization();
+    PushQuickAccessPresentation();
+    // The appearance editor's option tables and value texts re-localize
+    // themselves; the pushed group-navigation option list follows the shell
+    // table that re-localizes above.
+    _appearanceSettings.RefreshLocalization();
+    PushAppearanceGroupNavigationPresentation();
+}
+
 
     private void OnSettingsChanged()
     {
@@ -47,39 +53,14 @@ public partial class SettingsViewModel
         _isRestoringDefaults = true;
         try
         {
-            SelectedTheme = settings.Theme is ThemeLight or ThemeDark ? settings.Theme : ThemeSystem;
-            SelectedTrayIconStyle = settings.TrayIconStyle is TrayIconStyleColorful or TrayIconStyleBlack or TrayIconStyleWhite
-                ? settings.TrayIconStyle
-                : TrayIconStyleSystem;
             SelectedLanguage = LocalizationService.NormalizeLanguageSetting(settings.Language);
-            UseSystemAccentColor = !string.Equals(
-                settings.AccentColorMode,
-                ThemeService.AccentModeCustom,
-                StringComparison.OrdinalIgnoreCase);
-
             AutoCheckForUpdates = settings.AutoCheckForUpdates;
             FileItemSystemContextMenuEnabled = settings.FileItemSystemContextMenuEnabled;
             SelectedFileWidgetFolderOpenBehavior =
                 FileWidgetFolderOpenBehaviorNames.NormalizeGlobal(
                     settings.FileWidgetFolderOpenBehavior);
-            DefaultWidth = settings.DefaultWidgetWidth;
-            DefaultHeight = settings.DefaultWidgetHeight;
             ShowHoverButtons = settings.ShowHoverButtons;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
-
-            WidgetOpacity = settings.WidgetOpacity;
-            WidgetMaterialIntensity = settings.WidgetMaterialIntensity;
-            ApplyWidgetForegroundSettingsSnapshot(settings);
-            SelectedWidgetCornerPreference = WindowsCompatibilityService.ResolveEffectiveWidgetCornerPreference(
-                settings.WidgetCornerPreference);
-            SelectedWidgetMaterialType = WindowsCompatibilityService.ResolveWidgetMaterialType(
-                settings.WidgetMaterialType);
-            SelectedWidgetBorderColorMode = settings.WidgetBorderColorMode is BorderColorNeutral or BorderColorAccent or BorderColorNone
-                ? settings.WidgetBorderColorMode
-                : BorderColorNeutral;
-            SelectedWidgetBorderStyle = settings.WidgetBorderStyle is BorderThin or BorderMedium or BorderThick
-                ? settings.WidgetBorderStyle
-                : BorderThin;
 
             SelectedWidgetCompactWidthMode = SettingsService.NormalizeWidgetCompactWidthMode(
                 settings.WidgetCompactWidthMode);
@@ -107,27 +88,6 @@ public partial class SettingsViewModel
                 settings.WidgetCompactCollapseDelayMs);
             SelectedWidgetCompactMediaCornerMode = SettingsService.NormalizeWidgetCompactMediaCornerMode(settings.WidgetCompactMediaCornerMode);
 
-            SelectedWidgetAnimationEffect = NormalizeWidgetAnimationEffect(settings.WidgetAnimationEffect);
-            SelectedWidgetAnimationSpeed = NormalizeWidgetAnimationSpeed(settings.WidgetAnimationSpeed);
-            SelectedWidgetAnimationSlideDirection = NormalizeWidgetAnimationSlideDirection(settings.WidgetAnimationSlideDirection);
-            SelectedWidgetAnimationEasingIntensity = NormalizeWidgetAnimationEasingIntensity(settings.WidgetAnimationEasingIntensity);
-            SelectedAnimationPreset = ResolveAnimationPreset();
-            SelectedDisplayWidgetChromeMode = NormalizeWidgetChromeModeSetting(
-                settings.DisplayWidgetChromeMode,
-                WidgetChromeMode.Overlay);
-            SelectedInteractiveWidgetChromeMode = NormalizeWidgetChromeModeSetting(
-                settings.InteractiveWidgetChromeMode,
-                WidgetChromeMode.Standard);
-            SelectedWidgetTitleIconMode = NormalizeWidgetTitleIconModeSetting(settings.WidgetTitleIconMode);
-
-            IconSize = settings.IconSize;
-            TextSize = settings.TextSize;
-            LayoutDensityScale = settings.LayoutDensityScale;
-            HorizontalSpacingScale = settings.HorizontalSpacingScale;
-            VerticalSpacingScale = settings.VerticalSpacingScale;
-            FileNameWidthScale = settings.FileNameWidthScale;
-            FileNameLineCount = SettingsService.NormalizeFileNameLineCount(settings.FileNameLineCount);
-            SelectedLayoutDensity = SettingsService.ResolveLayoutDensityPreset(settings);
             IdleWorkingSetTrimEnabled = settings.IdleWorkingSetTrimEnabled;
             ImmediateHiddenWorkingSetTrimEnabled = settings.ImmediateHiddenWorkingSetTrimEnabled;
             QuiescenceWorkingSetTrimEnabled = settings.Performance.QuiescenceWorkingSetTrimEnabled;
@@ -149,6 +109,20 @@ public partial class SettingsViewModel
             SyncTodoTextSizeFacade();
             TodoUseWideDetailPane = _todoSettings.LayoutMode != SettingsService.TodoLayoutModeSinglePane;
             TodoAutoSelectFirstInWideLayout = _todoSettings.AutoSelectFirstInWideLayout;
+
+            // Appearance presentation (material, density, window chrome, animation,
+            // foreground, tray icon style) lives on the appearance editor now;
+            // the shell only re-projects the selections whose state machines
+            // stay here (theme, accent mode/effective color, group-nav).
+            _appearanceSettings.SyncPresentation();
+            PushAppearanceThemeSelection();
+            UseSystemAccentColor = !string.Equals(
+                settings.AccentColorMode,
+                ThemeService.AccentModeCustom,
+                StringComparison.OrdinalIgnoreCase);
+            PushAppearanceAccentPresentation();
+            PushAppearanceGroupNavigationPresentation();
+
 
             // Music presentation lives on the section editor now: refresh the
             // editor projection instead of assigning shell facade properties.
@@ -208,11 +182,8 @@ public partial class SettingsViewModel
             _isRestoringDefaults = wasRestoringDefaults;
         }
 
-        RefreshNumberInputs();
         RefreshSelectionProperties(refreshLocalizedOptions: false);
         RefreshGlobalHotkeyState();
-        OnPropertyChanged(nameof(CanEditCustomAccent));
-        OnPropertyChanged(nameof(AccentColorDescription));
         OnPropertyChanged(nameof(WeatherCityNameVisibility));
         OnPropertyChanged(nameof(QuickCaptureStatusText));
         OnPropertyChanged(nameof(QuickCaptureDependencyStatusText));
@@ -225,7 +196,6 @@ public partial class SettingsViewModel
     private void RefreshLocalizedProperties()
     {
         RefreshSelectionProperties(refreshLocalizedOptions: true);
-        OnPropertyChanged(nameof(AccentColorDescription));
         OnPropertyChanged(nameof(DistributionChannelText));
         OnPropertyChanged(nameof(OfficialWebsiteDisplayText));
         OnPropertyChanged(nameof(OpenSourceRepositoryDisplayText));
@@ -270,13 +240,7 @@ public partial class SettingsViewModel
         if (refreshLocalizedOptions)
         {
             RefreshFileStackSelectionProperties();
-            _cachedThemeDisplayNames = null;
-            _cachedTrayIconStyleDisplayNames = null;
             _cachedLanguageDisplayNames = null;
-            _cachedWidgetCornerPreferenceDisplayNames = null;
-            _cachedWidgetMaterialTypeDisplayNames = null;
-            _cachedWidgetBorderColorModeDisplayNames = null;
-            _cachedWidgetBorderStyleDisplayNames = null;
             _cachedWidgetCollapseBehaviorDisplayNames = null;
             _cachedWidgetCompactContentModeDisplayNames = null;
             _cachedWidgetCompactWidthModeDisplayNames = null;
@@ -287,15 +251,6 @@ public partial class SettingsViewModel
             _cachedWidgetCompactAnimationEffectDisplayNames = null;
             _cachedWidgetCompactHoverResponseDisplayNames = null;
             _cachedWidgetCompactMediaCornerDisplayNames = null;
-            _cachedLayoutDensityDisplayNames = null;
-            _cachedAnimationPresetDisplayNames = null;
-            _cachedWidgetAnimationEffectDisplayNames = null;
-            _cachedWidgetAnimationSpeedDisplayNames = null;
-            _cachedWidgetAnimationSlideDirectionDisplayNames = null;
-            _cachedWidgetAnimationEasingIntensityDisplayNames = null;
-            _cachedDisplayWidgetChromeModeDisplayNames = null;
-            _cachedInteractiveWidgetChromeModeDisplayNames = null;
-            _cachedWidgetTitleIconModeDisplayNames = null;
             _cachedQuickCaptureDefaultViewDisplayNames = null;
             _cachedQuickCaptureTabStyleDisplayNames = null;
             _cachedTodoNewTaskPositionDisplayNames = null;
@@ -311,13 +266,7 @@ public partial class SettingsViewModel
             _cachedWeatherRefreshIntervalDisplayNames = null;
             _cachedAutomaticBackupIntervalDisplayNames = null;
             _cachedAutomaticBackupRetentionDisplayNames = null;
-            OnPropertyChanged(nameof(AvailableThemeDisplayNames));
-            OnPropertyChanged(nameof(AvailableTrayIconStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableLanguageDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetCornerPreferenceDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetMaterialTypeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetBorderColorModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetBorderStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetCollapseBehaviorDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetCompactWidthModeDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetCompactExpansionDirectionDisplayNames));
@@ -328,15 +277,6 @@ public partial class SettingsViewModel
             OnPropertyChanged(nameof(AvailableWidgetCompactAnimationEffectDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetCompactHoverResponseDisplayNames));
             OnPropertyChanged(nameof(AvailableWidgetCompactMediaCornerDisplayNames));
-            OnPropertyChanged(nameof(AvailableLayoutDensityDisplayNames));
-            OnPropertyChanged(nameof(AvailableAnimationPresetDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetAnimationEffectDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetAnimationSpeedDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetAnimationSlideDirectionDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetAnimationEasingIntensityDisplayNames));
-            OnPropertyChanged(nameof(AvailableDisplayWidgetChromeModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableInteractiveWidgetChromeModeDisplayNames));
-            OnPropertyChanged(nameof(AvailableWidgetTitleIconModeDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureDefaultViewDisplayNames));
             OnPropertyChanged(nameof(AvailableQuickCaptureTabStyleDisplayNames));
             OnPropertyChanged(nameof(AvailableTodoNewTaskPositionDisplayNames));
@@ -355,23 +295,9 @@ public partial class SettingsViewModel
             NotifySelectionOptionsChanged();
         }
 
-        RefreshWidgetForegroundSelectionProperties(refreshLocalizedOptions);
         RefreshPerformanceSelectionProperties(refreshLocalizedOptions);
 
-        OnPropertyChanged(nameof(IsOpacitySliderEnabled));
-        OnPropertyChanged(nameof(WidgetOpacityVisibility));
-        OnPropertyChanged(nameof(MaterialIntensityVisibility));
-        OnPropertyChanged(nameof(WidgetTransparency));
-        OnPropertyChanged(nameof(IsWidgetBorderStyleEnabled));
-        OnPropertyChanged(nameof(SelectedThemeText));
-        OnPropertyChanged(nameof(SelectedTrayIconStyleText));
         OnPropertyChanged(nameof(SelectedLanguageText));
-        OnPropertyChanged(nameof(SelectedWidgetCornerPreferenceText));
-        OnPropertyChanged(nameof(SelectedWidgetMaterialTypeText));
-        OnPropertyChanged(nameof(Windows10VisualCompatibilityTitle));
-        OnPropertyChanged(nameof(Windows10VisualCompatibilityMessage));
-        OnPropertyChanged(nameof(SelectedWidgetBorderColorModeText));
-        OnPropertyChanged(nameof(SelectedWidgetBorderStyleText));
         OnPropertyChanged(nameof(SelectedWidgetCollapseBehaviorText));
         OnPropertyChanged(nameof(SelectedWidgetCompactWidthModeText));
         OnPropertyChanged(nameof(SelectedWidgetCompactExpansionDirectionText));
@@ -397,18 +323,6 @@ public partial class SettingsViewModel
         OnPropertyChanged(nameof(IsWidgetCompactHoverResponseCustom));
         OnPropertyChanged(nameof(WidgetCompactHoverResponseCustomVisibility));
         OnPropertyChanged(nameof(SelectedWidgetCompactMediaCornerText));
-        OnPropertyChanged(nameof(SelectedLayoutDensityText));
-        OnPropertyChanged(nameof(SelectedAnimationPresetText));
-        OnPropertyChanged(nameof(SelectedWidgetAnimationEffectText));
-        OnPropertyChanged(nameof(IsDirectionEnabled));
-        OnPropertyChanged(nameof(IsEasingEnabled));
-        OnPropertyChanged(nameof(IsSpeedEnabled));
-        OnPropertyChanged(nameof(SelectedWidgetAnimationSpeedText));
-        OnPropertyChanged(nameof(SelectedWidgetAnimationSlideDirectionText));
-        OnPropertyChanged(nameof(SelectedWidgetAnimationEasingIntensityText));
-        OnPropertyChanged(nameof(SelectedDisplayWidgetChromeModeText));
-        OnPropertyChanged(nameof(SelectedInteractiveWidgetChromeModeText));
-        OnPropertyChanged(nameof(SelectedWidgetTitleIconModeText));
         NotifyHoverButtonActionPropertiesChanged();
         _interactionSettings.UpdateHoverButtonActionsSummary(BuildHoverButtonActionsSummary());
         OnPropertyChanged(nameof(SelectedQuickCaptureDefaultViewText));
