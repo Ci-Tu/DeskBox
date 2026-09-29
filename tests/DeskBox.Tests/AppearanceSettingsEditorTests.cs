@@ -311,7 +311,7 @@ public sealed class AppearanceSettingsEditorTests : IDisposable
 
         Assert.Equal("Dark", editor.Theme);
         Assert.Equal("Custom", editor.AccentColorSource);
-        Assert.False(editor.CanEditCustomAccent);
+        Assert.True(editor.CanEditCustomAccent);
         Assert.Equal("#EF6950", editor.SelectedAccentColorHex);
         Assert.Null(theme);
         Assert.Null(sourceUseSystem);

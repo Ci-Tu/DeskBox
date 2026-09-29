@@ -263,6 +263,13 @@ _ = RefreshQuickAccessStateAsync();
         _quickCaptureSettingsEditor.ListTextSizeCommitted += OnQuickCaptureListTextSizeCommitted;
         _quickCaptureSettingsEditor.ContentTextSizeCommitted += OnQuickCaptureContentTextSizeCommitted;
 
+        // Todo-section text-size commits follow the same contract as Quick
+        // Capture: the editor persists the raw override values and the shell
+        // answers with the shared appearance save pass so slider-drag
+        // suppression and per-widget previews keep their original timing.
+        _todoSettings.ListTextSizeCommitted += OnTodoListTextSizeCommitted;
+        _todoSettings.ContentTextSizeCommitted += OnTodoContentTextSizeCommitted;
+
         // Weather-section host linkage (batch 48): the editor owns the
         // section's binding surface and persisted writes; the shell answers
         // user location-mode edits by re-running the Windows location
