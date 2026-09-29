@@ -263,6 +263,13 @@ _ = RefreshQuickAccessStateAsync();
         _quickCaptureSettingsEditor.ListTextSizeCommitted += OnQuickCaptureListTextSizeCommitted;
         _quickCaptureSettingsEditor.ContentTextSizeCommitted += OnQuickCaptureContentTextSizeCommitted;
 
+        // Todo-section text-size commits follow the same contract as Quick
+        // Capture: the editor persists the raw override values and the shell
+        // answers with the shared appearance save pass so slider-drag
+        // suppression and per-widget previews keep their original timing.
+        _todoSettings.ListTextSizeCommitted += OnTodoListTextSizeCommitted;
+        _todoSettings.ContentTextSizeCommitted += OnTodoContentTextSizeCommitted;
+
         // Weather-section host linkage (batch 48): the editor owns the
         // section's binding surface and persisted writes; the shell answers
         // user location-mode edits by re-running the Windows location
@@ -333,8 +340,10 @@ _ = RefreshQuickAccessStateAsync();
         _themeService.AppearanceChanged -= OnAppearanceChanged;
         _localizationService.LanguageChanged -= OnLanguageChanged;
         _weatherSettings.AutoLocationUserChanged -= OnWeatherAutoLocationUserChanged;
+        // Cancel the live city search; its owning invocation disposes the
+        // source in its own finally once it unwinds on the canceled token
+        // (the field is only non-null while a search invocation runs).
         _citySearchCts?.Cancel();
-        _citySearchCts?.Dispose();
         _citySearchService?.Dispose();
         _lifetimeCts.Dispose();
     }

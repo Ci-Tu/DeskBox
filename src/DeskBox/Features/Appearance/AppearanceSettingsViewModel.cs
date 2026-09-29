@@ -378,12 +378,12 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
     }
 
     public bool CanEditCustomAccent =>
-        !string.Equals(AccentColorSource, AccentSourceCustom, StringComparison.OrdinalIgnoreCase);
+        string.Equals(AccentColorSource, AccentSourceCustom, StringComparison.OrdinalIgnoreCase);
 
     public string AccentColorDescription =>
         CanEditCustomAccent
-            ? _localize("Settings.Accent.SystemDescription")
-            : _localize("Settings.Accent.CustomDescription");
+            ? _localize("Settings.Accent.CustomDescription")
+            : _localize("Settings.Accent.SystemDescription");
 
     /// <summary>
     /// Pushed by the shell: the effective accent color as <c>#RRGGBB</c>.

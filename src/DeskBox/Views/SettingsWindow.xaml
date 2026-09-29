@@ -1039,7 +1039,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 <Slider Maximum="1000" Minimum="100" StepFrequency="10" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding ExpandDelayMs, Mode=TwoWay}" />
                             </StackPanel>
                         </toolkit:SettingsCard>
-                        <toolkit:SettingsCard Visibility="{Binding WidgetCompactHoverResponseCustomVisibility}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.Capsule.CollapseDelay.Description" svc:Localized.HeaderKey="Settings.Capsule.CollapseDelay.Title">
+                        <toolkit:SettingsCard Visibility="{Binding ShowHoverResponseCustom, Converter={StaticResource SettingsBoolToVisibilityConverter}}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.Capsule.CollapseDelay.Description" svc:Localized.HeaderKey="Settings.Capsule.CollapseDelay.Title">
                             <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
                                 <TextBlock Style="{StaticResource SliderSettingValueTextStyle}" Text="{Binding CollapseDelayText}" />
                                 <Slider Maximum="1500" Minimum="200" StepFrequency="20" Style="{StaticResource InlineMetricSliderStyle}" Value="{Binding CollapseDelayMs, Mode=TwoWay}" />
@@ -1100,7 +1100,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <toolkit:SettingsCard Visibility="{Binding CapsuleOverridesListVisibility}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.Capsule.Overrides.ResetAll.Description" svc:Localized.HeaderKey="Settings.Capsule.Overrides.ResetAll.Title">
+                        <toolkit:SettingsCard Visibility="{Binding ShowOverridesList, Converter={StaticResource SettingsBoolToVisibilityConverter}}" HorizontalContentAlignment="Right" svc:Localized.DescriptionKey="Settings.Capsule.Overrides.ResetAll.Description" svc:Localized.HeaderKey="Settings.Capsule.Overrides.ResetAll.Title">
                             <Button Command="{x:Bind ResetAllCapsuleOverridesCommand, Mode=OneWay}">
                                 <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon FontSize="13" Glyph="&#xE777;" /><TextBlock svc:Localized.Key="Settings.Capsule.Overrides.ResetAll.Action" /></StackPanel>
                             </Button>

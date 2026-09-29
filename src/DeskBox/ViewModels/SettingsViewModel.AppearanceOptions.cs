@@ -86,6 +86,10 @@ public partial class SettingsViewModel
 
     private void OnAppearanceAccentColorSourceUserChanged(bool useSystem)
     {
+        // Keep the shell's accent-mode flag in step with the editor write:
+        // RefreshAccentPreview pushes this flag back into the editor, so a
+        // stale value here would bounce the combo selection right back.
+        UseSystemAccentColor = useSystem;
         _themeService.SetAccentMode(
             useSystem ? ThemeService.AccentModeSystem : ThemeService.AccentModeCustom);
         RefreshAccentPreview();
