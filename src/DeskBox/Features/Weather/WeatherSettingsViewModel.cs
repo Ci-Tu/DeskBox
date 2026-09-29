@@ -134,8 +134,15 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
             }
 
             bool enabled = normalized == WeatherOptionKinds.LocationModeAuto;
-            RunWrite(() => _settings.SetWeatherAutoLocation(enabled));
-            AutoLocationUserChanged?.Invoke(enabled);
+            // Fire only after the write actually persisted: the coordinator
+            // port returns false for the unchanged-write skip, so the shell's
+            // location lookup only runs for real persisted flips (audit P3).
+            bool persisted = false;
+            RunWrite(() => persisted = _settings.SetWeatherAutoLocation(enabled));
+            if (persisted)
+            {
+                AutoLocationUserChanged?.Invoke(enabled);
+            }
         }
     }
 

@@ -340,8 +340,10 @@ _ = RefreshQuickAccessStateAsync();
         _themeService.AppearanceChanged -= OnAppearanceChanged;
         _localizationService.LanguageChanged -= OnLanguageChanged;
         _weatherSettings.AutoLocationUserChanged -= OnWeatherAutoLocationUserChanged;
+        // Cancel the live city search; its owning invocation disposes the
+        // source in its own finally once it unwinds on the canceled token
+        // (the field is only non-null while a search invocation runs).
         _citySearchCts?.Cancel();
-        _citySearchCts?.Dispose();
         _citySearchService?.Dispose();
         _lifetimeCts.Dispose();
     }
