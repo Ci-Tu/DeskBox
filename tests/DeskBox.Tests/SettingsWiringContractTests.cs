@@ -14,28 +14,19 @@ namespace DeskBox.Tests;
 public sealed class SettingsWiringContractTests
 {
     /// <summary>
-    /// Bindings still referencing deleted shell facade visibility properties
-    /// (batch 44 regression: both cards stayed permanently visible). The
-    /// accent/todo/capsule fix batch rebinds them to editor properties; this
-    /// ratchet entry must be deleted when that batch lands.
+    /// Bindings still referencing deleted shell facade visibility properties.
+    /// The batch-44 regressions were fixed in 2b6b2e0d (rebound to editor
+    /// properties); the list stays empty so any future dead binding fails
+    /// immediately.
     /// </summary>
-    private static readonly string[] PendingDeadBindingNames =
-    {
-        "CapsuleOverridesListVisibility",
-        "WidgetCompactHoverResponseCustomVisibility",
-    };
+    private static readonly string[] PendingDeadBindingNames = [];
 
     /// <summary>
-    /// Todo editor commit events the shell does not subscribe yet (batch 47
-    /// regression: slider drags lost live preview). The accent/todo/capsule
-    /// fix batch wires them; this ratchet entry must be deleted when that
-    /// batch lands.
+    /// Editor commit events the shell does not subscribe. The batch-47
+    /// regressions were fixed in 2b6b2e0d; the list stays empty so any
+    /// future unsubscribed editor event fails immediately.
     /// </summary>
-    private static readonly (string EditorClassName, string EventName)[] PendingUnsubscribedEvents =
-    {
-        ("TodoSettingsViewModel", "ListTextSizeCommitted"),
-        ("TodoSettingsViewModel", "ContentTextSizeCommitted"),
-    };
+    private static readonly (string EditorClassName, string EventName)[] PendingUnsubscribedEvents = [];
 
     [Fact]
     public void SettingsXamlClassicBindings_ResolveToLiveBindableSources()
@@ -156,8 +147,6 @@ public sealed class SettingsWiringContractTests
                 }
             }
         }
-
-        Assert.NotEmpty(unsubscribed);
 
         string[] blocking = unsubscribed
             .Where(entry => !PendingUnsubscribedEvents.Contains(entry))
