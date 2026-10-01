@@ -39,7 +39,7 @@ public sealed class SettingsSliceOwnershipContractTests
     [Fact]
     public void EveryFacadeProperty_MapsToExactlyOneSliceProperty()
     {
-        Assert.Equal(220, FacadeProperties.Length);
+        Assert.Equal(226, FacadeProperties.Length);
 
         foreach (PropertyInfo facade in FacadeProperties)
         {
@@ -269,8 +269,8 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/SearchHotkeyService.cs"] = 12,
         ["src/DeskBox/Services/SearchResultActionService.cs"] = 2,
         ["src/DeskBox/Services/SettingsMigrationService.cs"] = 35,
-        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 20,
-        ["src/DeskBox/Services/SettingsService.cs"] = 594,
+        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 22,
+        ["src/DeskBox/Services/SettingsService.cs"] = 603,
         ["src/DeskBox/Services/ThemeService.cs"] = 11,
         ["src/DeskBox/Services/TodoReminderService.cs"] = 8,
         ["src/DeskBox/Services/WeatherService.cs"] = 1,
@@ -286,7 +286,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/WidgetManager.Groups.cs"] = 55,
         ["src/DeskBox/Services/WidgetManager.Storage.cs"] = 20,
         ["src/DeskBox/Services/WidgetManager.Surfaces.cs"] = 1,
-        ["src/DeskBox/Services/WidgetManager.TrayAnimation.cs"] = 3,
+        ["src/DeskBox/Services/WidgetManager.TrayAnimation.cs"] = 4,
         ["src/DeskBox/Services/WidgetManager.cs"] = 27,
         ["src/DeskBox/Services/WidgetStartupRestorePolicy.cs"] = 2,
         ["src/DeskBox/Services/WidgetTopologyLayoutService.cs"] = 22,
@@ -351,8 +351,8 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs"] = 15,
         ["src/DeskBox/ViewModels/SettingsViewModel.HotkeyAndStorage.cs"] = 6,
         ["src/DeskBox/ViewModels/SettingsViewModel.RuntimeDiagnostics.cs"] = 1,
-        ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.cs"] = 14,
+        ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 7,
+        ["src/DeskBox/ViewModels/SettingsViewModel.cs"] = 15,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.DetailAndAttachments.cs"] = 1,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.FilteringAndAppearance.cs"] = 21,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.cs"] = 12,
@@ -370,13 +370,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Views/ContentWidgetWindow.QuickCapture.cs"] = 1,
         ["src/DeskBox/Views/ContentWidgetWindow.TrayAnimations.cs"] = 4,
         ["src/DeskBox/Views/ContentWidgetWindow.xaml.cs"] = 16,
-        ["src/DeskBox/Views/OnboardingWindow.Appearance.cs"] = 10,
-        ["src/DeskBox/Views/OnboardingWindow.Completion.cs"] = 5,
-        ["src/DeskBox/Views/OnboardingWindow.DesktopOrganization.cs"] = 1,
-        ["src/DeskBox/Views/OnboardingWindow.Features.cs"] = 1,
-        ["src/DeskBox/Views/OnboardingWindow.Hotkey.cs"] = 15,
-        ["src/DeskBox/Views/OnboardingWindow.Storage.cs"] = 5,
-        ["src/DeskBox/Views/OnboardingWindow.TaskFlow.cs"] = 5,
+        ["src/DeskBox/Views/OnboardingWindow.Steps.cs"] = 3,
         ["src/DeskBox/Views/OnboardingWindow.xaml.cs"] = 4,
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.Appearance.cs"] = 3,
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.Detail.cs"] = 2,

@@ -65,6 +65,38 @@ public sealed class WidgetStartupRestorePolicyTests
     }
 
     [Fact]
+    public void GetStartupHideReason_HidesOnlyForQuickRevealOrSilentStartup()
+    {
+        Assert.Equal(
+            "quick-reveal-layer",
+            WidgetStartupRestorePolicy.GetStartupHideReason(
+                usesQuickRevealLayer: true,
+                settings: new AppSettings { }));
+        Assert.Equal(
+            "silent-startup",
+            WidgetStartupRestorePolicy.GetStartupHideReason(
+                usesQuickRevealLayer: false,
+                settings: new AppSettings { SilentStartup = true }));
+        // Quick reveal keeps its dedicated reason even when the silent-startup
+        // preference is also on: the log must name the layer, not the setting.
+        Assert.Equal(
+            "quick-reveal-layer",
+            WidgetStartupRestorePolicy.GetStartupHideReason(
+                usesQuickRevealLayer: true,
+                settings: new AppSettings { SilentStartup = true }));
+        Assert.Null(WidgetStartupRestorePolicy.GetStartupHideReason(
+            usesQuickRevealLayer: false,
+            settings: new AppSettings { }));
+    }
+
+    [Fact]
+    public void GetStartupHideReason_RejectsNullSettings()
+    {
+        Assert.Throws<ArgumentNullException>(
+            () => WidgetStartupRestorePolicy.GetStartupHideReason(false, null!));
+    }
+
+    [Fact]
     public void MarkVisible_SynchronizesTheWholeGroupAndStandaloneWidget()
     {
         var first = new WidgetConfig { Id = "first", IsVisible = false };

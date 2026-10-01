@@ -6,13 +6,11 @@ public sealed class FrostedActionSurfaceContractTests
     public void RecommendedActionAreas_UseIndependentAcrylicLayers()
     {
         string root = FindRepositoryRoot();
-        string onboarding = Read(root, "src/DeskBox/Views/OnboardingWindow.xaml");
         string quickCaptureSurface = Read(root, "src/DeskBox/Controls/WidgetContents/QuickCaptureSurfaceContent.xaml");
         string quickCaptureWindow = Read(root, "src/DeskBox/Views/QuickCaptureWidgetWindow.xaml");
         string todo = Read(root, "src/DeskBox/Controls/WidgetContents/TodoWidgetContent.xaml");
         string releaseNotes = Read(root, "src/DeskBox/Views/ReleaseNotesWindow.xaml");
 
-        AssertAcrylicLayer(onboarding, "x:Name=\"FooterAcrylicSurface\"", "Opacity=\"0.46\"");
         AssertAcrylicLayer(quickCaptureSurface, "x:Name=\"DetailHeaderAcrylicSurface\"", "Opacity=\"0.42\"");
         AssertAcrylicLayer(quickCaptureWindow, "x:Name=\"DetailHeaderAcrylicSurface\"", "Opacity=\"0.42\"");
         AssertAcrylicLayer(todo, "x:Name=\"DetailHeaderAcrylicSurface\"", "Opacity=\"0.42\"");

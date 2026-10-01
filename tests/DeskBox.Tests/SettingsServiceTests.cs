@@ -1187,6 +1187,55 @@ public sealed class SettingsServiceTests : IDisposable
             service.Settings.WidgetAnimationSlideDirection);
     }
 
+    [Theory]
+    [InlineData(SettingsService.WidgetAnimationEffectEdgeScale)]
+    [InlineData(SettingsService.WidgetAnimationEffectTilt)]
+    [InlineData(SettingsService.WidgetAnimationEffectWipe)]
+    public async Task LoadAsync_PreservesDirectionalStationaryEffects(string effect)
+    {
+        // The persistence whitelist once knew only the four legacy effects
+        // and rewrote every new effect back to SlideFade on the next
+        // save/load cycle, which the user saw as "the effect drifts back to
+        // slide after a few toggles". These effects consume the direction
+        // too, so the stored direction must survive with them.
+        var settings = new AppSettings
+        {
+            WidgetAnimationEffect = effect,
+            WidgetAnimationSlideDirection = SettingsService.WidgetAnimationSlideDirectionUp
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(_settingsRoot, "settings.json"),
+            JsonSerializer.Serialize(settings, s_jsonOptions));
+
+        var service = new SettingsService(_settingsRoot);
+        await service.LoadAsync();
+
+        Assert.Equal(effect, service.Settings.WidgetAnimationEffect);
+        Assert.Equal(
+            SettingsService.WidgetAnimationSlideDirectionUp,
+            service.Settings.WidgetAnimationSlideDirection);
+    }
+
+    [Fact]
+    public async Task LoadAsync_PreservesSpringEasingIntensity()
+    {
+        var settings = new AppSettings
+        {
+            WidgetAnimationEffect = SettingsService.WidgetAnimationEffectFade,
+            WidgetAnimationEasingIntensity = SettingsService.WidgetAnimationEasingSpring
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(_settingsRoot, "settings.json"),
+            JsonSerializer.Serialize(settings, s_jsonOptions));
+
+        var service = new SettingsService(_settingsRoot);
+        await service.LoadAsync();
+
+        Assert.Equal(
+            SettingsService.WidgetAnimationEasingSpring,
+            service.Settings.WidgetAnimationEasingIntensity);
+    }
+
     [Fact]
     public async Task LoadAsync_MigratesRemovedNoAnimationOptionToStandardSlideFade()
     {

@@ -434,6 +434,11 @@ public sealed partial class QuickCaptureWidgetWindow :
         _trayAnimation.SetOffsetOverride(offsetX, offsetY);
     }
 
+    public void SetTrayAnimationEdgeFade(bool enabled)
+    {
+        _trayAnimation.SetEdgeFadeOverride(enabled);
+    }
+
     public void CancelTrayAnimationAndRestorePosition()
     {
         if (!Visible && _isHideAnimationRunning)

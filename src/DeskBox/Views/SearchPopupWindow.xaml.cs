@@ -2817,7 +2817,14 @@ public sealed partial class SearchPopupWindow : Window
                 args.Data.Properties.Title = draggedPaths.Length == 1
                     ? item.Title
                     : draggedPaths.Length.ToString();
-                args.Data.RequestedOperation = DataPackageOperation.Copy;
+                // AllowedOperations carries the capability set; keeping
+                // RequestedOperation at None means no preferred-operation
+                // flag reaches Explorer, which is what made Windows 10 show
+                // an operation picker on every drop. The payload is broker
+                // StorageItems (not the native Shell object), so Copy stays
+                // the ceiling — Move could authorize source deletion.
+                args.AllowedOperations = DataPackageOperation.Copy;
+                args.Data.RequestedOperation = DataPackageOperation.None;
                 if (draggedPaths.Length == 1)
                 {
                     await SetDragPayloadAsync(args.Data, draggedPaths[0]);

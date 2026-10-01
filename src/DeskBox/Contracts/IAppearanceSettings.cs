@@ -200,6 +200,9 @@ public static class WidgetAnimationKinds
     public const string EffectSlideLeftFade = "SlideLeftFade";
     public const string EffectSlideRightFade = "SlideRightFade";
     public const string EffectScaleSlide = "ScaleSlide";
+    public const string EffectEdgeScale = "EdgeScale";
+    public const string EffectTilt = "Tilt";
+    public const string EffectWipe = "Wipe";
 
     public const string SpeedVeryFast = "VeryFast";
     public const string SpeedFast = "Fast";
@@ -217,6 +220,7 @@ public static class WidgetAnimationKinds
     public const string EasingLight = "Light";
     public const string EasingStandard = "Standard";
     public const string EasingStrong = "Strong";
+    public const string EasingSpring = "Spring";
 
     public const string PresetGentle = "Gentle";
     public const string PresetStandard = "Standard";
@@ -228,7 +232,8 @@ public static class WidgetAnimationKinds
             EffectFade or EffectSlideRight or EffectSlideLeft or EffectSlideUp or
             EffectSlideDown or EffectScaleFade or EffectSlideFade or EffectZoom or
             EffectSlideUpFade or EffectSlideDownFade or EffectSlideLeftFade or
-            EffectSlideRightFade or EffectScaleSlide
+            EffectSlideRightFade or EffectScaleSlide or
+            EffectEdgeScale or EffectTilt or EffectWipe
             ? effect
             : EffectSlideFade;
 
@@ -243,9 +248,27 @@ public static class WidgetAnimationKinds
             : DirectionRight;
 
     public static string NormalizeEasingIntensity(string? intensity) =>
-        intensity is EasingNone or EasingLight or EasingStandard or EasingStrong
+        intensity is EasingNone or EasingLight or EasingStandard or EasingStrong or EasingSpring
             ? intensity
             : EasingStandard;
+
+    /// <summary>
+    /// Effects whose visual result depends on the configured slide
+    /// direction: the travel direction for slides, the anchor edge for
+    /// edge-scale, the tilt sign, and the wipe side. The settings
+    /// persistence normalizer uses this to decide whether a stored
+    /// direction is meaningful, and the appearance editor to enable the
+    /// direction picker.
+    /// </summary>
+    public static bool UsesSlideDirection(string? effect)
+    {
+        return NormalizeEffect(effect) is
+            EffectSlideFade or
+            EffectScaleSlide or
+            EffectEdgeScale or
+            EffectTilt or
+            EffectWipe;
+    }
 
     public static string ResolvePreset(
         string effect,
@@ -325,7 +348,8 @@ public readonly record struct AppearanceAnimationSettings(
     string Effect,
     string Speed,
     string SlideDirection,
-    string EasingIntensity);
+    string EasingIntensity,
+    bool StaggerEnabled = false);
 
 public readonly record struct AppearanceForegroundSettings(
     string ForegroundMode,
@@ -384,6 +408,7 @@ public interface IAppearanceSettings
     void SetAnimationSpeed(string? speed, bool scheduleSave = true);
     void SetAnimationSlideDirection(string? direction, bool scheduleSave = true);
     void SetAnimationEasingIntensity(string? intensity, bool scheduleSave = true);
+    void SetAnimationStaggerEnabled(bool enabled, bool scheduleSave = true);
 
     void SetWidgetForegroundMode(string? mode);
     void SetWidgetForegroundColor(string colorHex);

@@ -11,6 +11,7 @@ namespace DeskBox.ViewModels;
     nameof(AutoStartModeVisibility),
     nameof(SelectedAutoStartMode),
     nameof(AvailableAutoStartModeOptions),
+    nameof(SilentStartup),
     nameof(AvailableLanguageOptions),
     nameof(CanOpenUpdateFallback),
     nameof(CanViewReleaseNotes),

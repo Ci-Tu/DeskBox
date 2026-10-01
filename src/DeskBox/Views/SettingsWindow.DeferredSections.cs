@@ -192,6 +192,7 @@ public sealed partial class SettingsWindow
             section.DataContext = _managedStorageSettingsViewModel;
             RefreshManagedStoragePathWarning();
             RefreshManagedStorageDesktopShortcutState();
+            RefreshDragOutWin10State();
         }
 
         // The appearance family (main section plus the material, density,
@@ -236,7 +237,16 @@ public sealed partial class SettingsWindow
         }
 
         section.Loaded += DeferredSettingsSection_Loaded;
-        ContentHost.Children.Add(section);
+        if (sectionTag == "FileStorageSettings" &&
+            _settingsSectionElements.TryGetValue("AppearanceDetail", out FrameworkElement? parent) &&
+            parent is FileWidgetSettingsSection fileWidgetSection)
+        {
+            fileWidgetSection.AttachManagedStorageSection(section);
+        }
+        else
+        {
+            ContentHost.Children.Add(section);
+        }
         App.Log(
             $"[SettingsPerf] Section created tag={sectionTag} " +
             $"createdSections={_settingsSectionElements.Count} elapsedMs={stopwatch.ElapsedMilliseconds}");

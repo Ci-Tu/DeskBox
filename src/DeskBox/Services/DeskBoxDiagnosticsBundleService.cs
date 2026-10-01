@@ -136,7 +136,8 @@ public sealed record DeskBoxDiagnosticSnapshot(
     DeskBoxShortcutNativeDiagnostic ShortcutNative,
     AppRuntimeHealthSnapshot? RuntimeHealth,
     DeskBoxWidgetManagerDiagnostic WidgetManager,
-    IReadOnlyList<DeskBoxDisplayDiagnostic> Displays);
+    IReadOnlyList<DeskBoxDisplayDiagnostic> Displays,
+    ManagedStorageMigrationDiagnostic? StorageMigration = null);
 
 [JsonSourceGenerationOptions(
     GenerationMode = JsonSourceGenerationMode.Metadata,

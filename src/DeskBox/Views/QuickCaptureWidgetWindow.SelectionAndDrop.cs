@@ -471,7 +471,9 @@ public sealed partial class QuickCaptureWidgetWindow
         if (DeskBoxDragData.HasDroppedFiles(e.DataView))
         {
             e.AcceptedOperation =
-                DeskBoxDragData.GetFileAssociationOperation(e.DataView);
+                DeskBoxDragData.GetFileAssociationOperation(
+                    e.DataView,
+                    e.AllowedOperations);
             ApplyCompactQuickCaptureDropCaption(e);
             return;
         }

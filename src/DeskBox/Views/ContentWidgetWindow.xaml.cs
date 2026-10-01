@@ -725,6 +725,11 @@ public sealed partial class ContentWidgetWindow : WidgetWindowBase, IDesktopWidg
         TrayAnimation.SetOffsetOverride(offsetX, offsetY);
     }
 
+    public void SetTrayAnimationEdgeFade(bool enabled)
+    {
+        TrayAnimation.SetEdgeFadeOverride(enabled);
+    }
+
     public void CancelTrayAnimationAndRestorePosition()
     {
         if (!Visible && IsHideAnimationRunning)

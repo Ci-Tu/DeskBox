@@ -93,7 +93,10 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
         WidgetAnimationKinds.EffectSlideFade,
         WidgetAnimationKinds.EffectFade,
         WidgetAnimationKinds.EffectScaleFade,
-        WidgetAnimationKinds.EffectZoom
+        WidgetAnimationKinds.EffectZoom,
+        WidgetAnimationKinds.EffectEdgeScale,
+        WidgetAnimationKinds.EffectTilt,
+        WidgetAnimationKinds.EffectWipe
     ];
     private static readonly string[] AnimationSpeeds =
     [
@@ -115,7 +118,8 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
         WidgetAnimationKinds.EasingNone,
         WidgetAnimationKinds.EasingLight,
         WidgetAnimationKinds.EasingStandard,
-        WidgetAnimationKinds.EasingStrong
+        WidgetAnimationKinds.EasingStrong,
+        WidgetAnimationKinds.EasingSpring
     ];
     private static readonly string[] TitleIconModes =
     [
@@ -205,6 +209,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
     private string _animationEffect = WidgetAnimationKinds.EffectSlideFade;
     private string _animationSpeed = WidgetAnimationKinds.SpeedStandard;
     private string _animationSlideDirection = WidgetAnimationKinds.DirectionRight;
+    private bool _animationStaggerEnabled;
     private string _animationEasingIntensity = WidgetAnimationKinds.EasingStandard;
     private string _animationPreset = WidgetAnimationKinds.PresetStandard;
 
@@ -1235,6 +1240,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
             OnPropertyChanged(nameof(IsDirectionEnabled));
             OnPropertyChanged(nameof(IsEasingEnabled));
             OnPropertyChanged(nameof(IsSpeedEnabled));
+            OnPropertyChanged(nameof(IsStaggerEnabled));
             SyncAnimationPresetSelection();
         }
     }
@@ -1248,7 +1254,10 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
                 "Settings.Animation.Effect.SlideFade",
                 "Settings.Animation.Effect.Fade",
                 "Settings.Animation.Effect.ScaleFade",
-                "Settings.Animation.Effect.Zoom"
+                "Settings.Animation.Effect.Zoom",
+                "Settings.Animation.Effect.EdgeScale",
+                "Settings.Animation.Effect.Tilt",
+                "Settings.Animation.Effect.Wipe"
             ];
             _cachedAnimationEffectNames ??= keys.Select(key => _localize(key)).ToArray();
             var options = new SettingsOption[AnimationEffects.Length];
@@ -1263,7 +1272,15 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
 
     public bool IsSpeedEnabled => AnimationEffect != WidgetAnimationKinds.EffectNone;
 
-    public bool IsDirectionEnabled => AnimationEffect is
+    public bool IsDirectionEnabled =>
+        WidgetAnimationKinds.UsesSlideDirection(AnimationEffect);
+
+    /// <summary>
+    /// Staggering delays each window's HWND travel inside the batch driver;
+    /// stationary effects (fade/scale/tilt/wipe family) never move windows,
+    /// so the toggle does nothing for them and must not present as usable.
+    /// </summary>
+    public bool IsStaggerEnabled => AnimationEffect is
         WidgetAnimationKinds.EffectSlideFade or
         WidgetAnimationKinds.EffectScaleSlide;
 
@@ -1394,6 +1411,23 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
         }
     }
 
+    public bool AnimationStaggerEnabled
+    {
+        get => _animationStaggerEnabled;
+        set
+        {
+            if (!SetProperty(ref _animationStaggerEnabled, value))
+            {
+                return;
+            }
+
+            if (!_isSyncingPresentation)
+            {
+                _settings.SetAnimationStaggerEnabled(value);
+            }
+        }
+    }
+
     public IReadOnlyList<SettingsOption> AvailableAnimationEasingIntensityOptions
     {
         get
@@ -1403,7 +1437,8 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
                 "Settings.Animation.Easing.None",
                 "Settings.Animation.Easing.Light",
                 "Settings.Animation.Easing.Strong",
-                "Settings.Animation.Easing.Standard"
+                "Settings.Animation.Easing.Standard",
+                "Settings.Animation.Easing.Spring"
             ];
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string key in keys)
@@ -1417,6 +1452,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
                     WidgetAnimationKinds.EasingNone => names["Settings.Animation.Easing.None"],
                     WidgetAnimationKinds.EasingLight => names["Settings.Animation.Easing.Light"],
                     WidgetAnimationKinds.EasingStrong => names["Settings.Animation.Easing.Strong"],
+                    WidgetAnimationKinds.EasingSpring => names["Settings.Animation.Easing.Spring"],
                     _ => names["Settings.Animation.Easing.Standard"]
                 })
                 .ToArray();
@@ -1662,6 +1698,7 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
             AnimationSpeed = animation.Speed;
             AnimationSlideDirection = animation.SlideDirection;
             AnimationEasingIntensity = animation.EasingIntensity;
+            AnimationStaggerEnabled = animation.StaggerEnabled;
             AnimationPreset = WidgetAnimationKinds.ResolvePreset(
                 animation.Effect,
                 animation.Speed,

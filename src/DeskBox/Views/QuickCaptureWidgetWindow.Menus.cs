@@ -88,6 +88,7 @@ public sealed partial class QuickCaptureWidgetWindow
         };
         bool startRenameWhenClosed = false;
         bool showForegroundColorPickerWhenClosed = false;
+        IDisposable? pickerHandoff = null;
         renameItem.Click += (_, _) => startRenameWhenClosed = true;
         flyout.Closed += (_, _) =>
         {
@@ -97,10 +98,16 @@ public sealed partial class QuickCaptureWidgetWindow
             }
             else if (showForegroundColorPickerWhenClosed)
             {
-                DispatcherQueue.TryEnqueue(() =>
-                    ShowFlyoutWithElevation(
-                        BuildWidgetForegroundColorPickerFlyout(),
-                        QuickCaptureShell));
+                QueueInteractionGuardedShow(
+                    pickerHandoff,
+                    () =>
+                    {
+                        ShowFlyoutWithElevation(
+                            BuildWidgetForegroundColorPickerFlyout(),
+                            QuickCaptureShell);
+                        return Task.CompletedTask;
+                    });
+                pickerHandoff = null;
             }
         };
         flyout.Items.Add(renameItem);
@@ -129,7 +136,14 @@ public sealed partial class QuickCaptureWidgetWindow
             ViewModel.Config,
             _localizationService,
             SetWidgetForegroundModeOverride,
-            () => showForegroundColorPickerWhenClosed = true));
+            () =>
+            {
+                showForegroundColorPickerWhenClosed = true;
+                // Same transition gap as the content widget's close chain:
+                // without a handoff the Smart capsule collapses between the
+                // menu closing and the color picker opening.
+                pickerHandoff ??= AcquireFlyoutHandoff("quick-color-picker-handoff");
+            }));
 
         WidgetGroupMenuBuilder.Append(
             flyout,

@@ -97,6 +97,9 @@ public sealed class SettingsService
     public const string WidgetAnimationEffectSlideLeftFade = Contracts.WidgetAnimationKinds.EffectSlideLeftFade;
     public const string WidgetAnimationEffectSlideRightFade = Contracts.WidgetAnimationKinds.EffectSlideRightFade;
     public const string WidgetAnimationEffectScaleSlide = Contracts.WidgetAnimationKinds.EffectScaleSlide;
+    public const string WidgetAnimationEffectEdgeScale = Contracts.WidgetAnimationKinds.EffectEdgeScale;
+    public const string WidgetAnimationEffectTilt = Contracts.WidgetAnimationKinds.EffectTilt;
+    public const string WidgetAnimationEffectWipe = Contracts.WidgetAnimationKinds.EffectWipe;
     public const string WidgetAnimationSpeedVeryFast = Contracts.WidgetAnimationKinds.SpeedVeryFast;
     public const string WidgetAnimationSpeedFast = Contracts.WidgetAnimationKinds.SpeedFast;
     public const string WidgetAnimationSpeedStandard = Contracts.WidgetAnimationKinds.SpeedStandard;
@@ -111,6 +114,7 @@ public sealed class SettingsService
     public const string WidgetAnimationEasingLight = Contracts.WidgetAnimationKinds.EasingLight;
     public const string WidgetAnimationEasingStandard = Contracts.WidgetAnimationKinds.EasingStandard;
     public const string WidgetAnimationEasingStrong = Contracts.WidgetAnimationKinds.EasingStrong;
+    public const string WidgetAnimationEasingSpring = Contracts.WidgetAnimationKinds.EasingSpring;
 
     public static bool IsMicaMaterial(string? materialType) =>
         materialType is WidgetMaterialTypeMica or WidgetMaterialTypeMicaAlt;
@@ -221,6 +225,9 @@ public sealed class SettingsService
     public const string ManagedDropActionMove = Contracts.ManagedDropActions.Move;
     public const string ManagedDropActionCopy = Contracts.ManagedDropActions.Copy;
     public const string ManagedDropActionFollowWindows = Contracts.ManagedDropActions.FollowWindows;
+    public const string ManagedDragOutActionMove = Contracts.ManagedDropActions.Move;
+    public const string ManagedDragOutActionCopy = Contracts.ManagedDropActions.Copy;
+    public const string ManagedDragOutActionFollowWindows = Contracts.ManagedDropActions.FollowWindows;
 
     // Canonical attachment storage modes live in Contracts
     // (AttachmentStorageModes, batch 50); these historical constants are
@@ -375,6 +382,7 @@ public const int DefaultSearchMaxResults = 100;
                 [nameof(AppSettings.RecentOrganizationHistory)] = DefaultPreferencePreservationReason.UserData,
                 [nameof(AppSettings.DesktopOrganizationRules)] = DefaultPreferencePreservationReason.UserData,
                 [nameof(AppSettings.DesktopAutoOrganizationEnabled)] = DefaultPreferencePreservationReason.UserChoice,
+                [nameof(AppSettings.DesktopAutoOrganizationDelaySeconds)] = DefaultPreferencePreservationReason.UserChoice,
                 [nameof(AppSettings.DesktopAutoOrganizationBaselineUtc)] = DefaultPreferencePreservationReason.RuntimeState,
                 [nameof(AppSettings.DefaultManagedStorageRootPath)] = DefaultPreferencePreservationReason.Storage,
                 [nameof(AppSettings.AutomaticBackupDirectory)] = DefaultPreferencePreservationReason.Storage,
@@ -499,6 +507,7 @@ public const int DefaultSearchMaxResults = 100;
         settings.WidgetAnimationSpeed = WidgetAnimationSpeedStandard;
         settings.WidgetAnimationSlideDirection = WidgetAnimationSlideDirectionRight;
         settings.WidgetAnimationEasingIntensity = WidgetAnimationEasingStandard;
+        settings.WidgetAnimationStaggerEnabled = false;
         settings.WidgetLayerMode = WidgetLayerModeDynamic;
         settings.KeepWidgetsVisibleOnShowDesktop = true;
         settings.DisplayWidgetChromeMode = WidgetChromeModeOverlay;
@@ -553,6 +562,7 @@ public const int DefaultSearchMaxResults = 100;
         settings.ShowHoverButtons = true;
         settings.WidgetHoverButtonActions = DefaultWidgetHoverButtonActions;
         settings.AutoCheckForUpdates = true;
+        settings.SilentStartup = false;
         settings.QuickCaptureClipboardEnabled = false;
         settings.QuickCaptureImageClipboardEnabled = false;
         settings.QuickCaptureRecentLimit = QuickCaptureService.DefaultRecentLimit;
@@ -633,6 +643,9 @@ settings.WeatherRefreshIntervalMinutes = 60;
         settings.TodoShowImportantTab = true;
         settings.TodoShowCompletedTab = true;
         settings.ManagedDropAction = ManagedDropActionMove;
+        settings.ManagedDragOutAction = ManagedDragOutActionFollowWindows;
+        settings.DragOutModifierTipEnabled = true;
+        settings.DragOutResultHintEnabled = true;
         settings.AutomaticBackupEnabled = DataBackupSettingsPolicy.DefaultEnabled;
         settings.AutomaticBackupIntervalMinutes = DataBackupSettingsPolicy.DefaultIntervalMinutes;
         settings.AutomaticBackupRetentionCount = DataBackupSettingsPolicy.DefaultRetentionCount;
@@ -694,6 +707,9 @@ settings.FocusClickedWidgetOnRaise = false;
     /// writer strips them (single owner, no dual-write).
     /// </summary>
     public WidgetLayoutStore Layout { get; }
+
+    internal string ManagedStorageMigrationDirectory =>
+        Path.Combine(Path.GetDirectoryName(_settingsPath)!, "managed-storage-migrations");
 
     private static string InitializeSettingsPath(string dataDir)
     {
@@ -1572,7 +1588,10 @@ settings.FocusClickedWidgetOnRaise = false;
             WidgetAnimationEffectFade or
             WidgetAnimationEffectScaleFade or
             WidgetAnimationEffectSlideFade or
-            WidgetAnimationEffectZoom))
+            WidgetAnimationEffectZoom or
+            WidgetAnimationEffectEdgeScale or
+            WidgetAnimationEffectTilt or
+            WidgetAnimationEffectWipe))
         {
             settings.WidgetAnimationEffect = WidgetAnimationEffectSlideFade;
             changed = true;
@@ -1611,14 +1630,15 @@ settings.FocusClickedWidgetOnRaise = false;
             WidgetAnimationEasingNone or
             WidgetAnimationEasingLight or
             WidgetAnimationEasingStandard or
-            WidgetAnimationEasingStrong))
+            WidgetAnimationEasingStrong or
+            WidgetAnimationEasingSpring))
         {
             settings.WidgetAnimationEasingIntensity = WidgetAnimationEasingStandard;
             changed = true;
         }
 
-        if (settings.WidgetAnimationEffect != WidgetAnimationEffectSlideFade &&
-                 settings.WidgetAnimationSlideDirection != WidgetAnimationSlideDirectionNone)
+        if (!Contracts.WidgetAnimationKinds.UsesSlideDirection(settings.WidgetAnimationEffect) &&
+            settings.WidgetAnimationSlideDirection != WidgetAnimationSlideDirectionNone)
         {
             settings.WidgetAnimationSlideDirection = WidgetAnimationSlideDirectionNone;
             changed = true;
@@ -2619,6 +2639,14 @@ settings.FocusClickedWidgetOnRaise = false;
             changed = true;
         }
 
+        if (!string.Equals(settings.ManagedDragOutAction, ManagedDragOutActionFollowWindows, StringComparison.Ordinal) &&
+            !string.Equals(settings.ManagedDragOutAction, ManagedDragOutActionMove, StringComparison.Ordinal) &&
+            !string.Equals(settings.ManagedDragOutAction, ManagedDragOutActionCopy, StringComparison.Ordinal))
+        {
+            settings.ManagedDragOutAction = ManagedDragOutActionFollowWindows;
+            changed = true;
+        }
+
         string normalizedRootPath = NormalizeManagedStorageRootPath(settings.DefaultManagedStorageRootPath);
         if (!string.Equals(settings.DefaultManagedStorageRootPath, normalizedRootPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -2683,6 +2711,13 @@ settings.FocusClickedWidgetOnRaise = false;
         {
             settings.DesktopAutoOrganizationEnabled = false;
             settings.DesktopAutoOrganizationBaselineUtc = null;
+            changed = true;
+        }
+        int normalizedAutoOrganizationDelay = DesktopAutoOrganizationPolicy.NormalizeDelaySeconds(
+            settings.DesktopOrganization.DesktopAutoOrganizationDelaySeconds);
+        if (settings.DesktopOrganization.DesktopAutoOrganizationDelaySeconds != normalizedAutoOrganizationDelay)
+        {
+            settings.DesktopOrganization.DesktopAutoOrganizationDelaySeconds = normalizedAutoOrganizationDelay;
             changed = true;
         }
 

@@ -78,6 +78,21 @@
                         OnContent=""
                         Toggled="AutoOrganizationToggle_Toggled" />
                 </toolkit:SettingsCard>
+
+                <toolkit:SettingsCard
+                    x:Name="AutoIntervalCard"
+                    Visibility="Collapsed"
+                    HorizontalContentAlignment="Right"
+                    svc:Localized.DescriptionKey="DesktopOrganization.Auto.Interval.Description"
+                    svc:Localized.HeaderKey="DesktopOrganization.Auto.Interval.Title">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <FontIcon Glyph="&#xE823;" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <ComboBox
+                        x:Name="AutoIntervalComboBox"
+                        MinWidth="150"
+                        SelectionChanged="AutoIntervalComboBox_SelectionChanged" />
+                </toolkit:SettingsCard>
             </StackPanel>
 
             <StackPanel Spacing="6">

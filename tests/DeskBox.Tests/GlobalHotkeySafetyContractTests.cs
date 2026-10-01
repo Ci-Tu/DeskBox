@@ -107,7 +107,7 @@ public sealed class GlobalHotkeySafetyContractTests
     }
 
     [Fact]
-    public void SettingsAndOnboardingRecorders_IgnoreReservedHookMaskKey()
+    public void SettingsRecorder_IgnoresReservedHookMaskKey()
     {
         Assert.True(ReservedHotkeyHookService.IsInternalMaskKey(0xE8));
         Assert.False(ReservedHotkeyHookService.IsInternalMaskKey(0x20));
@@ -120,15 +120,6 @@ public sealed class GlobalHotkeySafetyContractTests
         Assert.True(
             settingsHandler.IndexOf("IsInternalMaskKey", StringComparison.Ordinal) <
             settingsHandler.IndexOf("ApplyRecordedHotkeyAsync", StringComparison.Ordinal));
-
-        string onboardingSource = Read("src/DeskBox/Views/OnboardingWindow.Hotkey.cs");
-        string onboardingHandler = Slice(
-            onboardingSource,
-            "private void OnHotkeyKeyDown",
-            "private void Step4HotkeyToggle_Toggled");
-        Assert.True(
-            onboardingHandler.IndexOf("IsInternalMaskKey", StringComparison.Ordinal) <
-            onboardingHandler.IndexOf("ApplyRecordedHotkeyAsync", StringComparison.Ordinal));
     }
 
     [Fact]
