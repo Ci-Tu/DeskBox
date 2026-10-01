@@ -109,6 +109,11 @@ public sealed class FileWidgetContentAdapter :
     internal bool IsImportBusy =>
         MaterializedView is FileSurfaceContent { IsImportBusy: true };
 
+    internal string? CurrentFolderPath =>
+        MaterializedView is FileSurfaceContent content
+            ? content.ViewModel.CurrentFolderPath
+            : null;
+
     internal long? ImportBusyElapsedMilliseconds =>
         Surface?.ImportBusyElapsedMilliseconds;
 
@@ -163,10 +168,9 @@ public sealed class FileWidgetContentAdapter :
             : Task.CompletedTask;
     }
 
-    public Task AddFromTitleButtonAsync()
-    {
-        return AsContent(View).AddFromTitleButtonAsync();
-    }
+    // The file surface no longer offers a picker-based add action (#458); the
+    // interface stays implemented so TriggerAddAction simply does nothing.
+    public Task AddFromTitleButtonAsync() => Task.CompletedTask;
 
     public override void ApplyAppearance()
     {
@@ -364,7 +368,8 @@ public sealed class FileWidgetContentAdapter :
         WidgetItem? targetItem = null,
         FileDropIntent? forcedIntent = null,
         int? screenX = null,
-        int? screenY = null)
+        int? screenY = null,
+        uint? allowedEffects = null)
     {
         return Surface is { } content
             ? content.ImportNativeDroppedFilesAsync(
@@ -374,7 +379,8 @@ public sealed class FileWidgetContentAdapter :
                 targetItem,
                 forcedIntent,
                 screenX,
-                screenY)
+                screenY,
+                allowedEffects)
             : Task.FromResult(false);
     }
 

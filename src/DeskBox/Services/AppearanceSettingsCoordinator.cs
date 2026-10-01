@@ -90,7 +90,8 @@ public sealed class AppearanceSettingsCoordinator : IAppearanceSettings
             WidgetAnimationKinds.NormalizeSlideDirection(
                 shell.WidgetAnimationSlideDirection),
             WidgetAnimationKinds.NormalizeEasingIntensity(
-                shell.WidgetAnimationEasingIntensity));
+                shell.WidgetAnimationEasingIntensity),
+            shell.WidgetAnimationStaggerEnabled);
     }
 
     public AppearanceForegroundSettings ReadForeground()
@@ -485,6 +486,19 @@ public sealed class AppearanceSettingsCoordinator : IAppearanceSettings
         }
 
         shell.WidgetAnimationEasingIntensity = normalized;
+        if (scheduleSave) _settings.SaveDebounced();
+    }
+
+    public void SetAnimationStaggerEnabled(bool enabled, bool scheduleSave = true)
+    {
+        ThrowIfStopped();
+        WidgetShellSettingsSlice shell = _settings.Settings.WidgetShell;
+        if (shell.WidgetAnimationStaggerEnabled == enabled)
+        {
+            return;
+        }
+
+        shell.WidgetAnimationStaggerEnabled = enabled;
         if (scheduleSave) _settings.SaveDebounced();
     }
 

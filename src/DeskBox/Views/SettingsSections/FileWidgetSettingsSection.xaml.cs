@@ -62,6 +62,17 @@ public sealed partial class FileWidgetSettingsSection : UserControl
         set => SetValue(InteractionProperty, value);
     }
 
+    /// <summary>
+    /// Mounts the managed-storage (收纳与路径) section inside the overview
+    /// card stack — directly below the desktop-organization card and above
+    /// the file-display card — instead of as a sibling appended at page end.
+    /// </summary>
+    public void AttachManagedStorageSection(FrameworkElement section)
+    {
+        int index = Math.Min(1, SectionCardsPanel.Children.Count);
+        SectionCardsPanel.Children.Insert(index, section);
+    }
+
     public event EventHandler<SettingsSectionNavigationRequestedEventArgs>? NavigationRequested;
 
     private void NestedSettingsButton_Click(object sender, RoutedEventArgs e)

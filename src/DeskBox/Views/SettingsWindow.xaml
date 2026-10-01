@@ -804,6 +804,18 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         controls:SettingsComboBox.Value="{Binding AnimationEasingIntensity, Mode=TwoWay}" />
                                 </toolkit:SettingsCard>
 
+                                <toolkit:SettingsCard
+                                    HorizontalContentAlignment="Right"
+                                    svc:Localized.DescriptionKey="Settings.Animation.Stagger.Description"
+                                    svc:Localized.HeaderKey="Settings.Animation.Stagger.Title">
+                                    <ToggleSwitch
+                                        MinWidth="0"
+                                        OffContent=""
+                                        OnContent=""
+                                        IsEnabled="{Binding IsStaggerEnabled}"
+                                        IsOn="{Binding AnimationStaggerEnabled, Mode=TwoWay}" />
+                                </toolkit:SettingsCard>
+
                     </StackPanel>
                 </StackPanel>
                     </DataTemplate>
@@ -1140,7 +1152,7 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                 </StackPanel>
                     </DataTemplate>
                     <DataTemplate x:Key="FileStorageSettingsSectionTemplate" x:DataType="viewModels:SettingsViewModel">
-                        <StackPanel x:Name="FileStorageSettingsSection" Margin="0,-12,0,0" Visibility="Collapsed" Style="{StaticResource SectionPanelStyle}">
+                        <StackPanel x:Name="FileStorageSettingsSection" Visibility="Collapsed" Style="{StaticResource SectionPanelStyle}">
                     <StackPanel Spacing="4">
                         <toolkit:SettingsCard ContentAlignment="Vertical" HorizontalContentAlignment="Stretch" Padding="20,16" svc:Localized.HeaderKey="Settings.Group.FileStorage.Title">
                             <toolkit:SettingsCard.HeaderIcon><FontIcon Glyph="&#xE8B7;" /></toolkit:SettingsCard.HeaderIcon>
@@ -1151,6 +1163,28 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                         <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" svc:Localized.Key="Settings.DropAction.Description" />
                                     </StackPanel>
                                     <ComboBox Grid.Column="1" MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableDropActionOptions}" controls:SettingsComboBox.Value="{Binding DropAction, Mode=TwoWay}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingTitleTextStyle}" svc:Localized.Key="Settings.DragOutAction.Title" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" svc:Localized.Key="Settings.DragOutAction.Description" />
+                                        <TextBlock x:Name="DragOutWin10Note" Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" Visibility="Collapsed" svc:Localized.Key="Settings.DragOutAction.Win10Note" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1" MinWidth="{StaticResource SettingsControlMinWidth}" ItemsSource="{Binding AvailableDragOutActionOptions}" controls:SettingsComboBox.Value="{Binding DragOutAction, Mode=TwoWay}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingTitleTextStyle}" svc:Localized.Key="Settings.DragOutTips.Modifier.Title" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" svc:Localized.Key="Settings.DragOutTips.Modifier.Description" />
+                                    </StackPanel>
+                                    <ToggleSwitch x:Name="DragOutModifierTipToggle" Grid.Column="1" MinWidth="0" VerticalAlignment="Center" OnContent="" OffContent="" IsOn="{Binding DragOutModifierTipEnabled, Mode=TwoWay}" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                                    <StackPanel Spacing="3" VerticalAlignment="Center">
+                                        <TextBlock Style="{StaticResource SettingTitleTextStyle}" svc:Localized.Key="Settings.DragOutTips.Result.Title" />
+                                        <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" TextWrapping="Wrap" svc:Localized.Key="Settings.DragOutTips.Result.Description" />
+                                    </StackPanel>
+                                    <ToggleSwitch Grid.Column="1" MinWidth="0" VerticalAlignment="Center" OnContent="" OffContent="" IsOn="{Binding DragOutResultHintEnabled, Mode=TwoWay}" />
                                 </Grid>
                                 <TextBox IsReadOnly="True" Text="{Binding RootPath, Mode=OneWay}" TextWrapping="NoWrap" />
                                 <Border
@@ -3496,6 +3530,20 @@ svc:Localized.DescriptionKey="Settings.DefaultWidth.Description"
                                     <TextBlock svc:Localized.Key="Settings.AutoStart.OpenSystemSettings" />
                                 </StackPanel>
                             </Button>
+                        </toolkit:SettingsCard>
+
+                        <toolkit:SettingsCard
+                            HorizontalContentAlignment="Right"
+                            svc:Localized.DescriptionKey="Settings.SilentStartup.Description"
+                            svc:Localized.HeaderKey="Settings.SilentStartup.Title">
+                            <toolkit:SettingsCard.HeaderIcon>
+                                <FontIcon Glyph="&#xE7B3;" />
+                            </toolkit:SettingsCard.HeaderIcon>
+                            <ToggleSwitch
+                                OnContent=""
+                                OffContent=""
+                                MinWidth="0"
+                                IsOn="{Binding SilentStartup, Mode=TwoWay}" />
                         </toolkit:SettingsCard>
 
                         <toolkit:SettingsCard

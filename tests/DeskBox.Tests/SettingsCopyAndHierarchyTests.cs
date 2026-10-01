@@ -219,7 +219,7 @@ public sealed class SettingsCopyAndHierarchyTests
             ["Widget.DeleteFolderToRecycleBin"] = "同时移入回收站",
             ["Search.Delete.Action"] = "移入回收站",
             ["Settings.QuickCapture.Format.Title"] = "编辑格式",
-            ["Settings.QuickCapture.Format.Description"] = "选择随记编辑器使用 Markdown 或纯文本",
+            ["Settings.QuickCapture.Format.Description"] = "影响编辑器语法与显示样式",
             ["Settings.Accent.Source.Title"] = "主题色来源",
             ["Settings.OpenMethod.Title"] = "打开方式",
             ["Settings.ShowDesktopBehavior.Title"] = "按 Win+D 后",

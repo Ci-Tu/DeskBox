@@ -71,6 +71,7 @@ private void OnLanguageChanged()
         {
             SelectedLanguage = LocalizationService.NormalizeLanguageSetting(settings.Language);
             AutoCheckForUpdates = settings.AutoCheckForUpdates;
+            SilentStartup = settings.SilentStartup;
             ShowHoverButtons = settings.ShowHoverButtons;
             ApplyHoverButtonActionSelection(settings.WidgetHoverButtonActions);
 

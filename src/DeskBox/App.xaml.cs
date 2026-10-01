@@ -97,8 +97,6 @@ public partial class App : Application
     private MenuFlyoutItem? _trayExitItem;
     private SettingsWindow? _settingsWindow;
     private OnboardingWindow? _onboardingWindow;
-    private string? _onboardingRaisedFileWidgetId;
-    internal event Action<int>? OnboardingFileImportCompleted;
     internal event Action<bool>? OnboardingWidgetsVisibilityChanged;
     private NativeAppNotificationService? _nativeNotificationService;
     private NativeNotificationActivationBootstrap? _nativeNotificationBootstrap;
@@ -3141,63 +3139,8 @@ public partial class App : Application
         }
     }
 
-    internal async Task<bool> ShowFirstFileWidgetForOnboardingAsync()
-    {
-        if (WidgetManager is null)
-        {
-            return false;
-        }
-
-        WidgetConfig? firstFileWidget = SettingsService.Settings.Widgets
-            .Where(widget =>
-                widget.WidgetKind == WidgetKind.File &&
-                !widget.IsDisabled &&
-                !SettingsService.Settings.DeletedWidgetIds.Contains(widget.Id))
-            .OrderByDescending(widget => widget.FollowsDefaultStoragePath)
-            .FirstOrDefault();
-        if (firstFileWidget is null)
-        {
-            return false;
-        }
-
-        bool shown = await WidgetManager.ShowWidgetAsync(
-            firstFileWidget.Id,
-            reveal: false,
-            autoRestoreOnReveal: false);
-        if (!shown)
-        {
-            return false;
-        }
-
-        _onboardingRaisedFileWidgetId = firstFileWidget.Id;
-        WidgetManager.SetWidgetOnboardingTopMost(
-            firstFileWidget.Id,
-            isTopMost: true);
-        return true;
-    }
-
-    internal void ReleaseOnboardingFileWidgetRaise()
-    {
-        string? widgetId = _onboardingRaisedFileWidgetId;
-        _onboardingRaisedFileWidgetId = null;
-        if (widgetId is not null)
-        {
-            WidgetManager?.SetWidgetOnboardingTopMost(
-                widgetId,
-                isTopMost: false);
-        }
-    }
-
     internal bool HasVisibleWidgetsForOnboarding =>
         WidgetManager?.HasVisibleWidgets == true;
-
-    internal void NotifyOnboardingFileImportCompleted(int importedItemCount)
-    {
-        if (importedItemCount > 0 && _onboardingWindow is not null)
-        {
-            OnboardingFileImportCompleted?.Invoke(importedItemCount);
-        }
-    }
 
     private static int s_lightMemoryCleanupGeneration;
     private static int s_backgroundMemoryCleanupGeneration;

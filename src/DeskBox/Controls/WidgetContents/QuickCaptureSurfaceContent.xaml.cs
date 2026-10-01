@@ -2229,9 +2229,10 @@ public sealed partial class QuickCaptureSurfaceContent :
         // fixed-size array before DragItemsCompleted is raised. Item-row drop
         // handlers persist the requested position instead.
         ItemsList.CanReorderItems = false;
-        e.Data.RequestedOperation =
-            DataPackageOperation.Copy |
-            DataPackageOperation.Move;
+        // Export drags are copy-only: advertising Move would let a Win10
+        // Explorer drop physically move the backing attachment file out of
+        // quick-capture storage, and multi-effect offers prompt the picker.
+        e.Data.RequestedOperation = DataPackageOperation.Copy;
     }
 
     private void ItemsList_DragItemsCompleted(
@@ -2253,7 +2254,9 @@ public sealed partial class QuickCaptureSurfaceContent :
         }
 
         e.Handled = true;
-        e.AcceptedOperation = DataPackageOperation.Move;
+        e.AcceptedOperation =
+            DeskBoxDragData.ResolveInternalMetadataOperation(
+                e.AllowedOperations);
         e.DragUIOverride.IsGlyphVisible = true;
     }
 
@@ -2486,7 +2489,9 @@ public sealed partial class QuickCaptureSurfaceContent :
         {
             bool hasFiles = DeskBoxDragData.HasDroppedFiles(e.DataView);
             e.AcceptedOperation = hasFiles
-                ? DeskBoxDragData.GetFileAssociationOperation(e.DataView)
+                ? DeskBoxDragData.GetFileAssociationOperation(
+                    e.DataView,
+                    e.AllowedOperations)
                 : DataPackageOperation.Copy;
             if (hasFiles)
             {
@@ -2576,7 +2581,9 @@ public sealed partial class QuickCaptureSurfaceContent :
 
             bool insertAfter = e.GetPosition(border).Y >= border.ActualHeight / 2;
             e.Handled = true;
-            e.AcceptedOperation = DataPackageOperation.Move;
+            e.AcceptedOperation =
+                DeskBoxDragData.ResolveInternalMetadataOperation(
+                    e.AllowedOperations);
             e.DragUIOverride.IsGlyphVisible = true;
             ApplyQuickCaptureReorderDropState(border, active: true, insertAfter);
             return;
@@ -2589,7 +2596,9 @@ public sealed partial class QuickCaptureSurfaceContent :
 
         e.Handled = true;
         e.AcceptedOperation =
-            DeskBoxDragData.GetFileAssociationOperation(e.DataView);
+            DeskBoxDragData.GetFileAssociationOperation(
+                e.DataView,
+                e.AllowedOperations);
         ApplyFileAssociationDragFeedback(e);
         ApplyQuickCaptureItemDropState(border, active: true);
     }

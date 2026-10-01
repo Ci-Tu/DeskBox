@@ -48,7 +48,9 @@ public sealed partial class ContentWidgetWindow
 
         e.AcceptedOperation = todo.CanImportExternalDrop(e.DataView)
             ? DeskBoxDragData.HasDroppedFiles(e.DataView)
-                ? DeskBoxDragData.GetFileAssociationOperation(e.DataView)
+                ? DeskBoxDragData.GetFileAssociationOperation(
+                    e.DataView,
+                    e.AllowedOperations)
                 : DataPackageOperation.Copy
             : DataPackageOperation.None;
         if (DeskBoxDragData.HasDroppedFiles(e.DataView))

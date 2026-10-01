@@ -16,7 +16,7 @@
 
     <StackPanel Style="{StaticResource SectionPanelStyle}">
         <TextBlock Style="{StaticResource SectionTitleTextStyle}" svc:Localized.Key="Settings.Appearance.DetailTitle" />
-        <StackPanel Margin="0,8,0,0" Spacing="4">
+        <StackPanel x:Name="SectionCardsPanel" Margin="0,8,0,0" Spacing="4">
             <Border Style="{StaticResource SettingsGroupStyle}">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="4">
                     <Button Grid.Column="0" Click="NestedSettingsButton_Click" Style="{StaticResource DrillDownRowStyle}" Tag="DesktopOrganizationSettings">

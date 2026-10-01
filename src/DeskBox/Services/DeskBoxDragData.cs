@@ -142,12 +142,61 @@ public static class DeskBoxDragData
     }
 
     public static DataPackageOperation GetFileAssociationOperation(
-        DataPackageView dataView)
+        DataPackageView dataView,
+        DataPackageOperation allowedOperations =
+            DataPackageOperation.Copy | DataPackageOperation.Move)
     {
-        return IsInternalFileDrag(dataView)
-            ? DataPackageOperation.Link
-            : DataPackageOperation.Copy;
+        return ResolveFileDragFeedbackOperation(
+            dataView,
+            IsInternalFileDrag(dataView)
+                ? DataPackageOperation.Link
+                : DataPackageOperation.Copy,
+            allowedOperations);
     }
+
+    // Internal metadata drags (todo/quick-capture reorder, tab moves) route
+    // through private payload formats, so the transport effect is only a
+    // glyph hint. Copy-export payloads advertise a single Copy effect —
+    // feedback must fall back to Copy when Move is not in the offer.
+    internal static DataPackageOperation ResolveInternalMetadataOperation(
+        DataPackageOperation allowedOperations) =>
+        allowedOperations.HasFlag(DataPackageOperation.Move)
+            ? DataPackageOperation.Move
+            : allowedOperations.HasFlag(DataPackageOperation.Copy)
+                ? DataPackageOperation.Copy
+                : DataPackageOperation.None;
+
+    // Copy is the transport acknowledgement inside the app for a DeskBox file
+    // drag. The source advertises Copy|Move to external receivers, but an
+    // in-app target resolves file-system intent through the private paths and
+    // the managed-transfer policy — OLE feedback must never authorize shell
+    // source cleanup, so every non-None internal report is normalized to Copy.
+    // A drag advertised with a single effect (Windows 10 collapses the set to
+    // Move) has no Copy to answer with: internal feedback falls back to Move
+    // there so the routed drop still fires. Completion results never flow
+    // through this fallback — ResolveSafeDropCompletionOperation stays the
+    // sole guard that never reports Move for a DeskBox drag.
+    internal static DataPackageOperation ResolveFileDragFeedbackOperation(
+        DataPackageView dataView,
+        DataPackageOperation operation,
+        DataPackageOperation allowedOperations =
+            DataPackageOperation.Copy | DataPackageOperation.Move) =>
+        operation != DataPackageOperation.None &&
+        IsInternalFileDrag(dataView)
+            ? !allowedOperations.HasFlag(DataPackageOperation.Copy) &&
+              allowedOperations.HasFlag(DataPackageOperation.Move)
+                ? DataPackageOperation.Move
+                : DataPackageOperation.Copy
+            : operation;
+
+    internal static DataPackageOperation GetFileTransferOperations(
+        DataPackageView dataView,
+        DataPackageOperation allowedOperations) =>
+        IsInternalFileDrag(dataView)
+            ? DataPackageOperation.Copy | DataPackageOperation.Move | DataPackageOperation.Link
+            : allowedOperations == DataPackageOperation.None
+                ? dataView.RequestedOperation
+                : allowedOperations;
 
     public static bool ShouldShowImportOverlay(
         IReadOnlyList<string> paths)

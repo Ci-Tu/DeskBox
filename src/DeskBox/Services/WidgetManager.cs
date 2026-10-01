@@ -38,111 +38,6 @@ public sealed record FileWidgetPathConflict(
     FileWidgetPathConflictKind Kind,
     WidgetConfig? ConflictingWidget);
 
-public sealed record ManagedStorageMigrationResidue(
-    string WidgetId,
-    string WidgetName,
-    string SourceFolder,
-    string Reason);
-
-public sealed record ManagedStorageRollbackFailure(
-    string WidgetId,
-    string WidgetName,
-    string DestinationFolder,
-    string SourceFolder,
-    bool PreserveExisting,
-    string Reason);
-
-/// <summary>
-/// One entry the user chose to skip (or that stayed behind) during a storage
-/// migration. The file still exists at <see cref="SourcePath"/>; the widget's
-/// destination folder simply never received it.
-/// </summary>
-public sealed record ManagedStorageSkippedItem(
-    string WidgetId,
-    string WidgetName,
-    string SourcePath,
-    string DestinationPath,
-    FileService.FileTransferItemErrorKind ErrorKind,
-    string Detail);
-
-/// <summary>
-/// Progress of a managed storage migration across all affected widgets.
-/// Item counters are cumulative across widget folders.
-/// </summary>
-public sealed record ManagedStorageMigrationProgress(
-    FileService.FileTransferPhase Phase,
-    int CompletedWidgets,
-    int TotalWidgets,
-    string? CurrentWidgetName,
-    string? CurrentItemName,
-    int CompletedItems,
-    int TotalItems,
-    long BytesTransferred,
-    double? BytesPerSecond,
-    TimeSpan? EstimatedRemaining);
-
-/// <summary>
-/// Optional interactive controls for a storage migration: progress reports,
-/// cancellation, and a per-item retry/skip/abort decision callback. The
-/// callback runs on a background thread; UI callers must marshal through the
-/// dispatcher before touching XAML.
-/// </summary>
-public sealed record ManagedStorageMigrationOptions(
-    IProgress<ManagedStorageMigrationProgress>? Progress = null,
-    CancellationToken CancellationToken = default,
-    Func<FileService.FileTransferItemError, Task<FileService.FileTransferItemAction>>? OnItemError = null);
-
-public sealed record ManagedStorageMigrationResult(
-    int AffectedWidgetCount,
-    string OldRootPath,
-    string NewRootPath,
-    IReadOnlyList<ManagedStorageMigrationResidue> Residues,
-    int MovedItemCount,
-    IReadOnlyList<ManagedStorageSkippedItem> SkippedItems);
-
-/// <summary>
-/// The migration destination already holds non-empty widget folders, usually
-/// a complete copy left by a previous failed attempt. Proceeding would fork
-/// the trees under "(2)" renamed duplicates, so the caller must clean the
-/// stale destination (recycle bin) before retrying.
-/// </summary>
-public sealed class ManagedStorageDestinationResidueException : Exception
-{
-    internal ManagedStorageDestinationResidueException(
-        IReadOnlyList<string> staleDestinationFolders)
-        : base(
-            "The destination already contains folders from a previous " +
-            "migration attempt.")
-    {
-        StaleDestinationFolders = staleDestinationFolders;
-    }
-
-    public IReadOnlyList<string> StaleDestinationFolders { get; }
-}
-
-/// <summary>
-/// A migration failed and the best-effort rollback could not return every
-/// moved folder, so some widget folders now live in both the old and the new
-/// root while the widgets point back at the old root. Carries the original
-/// failure plus the unreturned folders: the UI must list them and offer a
-/// recovery path instead of announcing a bare "migration failed" (#112).
-/// </summary>
-public sealed class ManagedStorageRollbackFailureException : Exception
-{
-    internal ManagedStorageRollbackFailureException(
-        Exception originalFailure,
-        IReadOnlyList<ManagedStorageRollbackFailure> failures)
-        : base(originalFailure.Message, originalFailure)
-    {
-        OriginalFailure = originalFailure;
-        Failures = failures;
-    }
-
-    public Exception OriginalFailure { get; }
-
-    public IReadOnlyList<ManagedStorageRollbackFailure> Failures { get; }
-}
-
 public sealed record QuickCaptureFileWidgetTarget(
     string WidgetId,
     string Name,
@@ -201,6 +96,7 @@ internal interface IDesktopWidgetWindow
     void ClearCompactArrangementConstraint();
     void PreviewCompactArrangement(Windows.Graphics.RectInt32 bounds);
     void SetTrayAnimationOffsetOverride(double? offsetX, double? offsetY);
+    void SetTrayAnimationEdgeFade(bool enabled);
     void CancelTrayAnimationAndRestorePosition();
     void PrepareTrayShowAnimation();
     void ShowPreparedAtDesktopLayer(bool persistVisibility = true);
@@ -927,6 +823,7 @@ public sealed partial class WidgetManager
     /// </summary>
     public async Task RestoreWidgetsAsync()
     {
+        await RecoverManagedStorageCommitAsync();
         RepairLegacyContentFeatureFileShells();
 
         // Dedup singleton feature widgets. Glance intentionally supports
@@ -1003,10 +900,13 @@ public sealed partial class WidgetManager
 
         PlacePendingInitialWidgets();
 
-        if (configs.Count > 0 && WidgetLayerService.UsesQuickRevealMode())
+        if (configs.Count > 0 &&
+            WidgetStartupRestorePolicy.GetStartupHideReason(
+                WidgetLayerService.UsesQuickRevealMode(),
+                _settingsService.Settings) is string startupHideReason)
         {
             await SetAllWidgetsVisibleCoreAsync(false);
-            App.LogVerbose("[WidgetManager] Startup widgets hidden for quick-reveal layer");
+            App.LogVerbose($"[WidgetManager] Startup widgets hidden reason={startupHideReason}");
         }
         else if (configs.Count > 0)
         {
@@ -1419,44 +1319,6 @@ public sealed partial class WidgetManager
         var window = await CreateWidgetFromConfigAsync(config, keepPreparedForAnimation: !reveal);
         ShowLoadedWidgetWindow(window, reveal, autoRestoreOnReveal);
 
-        return true;
-    }
-
-    internal bool SetWidgetOnboardingTopMost(
-        string widgetId,
-        bool isTopMost)
-    {
-        IDesktopWidgetWindow? window = null;
-        if (_fileWidgets.TryGetValue(widgetId, out var fileSession))
-        {
-            window = fileSession.Host;
-        }
-        else if (_contentWidgets.TryGetValue(widgetId, out var contentWindow))
-        {
-            window = contentWindow;
-        }
-        if (window is null)
-        {
-            return false;
-        }
-
-        if (isTopMost)
-        {
-            if (WidgetLayerService.UsesDesktopPinnedMode())
-            {
-                window.RaiseTemporarilyFromManager();
-            }
-            else
-            {
-                Win32Helper.SetWindowTopMost(
-                    window.WindowHandle,
-                    showWindow: false);
-            }
-
-            return true;
-        }
-
-        window.ForceRestoreDesktopLayerFromManager();
         return true;
     }
 

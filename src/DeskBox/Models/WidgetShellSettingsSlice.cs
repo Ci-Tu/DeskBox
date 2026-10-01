@@ -72,9 +72,16 @@ public sealed class WidgetShellSettingsSlice
 
     /// <summary>
     /// Easing intensity for animations.
-    /// Valid values: <c>"None"</c>, <c>"Light"</c>, <c>"Standard"</c>, <c>"Strong"</c>.
+    /// Valid values: <c>"None"</c>, <c>"Light"</c>, <c>"Standard"</c>, <c>"Strong"</c>, <c>"Spring"</c>.
     /// </summary>
     public string WidgetAnimationEasingIntensity { get; set; } = "Standard";
+
+    /// <summary>
+    /// When enabled, batch show/hide animations stagger each widget window
+    /// with a short per-window delay (top-left first) instead of moving the
+    /// whole group in lockstep.
+    /// </summary>
+    public bool WidgetAnimationStaggerEnabled { get; set; }
 
     /// <summary>
     /// Window layer behavior for desktop widgets.

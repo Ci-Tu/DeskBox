@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using DeskBox.Controls;
 using DeskBox.Contracts;
@@ -61,13 +61,7 @@ public sealed partial class FileSurfaceContent :
         new(StringComparer.OrdinalIgnoreCase);
     private string[] _activeDragSourcePaths = [];
     private bool _activeDragHasStorageItems;
-    // True from DragItemsStarting cancellation until the native DoDragDrop
-    // call returns; guards the (platform-dependent) Completed event against
-    // double-finishing a session the native path owns.
-    // Revival seam for the shelved native drag-out (drag contract §8.1.1b):
-    // nothing assigns it today, so the WinUI Completed reconciliation always
-    // runs; a revived native path sets it to skip the double completion.
-    private bool _nativeFileDragInFlight = false;
+    private DataPackageOperation _activeDragAllowedOperations;
     private bool _activeDragHandledAsStackMembership;
     private string? _activeDragSessionId;
     private readonly FileDragSessionState _sourceDragSession = new();
@@ -228,7 +222,7 @@ public sealed partial class FileSurfaceContent :
         RegisterRenderWindowScrollTracking();
         Root.DataContext = ViewModel;
         Root.IsTabStop = true;
-        EmptyAddButtonText.Text = T("Widget.AddFile");
+        InitializeEmptyStateHelp();
         OpenSelectionButton.Label = T("Common.Open");
         CopySelectionButton.Label = T("Common.Copy");
         CutSelectionButton.Label = T("Common.Cut");
@@ -639,8 +633,6 @@ public sealed partial class FileSurfaceContent :
         await Task.Delay(TimeSpan.FromMilliseconds(48), cancellationToken);
     }
 
-    internal Task AddFromTitleButtonAsync() => RunAsync(PickAndImportFilesAsync);
-
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         HideInactiveScrollBars();
@@ -792,10 +784,74 @@ public sealed partial class FileSurfaceContent :
         await RunAsync(RefreshAsync);
     }
 
-    private async void AddButton_Click(object sender, RoutedEventArgs e)
+    private void EmptyStateHelpButton_Click(object sender, RoutedEventArgs e)
     {
-        await RunAsync(PickAndImportFilesAsync);
+        FlyoutBase.ShowAttachedFlyout(EmptyStateHelpButton);
     }
+
+    private void InitializeEmptyStateHelp()
+    {
+        ToolTipService.SetToolTip(
+            EmptyStateHelpButton,
+            T("Widget.Empty.HelpTipTitle"));
+
+        if (!IsCurrentProcessElevatedCached())
+        {
+            return;
+        }
+
+        EmptyStateElevatedBar.Message = T("Widget.Empty.ElevatedWarning");
+        EmptyStateElevatedBar.IsOpen = true;
+    }
+
+    private static bool? s_isProcessElevated;
+
+    // Elevated widget windows cannot receive OLE drops from Explorer (UIPI),
+    // so the empty state calls that case out instead of letting the drop fail
+    // silently (#458 follow-up).
+    private static bool IsCurrentProcessElevatedCached()
+    {
+        if (s_isProcessElevated is { } cached)
+        {
+            return cached;
+        }
+
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        s_isProcessElevated = identity.Owner != identity.User;
+        return s_isProcessElevated.Value;
+    }
+
+    // UIElement.CanDrag routes its gesture through StartDragAsync, which
+    // WinUI does not support for an elevated process: the call throws inside
+    // the drag pipeline before DragStarting could cancel it. Elevated mode
+    // therefore removes the container drag affordance entirely.
+    private void ItemsView_ContainerContentChanging(
+        ListViewBase sender,
+        ContainerContentChangingEventArgs args)
+    {
+        if (IsCurrentProcessElevatedCached())
+        {
+            args.ItemContainer.CanDrag = false;
+            return;
+        }
+
+        // DragStarting/DropCompleted are not routed events in WinUI 3: a drag
+        // the container's own CanDrag initiates raises them on the container,
+        // and a handler on the items control never fires. Wire them onto each
+        // container; unsubscribe first so a recycled container cannot end up
+        // double-subscribed.
+        args.ItemContainer.DragStarting -= Items_DragStarting;
+        args.ItemContainer.DropCompleted -= Items_DropCompleted;
+        args.ItemContainer.DragStarting += Items_DragStarting;
+        args.ItemContainer.DropCompleted += Items_DropCompleted;
+    }
+
+    private bool IsFromStackPopover(object? sender) =>
+        ReferenceEquals(sender, _stackPopoverItemsView) ||
+        (sender is DependencyObject element &&
+         ReferenceEquals(
+             ItemsControl.ItemsControlFromItemContainer(element),
+             _stackPopoverItemsView));
 
     private async void Items_ItemClick(object sender, ItemClickEventArgs e)
     {
@@ -1003,34 +1059,82 @@ public sealed partial class FileSurfaceContent :
         e.Handled = true;
     }
 
-    private void Items_DragItemsStarting(
-        object sender,
-        DragItemsStartingEventArgs e)
+    private void Items_DragStarting(
+        UIElement sender,
+        DragStartingEventArgs e)
     {
+        App.Log(
+            $"[DragProtocol] stage=DragStarting widget={WidgetId} " +
+            $"sender={sender?.GetType().Name} " +
+            $"original={e.OriginalSource?.GetType().Name} " +
+            $"allowed={e.AllowedOperations}");
         _sourceDragSession.Complete(_activeDragSessionId);
         _activeDragSessionId = null;
-        bool fromStackPopover =
-            ReferenceEquals(sender, _stackPopoverItemsView);
+        bool fromStackPopover = IsFromStackPopover(sender);
         if (fromStackPopover)
         {
             _stackPopoverDragActive = true;
         }
         _activeDragHandledAsStackMembership = false;
 
-        if (_isImportBusy)
+        // The container that owns the gesture started this drag through
+        // StartDragAsync (the CanDrag setter on the item-container styles).
+        // DragStarting is not routed: it fires on that container, which is
+        // also the sender — while OriginalSource may be null. The container's
+        // DataContext is the dragged item. AllowedOperations below carries
+        // the real capability set to the platform — unlike ListViewBase's
+        // built-in drag it never doubles as the "preferred" operation, which
+        // is what made Windows 10 Explorer ask which operation to perform on
+        // every drop.
+        WidgetItem? draggedItem =
+            ((e.OriginalSource ?? sender) as FrameworkElement)
+                ?.DataContext as WidgetItem ??
+            (sender is DependencyObject container &&
+             ItemsControl.ItemsControlFromItemContainer(container) is { } owner
+                ? owner.ItemFromContainer(container) as WidgetItem
+                : null);
+
+        void CancelDrag(string reason)
         {
+            App.Log(
+                $"[DragProtocol] stage=DragCancelled widget={WidgetId} " +
+                $"reason={reason} sender={sender?.GetType().Name} " +
+                $"item='{draggedItem?.Path}'");
             e.Cancel = true;
+            if (_activeDragSessionId is { } sessionToEnd)
+            {
+                ActiveDeskBoxDragRegistry.End(sessionToEnd);
+            }
             _pendingPointerDragItems = [];
             _activeDragSourcePaths = [];
             _activeDragHasStorageItems = false;
+            _activeDragAllowedOperations = DataPackageOperation.None;
+            _stackInputActivation.CancelPointer();
             if (fromStackPopover)
             {
                 CompleteStackPopoverDrag();
             }
+        }
+
+        if (draggedItem is null || _isImportBusy || IsCurrentProcessElevatedCached())
+        {
+            CancelDrag(
+                draggedItem is null ? "no-item"
+                : _isImportBusy ? "import-busy"
+                : "elevated");
             return;
         }
 
-        WidgetStackItem[] busyStacks = e.Items
+        IReadOnlyList<WidgetItem> pointerSelection =
+            _pendingPointerDragItems.Length > 1
+                ? _pendingPointerDragItems
+                : GetSelectedItems();
+        _pendingPointerDragItems = [];
+        IReadOnlyList<WidgetItem> resolvedItems =
+            FileItemDragPackage.ResolveDraggedItems(
+                [draggedItem],
+                pointerSelection);
+        WidgetStackItem[] busyStacks = resolvedItems
             .OfType<WidgetStackItem>()
             .Where(stack => stack.Members.Any(member =>
                 GetTransferState(member).BlocksMutation))
@@ -1039,22 +1143,14 @@ public sealed partial class FileSurfaceContent :
         {
             WidgetItem busyMember = busyStacks[0].Members.First(member =>
                 GetTransferState(member).BlocksMutation);
-            e.Cancel = true;
             ShowTransferBlockedFeedback(GetTransferState(busyMember));
-            _pendingPointerDragItems = [];
-            _activeDragSourcePaths = [];
-            _activeDragHasStorageItems = false;
-            if (fromStackPopover)
-            {
-                CompleteStackPopoverDrag();
-            }
-
+            CancelDrag("stack-member-busy");
             return;
         }
 
         _activeDragSourcePaths = [];
         _activeDragHasStorageItems = false;
-        _activeDragHandledAsStackMembership = false;
+        _activeDragAllowedOperations = DataPackageOperation.None;
         _activeDragSessionId = Guid.NewGuid().ToString("N");
         // A new gesture starts clean: a stale launch hover must not resolve the
         // new drag's release on the tile the previous gesture ended on.
@@ -1073,13 +1169,12 @@ public sealed partial class FileSurfaceContent :
         _surfaceReorderDraggedItem = null;
         _surfaceReorderPathSet = null;
         _surfaceReorderLastView = null;
-        WidgetStackItem? stack =
-            e.Items.OfType<WidgetStackItem>().FirstOrDefault();
-        if (stack is not null)
+
+        if (draggedItem is WidgetStackItem stack)
         {
-            _pendingPointerDragItems = [];
             _stackPointerDragStarted = true;
             e.Data.RequestedOperation = DataPackageOperation.Link;
+            e.AllowedOperations = DataPackageOperation.Link;
             e.Data.Properties[
                 DeskBoxDragData.SourceWidgetIdProperty] = WidgetId;
             e.Data.Properties[
@@ -1098,36 +1193,22 @@ public sealed partial class FileSurfaceContent :
             return;
         }
 
-        WidgetItem[] eventItems = e.Items
-            .OfType<WidgetItem>()
-            .ToArray();
-        IReadOnlyList<WidgetItem> pointerSelection =
-            _pendingPointerDragItems.Length > 1
-                ? _pendingPointerDragItems
-                : GetSelectedItems();
-        _pendingPointerDragItems = [];
-        WidgetItem[] selectedItems = FileItemDragPackage.ResolveDraggedItems(
-                eventItems,
-                pointerSelection)
+        WidgetItem[] selectedItems = resolvedItems
             .Where(item =>
                 !string.IsNullOrWhiteSpace(item.Path) &&
                 (File.Exists(item.Path) || Directory.Exists(item.Path)))
             .ToArray();
         if (TryBlockTransferMutation(selectedItems))
         {
-            e.Cancel = true;
-            if (fromStackPopover)
-            {
-                CompleteStackPopoverDrag();
-            }
-
+            _activeDragSessionId = null;
+            CancelDrag("transfer-mutation-blocked");
             return;
         }
 
         // The StorageItem broker call below is synchronous on the UI STA, and
-        // DragItemsStartingEventArgs carries no deferral to await it on. The
-        // drag path already bypasses the broker for .lnk payloads, so measure
-        // what it actually costs for ordinary files before restructuring this
+        // DragStartingEventArgs gives no reason to defer it. The drag path
+        // already bypasses the broker for .lnk payloads, so measure what it
+        // actually costs for ordinary files before restructuring this
         // sequence; the number rides along on the existing protocol log.
         long storageBrokerMs = 0;
         var storageBrokerWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1147,21 +1228,48 @@ public sealed partial class FileSurfaceContent :
                 paths => paths.Count == 1
                     ? Path.GetFileName(paths[0])
                     : paths.Count.ToString(),
-                out FileItemDragPackageResult result,
-                isManagedShortcutDrag))
+                out FileItemDragPackageResult result))
         {
             _activeDragSessionId = null;
-            e.Cancel = true;
-            if (fromStackPopover)
-            {
-                CompleteStackPopoverDrag();
-            }
+            CancelDrag($"prepare-failed items={selectedItems.Length}");
+            return;
+        }
+
+        if (result.SourcePaths.Count > 0 &&
+            HasActiveTransferSource(result.SourcePaths))
+        {
+            _activeDragSessionId = null;
+            ShowTransferBlockedFeedback(
+                _fileService.TransferSessions.GetState(result.SourcePaths[0]));
+            CancelDrag("active-transfer-source");
             return;
         }
 
         _activeDragSourcePaths = result.SourcePaths.ToArray();
         _activeDragHasStorageItems = result.HasStorageItems;
+        // Windows 10 collapses the advertised set to a single effect —
+        // Explorer there prompts for every multi-effect drop regardless of
+        // the preferred operation. Windows 11 keeps Copy|Move plus the
+        // preference below.
+        e.AllowedOperations = FileItemDragPackage.ResolveDragOutAllowedOperations(
+            _settingsService.Settings.FileWidget.ManagedDragOutAction);
+        _activeDragAllowedOperations = e.AllowedOperations;
+        // TryPrepare always writes None; the user's drag-out setting is the
+        // actual preferred effect. It only reaches Windows 11 targets; on
+        // Windows 10 the single allowed effect above is what performs.
+        e.Data.RequestedOperation =
+            FileItemDragPackage.ResolveDragOutPreferredOperation(
+                _settingsService.Settings.FileWidget.ManagedDragOutAction);
         _sourceDragSession.Begin(_activeDragSessionId);
+        MaybeShowDragOutModifierTip(e.AllowedOperations);
+        // The OLE IDataObject cannot expose the in-app token to our own
+        // native drop target, so the CF_HDROP paths themselves identify a
+        // DeskBox-originated drag for native-side handling.
+        ActiveDeskBoxDragRegistry.Begin(
+            _activeDragSessionId,
+            WidgetId,
+            result.SourcePaths,
+            fromStackPopover);
         if (fromStackPopover &&
             !string.IsNullOrWhiteSpace(_stackPopoverKey))
         {
@@ -1170,6 +1278,11 @@ public sealed partial class FileSurfaceContent :
                 _stackPopoverKey;
         }
 
+        // Use the system-provided file visual instead of WinUI's item-card
+        // snapshot. This keeps widget-to-widget drags visually identical to an
+        // Explorer file drag while preserving the same DataPackage.
+        e.DragUI.SetContentFromDataPackage();
+
         App.Log(
             $"[DragProtocol] stage=PackagePrepared widget={WidgetId} " +
             $"session={FormatDragSessionId(_activeDragSessionId)} " +
@@ -1177,87 +1290,26 @@ public sealed partial class FileSurfaceContent :
             $"{result.SourcePaths.Count} storage={result.HasStorageItems} " +
             $"storageBrokerMs={storageBrokerMs} " +
             $"nativeShell={result.UsesNativeShellDataObject} " +
-            $"managedShortcut={isManagedShortcutDrag} requested=" +
-            $"{e.Data.RequestedOperation} mode=" +
+            $"managedShortcut={isManagedShortcutDrag} " +
+            $"requested={e.Data.RequestedOperation} " +
+            $"allowed={e.AllowedOperations} mode=" +
             $"{(sender is ListView ? "list" : "icons")} " +
             $"pathSample='{string.Join(" | ", result.SourcePaths.Take(5))}'");
-    }
-
-    private void Items_DragStarting(
-        UIElement sender,
-        DragStartingEventArgs e)
-    {
-        // DragStarting can be raised before ListViewBase has finished publishing
-        // DragItemsStarting state. Advertise the safe capability set up front so
-        // internal targets never have to infer it from a possibly incomplete
-        // path/selection snapshot. RequestedOperation is owned by
-        // FileItemDragPackage.TryPrepare and is not rewritten here.
-        e.AllowedOperations = FileItemDragPackage.SupportedOperations;
-
-        string[] sourcePaths = _activeDragSourcePaths.Length > 0
-            ? _activeDragSourcePaths
-            : GetSelectedItems()
-                .Where(item => item is not WidgetStackItem)
-                .Select(item => item.Path)
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToArray();
-        if (HasActiveTransferSource(sourcePaths))
-        {
-            e.Cancel = true;
-            ShowTransferBlockedFeedback(
-                _fileService.TransferSessions.GetState(sourcePaths[0]));
-            return;
-        }
-        bool isManagedShortcutDrag = IsManagedShortcutDrag(sourcePaths);
-        if (sourcePaths.Length > 0)
-        {
-            // Use the system-provided file visual instead of WinUI's item-card
-            // snapshot. This keeps widget-to-widget drags visually identical
-            // to an Explorer file drag while preserving the same DataPackage.
-            e.DragUI.SetContentFromDataPackage();
-        }
-
-        if (isManagedShortcutDrag)
-        {
-            // Keep Move as the preferred external action when a managed shortcut
-            // is restored to the desktop. Link remains available for metadata-only
-            // in-app arrangement without authorizing Shell source cleanup.
-            e.AllowedOperations =
-                FileItemDragPackage.ResolveSupportedOperations(
-                    isManagedShortcutDrag: true);
-        }
-
-        App.Log(
-            $"[DragProtocol] stage=SourceStarting widget={WidgetId} " +
-            $"popover={ReferenceEquals(sender, _stackPopoverItemsView)} " +
-            $"paths={sourcePaths.Length} cachedPaths=" +
-            $"{_activeDragSourcePaths.Length} managedShortcut=" +
-            $"{isManagedShortcutDrag} requested={e.Data.RequestedOperation} " +
-            $"allowed={e.AllowedOperations}");
     }
 
     private bool IsManagedShortcutDrag(IReadOnlyList<string> sourcePaths) =>
         ViewModel.FollowsDefaultStoragePath &&
         NativeShellFileDragProvider.AreExistingShortcuts(sourcePaths);
 
-    private void Items_DragItemsCompleted(
-        ListViewBase sender,
-        DragItemsCompletedEventArgs e)
+    private void Items_DropCompleted(
+        UIElement sender,
+        DropCompletedEventArgs e)
     {
-        // A native drag-out cancels the WinUI session at DragItemsStarting;
-        // if the platform still raises Completed for it, the native path has
-        // already finished the session itself.
-        if (_nativeFileDragInFlight)
-        {
-            return;
-        }
-
-        bool fromStackPopover =
-            ReferenceEquals(sender, _stackPopoverItemsView);
+        bool fromStackPopover = IsFromStackPopover(sender);
         CompleteDragItemsSession(
             e.DropResult,
             fromStackPopover,
-            e.Items.OfType<WidgetItem>().ToArray());
+            eventItems: []);
     }
 
     private void CompleteDragItemsSession(
@@ -1280,8 +1332,14 @@ public sealed partial class FileSurfaceContent :
         string? dragSessionId = _activeDragSessionId;
         bool releaseRecoveryPending = _sourceDragSession.ReleaseRecoveryPending;
         _sourceDragSession.Complete(dragSessionId);
+        if (dragSessionId is not null)
+        {
+            ActiveDeskBoxDragRegistry.End(dragSessionId);
+        }
+
         _activeDragSourcePaths = [];
         _activeDragHasStorageItems = false;
+        _activeDragAllowedOperations = DataPackageOperation.None;
         _activeDragHandledAsStackMembership = false;
         _activeDragSessionId = null;
 
@@ -1293,17 +1351,24 @@ public sealed partial class FileSurfaceContent :
             $"{handledAsStackMembership} storage={hasStorageItems} " +
             $"releaseRecoveryPending={releaseRecoveryPending}");
 
+        if (hasStorageItems && movedPaths.Length > 0)
+        {
+            _ = TraceDragSourcePresenceAsync(movedPaths, dragSessionId, dropResult);
+        }
+
         // WinUI does not deliver the routed Drop to the item surface for a drag
         // that started from this same ListView, so a release on a shortcut tile
         // is resolved here instead: the shortcut owns the gesture, the files
         // stay in the grid, and no reorder commits.
         bool launchedFromCompletedDrag =
+            !_isDisposed &&
             ShouldLaunchFromCompletedInternalDrag(dropResult, fromStackPopover) &&
+            !WasLaunchConsumedRecently() &&
             TryLaunchInternalDragOnShortcut(movedPaths);
 
         try
         {
-            if (launchedFromCompletedDrag)
+            if (launchedFromCompletedDrag || _isDisposed)
             {
                 return;
             }
@@ -1325,11 +1390,12 @@ public sealed partial class FileSurfaceContent :
                 handledAsStackMembership = true;
             }
 
-            if (ShouldObserveExternalDragOut(
-                    dropResult,
-                    hasStorageItems,
-                    handledAsStackMembership,
-                    fromStackPopover) &&
+            ExternalDragObservation observation = ResolveExternalDragObservation(
+                dropResult,
+                hasStorageItems,
+                handledAsStackMembership,
+                fromStackPopover);
+            if (observation != ExternalDragObservation.None &&
                 movedPaths.Length > 0)
             {
                 // DropResult describes the target's requested operation, not an
@@ -1338,8 +1404,24 @@ public sealed partial class FileSurfaceContent :
                 // remove every original row.
                 _ = ObserveExternalDragOutAsync(
                     movedPaths,
-                    _lifetimeCancellation.Token);
+                    _lifetimeCancellation.Token,
+                    brief: observation == ExternalDragObservation.Brief);
             }
+
+            // A file this drag just placed on the desktop would be swept back
+            // into a grid by desktop auto-organization; suppress the plausible
+            // destination names so the watcher leaves the arrival alone.
+            if (!handledAsStackMembership &&
+                hasStorageItems &&
+                movedPaths.Length > 0)
+            {
+                SuppressDesktopDragOutArrivals(movedPaths);
+            }
+
+            MaybeShowDragOutResultHint(
+                dropResult,
+                observation,
+                handledAsStackMembership);
         }
         catch (Exception ex)
         {
@@ -1355,7 +1437,10 @@ public sealed partial class FileSurfaceContent :
             ClearFolderDropTarget();
             ClearLaunchDropTarget();
             ClearStackMemberDropTarget();
-            PersistSurfaceReorder();
+            if (!_isDisposed)
+            {
+                PersistSurfaceReorder();
+            }
 
             if (fromStackPopover)
             {
@@ -1369,35 +1454,48 @@ public sealed partial class FileSurfaceContent :
         bool internalHandled) =>
         !internalHandled && dropResult != DataPackageOperation.None;
 
-    internal static bool ShouldObserveExternalDragOut(
+    public enum ExternalDragObservation
+    {
+        None,
+        Full,
+        Brief,
+    }
+
+    internal static ExternalDragObservation ResolveExternalDragObservation(
         DataPackageOperation dropResult,
         bool hasStorageItems,
         bool handledAsStackMembership,
         bool fromStackPopover)
     {
-        if (handledAsStackMembership)
+        if (handledAsStackMembership || !hasStorageItems)
         {
-            return false;
+            return ExternalDragObservation.None;
         }
 
         if (dropResult == DataPackageOperation.Move)
         {
-            return true;
+            return ExternalDragObservation.Full;
         }
 
-        // The Shell can occasionally report None for an accepted drag from
-        // the main file surface, so keep its existing delayed reconciliation.
-        // A popover member drag uses None for cancellation and for membership
-        // no-ops; observing that result can leave a long-running stale probe
-        // that later mistakes an unrelated move for this drag.
-        return !fromStackPopover &&
-            dropResult == DataPackageOperation.None &&
-            hasStorageItems;
+        // Explorer's optimized move may report Copy or None instead of Move
+        // because the target completed the whole relocation itself. A short
+        // existence probe reconciles those cases without holding a long
+        // watch: files that stayed (a real copy, a cancelled drop) never go
+        // missing, while a relocated source disappears within seconds.
+        return dropResult switch
+        {
+            DataPackageOperation.Copy => ExternalDragObservation.Brief,
+            DataPackageOperation.None => fromStackPopover
+                ? ExternalDragObservation.Brief
+                : ExternalDragObservation.Full,
+            _ => ExternalDragObservation.None,
+        };
     }
 
     private async Task ObserveExternalDragOutAsync(
         IReadOnlyCollection<string> sourcePaths,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool brief = false)
     {
         var remainingPaths = sourcePaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -1410,11 +1508,11 @@ public sealed partial class FileSurfaceContent :
         }
 
         int delayMs = 300;
-        const int MaxAttempts = 11;
+        int maxAttempts = brief ? 3 : 11;
         try
         {
             for (int attempt = 0;
-                 attempt < MaxAttempts &&
+                 attempt < maxAttempts &&
                  !_isDisposed &&
                  remainingPaths.Count > 0;
                  attempt++)
@@ -1493,14 +1591,112 @@ public sealed partial class FileSurfaceContent :
         }
 
         // Timing-protocol watchdog: an unexplained remainder after the full
-        // window means the "files vanished" inference did not converge.
-        if (remainingPaths.Count > 0)
+        // window means the "files vanished" inference did not converge. A
+        // brief probe's remainder is the expected outcome — the files stayed.
+        if (!brief && remainingPaths.Count > 0)
         {
             App.Log(
                 $"[DragProtocol] drag-out watch expired with remainder " +
                 $"widget={WidgetId} remaining={remainingPaths.Count} " +
                 $"tracked={sourcePaths.Count}");
         }
+    }
+
+    /// <summary>
+    /// Registers the plausible desktop destinations of a completed drag-out
+    /// with the auto-organization suppression registry. Existing arrivals get
+    /// a fingerprinted entry; names that have not materialized yet keep an
+    /// evidence-gated pending claim that outlives the configured delay so a
+    /// file arriving during this drag is not swept back into a grid, while
+    /// an unrelated same-named file later is not. Explorer conflict renames
+    /// ("keep both") land under a numbered or "- Copy" sibling name, so a
+    /// few of those candidates are claimed alongside the exact name.
+    /// </summary>
+    private void SuppressDesktopDragOutArrivals(
+        IReadOnlyCollection<string> sourcePaths)
+    {
+        if (!_settingsService.Settings.DesktopOrganization
+                .DesktopAutoOrganizationEnabled)
+        {
+            return;
+        }
+
+        DesktopAutoOrganizationSuppressionRegistry? suppressions =
+            App.Current?.OrganizerService?.AutoOrganizationSuppressions;
+        if (suppressions is null)
+        {
+            return;
+        }
+
+        try
+        {
+            TimeSpan organizationDelay = DesktopAutoOrganizationPolicy.GetDelay(
+                _settingsService.Settings);
+            string userDesktop = Environment.GetFolderPath(
+                Environment.SpecialFolder.DesktopDirectory);
+            string publicDesktop = Environment.GetFolderPath(
+                Environment.SpecialFolder.CommonDesktopDirectory);
+            bool sharedRoots = string.Equals(
+                userDesktop,
+                publicDesktop,
+                StringComparison.OrdinalIgnoreCase);
+            var arrivals = new List<(string SourcePath, string DestinationPath)>();
+            foreach (string sourcePath in sourcePaths)
+            {
+                if (string.IsNullOrWhiteSpace(sourcePath))
+                {
+                    continue;
+                }
+
+                string name = Path.GetFileName(sourcePath.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                foreach (string candidateName in GetArrivalNameCandidates(name))
+                {
+                    arrivals.Add(
+                        (sourcePath, Path.Combine(userDesktop, candidateName)));
+                    if (!sharedRoots)
+                    {
+                        arrivals.Add(
+                            (sourcePath,
+                             Path.Combine(publicDesktop, candidateName)));
+                    }
+                }
+            }
+
+            if (arrivals.Count == 0)
+            {
+                return;
+            }
+
+            suppressions.SuppressDraggedArrivals(arrivals, organizationDelay);
+            App.LogVerbose(
+                $"[DragProtocol] stage=DesktopArrivalSuppressed " +
+                $"widget={WidgetId} names={arrivals.Count}");
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[WidgetSurface] Desktop arrival suppression failed " +
+                $"id={WidgetId}: {ex.Message}");
+        }
+    }
+
+    // Explorer names conflict arrivals "name (2).ext" for drag keep-both and
+    // "name - Copy.ext" for paste-style copies. A bounded sibling set keeps
+    // the claim tight while covering the names a real arrival can take.
+    internal static IEnumerable<string> GetArrivalNameCandidates(string name)
+    {
+        yield return name;
+        string stem = Path.GetFileNameWithoutExtension(name);
+        string extension = Path.GetExtension(name);
+        yield return $"{stem} (2){extension}";
+        yield return $"{stem} (3){extension}";
+        yield return $"{stem} - Copy{extension}";
     }
 
     private async Task RenameItemAsync(WidgetItem item)
@@ -2081,7 +2277,6 @@ public sealed partial class FileSurfaceContent :
                 detachItems.Length > 0;
             e.AcceptedOperation = canDetach
                 ? ResolveInternalArrangementFeedbackOperation(
-                    payload.IsDeskBoxFileDrag,
                     e.AllowedOperations,
                     e.DataView.RequestedOperation)
                 : DataPackageOperation.None;
@@ -2100,7 +2295,6 @@ public sealed partial class FileSurfaceContent :
         {
             ResetExternalDropPreview();
             e.AcceptedOperation = ResolveInternalArrangementFeedbackOperation(
-                payload.IsDeskBoxFileDrag,
                 e.AllowedOperations,
                 e.DataView.RequestedOperation);
             TraceInternalDragDecision("surface-reorder", payload, e);
@@ -2219,6 +2413,10 @@ public sealed partial class FileSurfaceContent :
         DataPackageOperation operation,
         string caption)
     {
+        e.AcceptedOperation = DeskBoxDragData.ResolveFileDragFeedbackOperation(
+            e.DataView,
+            operation,
+            e.AllowedOperations);
         bool canDrop = operation != DataPackageOperation.None;
         e.DragUIOverride.IsContentVisible = true;
         e.DragUIOverride.IsGlyphVisible = canDrop;
@@ -2348,6 +2546,68 @@ public sealed partial class FileSurfaceContent :
             FileService.IsEntryDirectlyInDirectoryResolved(
                 path,
                 destination)));
+    }
+
+    // Teaches the modifier vocabulary at the only moment the user is paying
+    // attention to a drag. On by default; settings can switch it off. The
+    // drag's advertised set must contain both Copy and Move for the gesture
+    // to mean anything — a single-effect drag (Windows 10) has nothing to
+    // switch to.
+    private void MaybeShowDragOutModifierTip(
+        DataPackageOperation allowedOperations)
+    {
+        if (!_settingsService.Settings.FileWidget.DragOutModifierTipEnabled ||
+            !allowedOperations.HasFlag(DataPackageOperation.Copy) ||
+            !allowedOperations.HasFlag(DataPackageOperation.Move))
+        {
+            return;
+        }
+
+        ShowFeedback(new WidgetFeedbackRequest(
+            T("Widget.DragOutTip.Modifiers"),
+            WidgetFeedbackSeverity.Info,
+            "drag-out-modifier-tip"));
+    }
+
+    // Receipt after an unambiguous external drop (a reported Copy or Move —
+    // None covers optimized moves and cancels alike): explains what just
+    // happened and names the modifier that would have flipped it. A drag
+    // advertised with a single effect (Windows 10) could not be flipped, so
+    // the receipt stays a plain statement there.
+    private void MaybeShowDragOutResultHint(
+        DataPackageOperation dropResult,
+        ExternalDragObservation observation,
+        bool handledAsStackMembership)
+    {
+        if (!_settingsService.Settings.FileWidget.DragOutResultHintEnabled ||
+            handledAsStackMembership ||
+            observation == ExternalDragObservation.None)
+        {
+            return;
+        }
+
+        bool modifiersCouldFlip = _activeDragAllowedOperations
+            .HasFlag(DataPackageOperation.Copy) &&
+            _activeDragAllowedOperations.HasFlag(DataPackageOperation.Move);
+        string? key = dropResult switch
+        {
+            DataPackageOperation.Copy => modifiersCouldFlip
+                ? "Widget.DragOutTip.AfterCopy"
+                : "Widget.DragOutTip.AfterCopy.NoModifiers",
+            DataPackageOperation.Move => modifiersCouldFlip
+                ? "Widget.DragOutTip.AfterMove"
+                : "Widget.DragOutTip.AfterMove.NoModifiers",
+            _ => null
+        };
+        if (key is null)
+        {
+            return;
+        }
+
+        ShowFeedback(new WidgetFeedbackRequest(
+            T(key),
+            WidgetFeedbackSeverity.Info,
+            "drag-out-result-tip"));
     }
 
     private void ShowSameDirectoryDropFeedback()
@@ -2576,9 +2836,9 @@ public sealed partial class FileSurfaceContent :
 
                 bool mapped = !string.IsNullOrWhiteSpace(
                     ViewModel.MappedFolderPath);
-                bool? moveWhenMapped = mapped
-                    ? accepted == DataPackageOperation.Move
-                    : null;
+                bool? moveWhenMapped = ResolveMoveWhenMapped(
+                    mapped,
+                    resolvedIntent);
                 string? sourceWidgetId = TryGetString(
                     e.DataView.Properties,
                     "DeskBoxSourceWidgetId");
@@ -2587,9 +2847,8 @@ public sealed partial class FileSurfaceContent :
                     await ImportDroppedFilesAsync(
                         droppedFiles,
                         moveWhenMapped,
-                        intentOverride: resolvedIntent == FileDropIntent.Shortcut
-                            ? FileDropIntent.Shortcut
-                            : null,
+                        intentOverride: ResolveShortcutIntentOverride(
+                            resolvedIntent),
                         preferredManualIndex: preferredRawIndex,
                         activateManualSortOnSuccess: activateManualSortOnSuccess,
                         preferredStackAnchor: preferredStackAnchor);
@@ -2612,6 +2871,8 @@ public sealed partial class FileSurfaceContent :
                     payload.IsDeskBoxFileDrag,
                     requestedMoveCount,
                     completedSourcePaths.Count);
+                e.AcceptedOperation = DeskBoxDragData.ResolveFileDragFeedbackOperation(
+                    e.DataView, e.AcceptedOperation);
 
                 int completedCount = moveWhenMapped == true
                     ? completedSourcePaths.Count
@@ -3342,7 +3603,6 @@ public sealed partial class FileSurfaceContent :
     }
 
     internal static DataPackageOperation ResolveInternalArrangementFeedbackOperation(
-        bool isDeskBoxFileDrag,
         DataPackageOperation allowedOperations,
         DataPackageOperation requestedOperation)
     {
@@ -3356,18 +3616,18 @@ public sealed partial class FileSurfaceContent :
             return DataPackageOperation.Link;
         }
 
+        // The metadata-only mutation prefers Copy so a DeskBox drag never
+        // reports Move — not even transiently. Windows 10 drags advertise a
+        // single-effect set (Move) that excludes Copy, so internal routing
+        // falls back to a provisional Move there; completion still never
+        // echoes Move — ResolveInternalArrangementCompletionOperation stays
+        // the sole guard for that rule.
         if (supported.HasFlag(DataPackageOperation.Copy))
         {
             return DataPackageOperation.Copy;
         }
 
-        // ListViewBase item drags expose RequestedOperation as the target's
-        // allowed operation and do not reliably raise UIElement.DragStarting.
-        // Move is therefore required as DragOver feedback so WinUI will route
-        // Drop. The completion policy below never returns Move for the
-        // metadata-only mutation.
-        return isDeskBoxFileDrag &&
-               supported.HasFlag(DataPackageOperation.Move)
+        return supported.HasFlag(DataPackageOperation.Move)
             ? DataPackageOperation.Move
             : DataPackageOperation.None;
     }
@@ -3608,8 +3868,6 @@ public sealed partial class FileSurfaceContent :
             }
 
             await CompleteTrackedImportAsync(ImportCompletionState.Completed);
-            global::DeskBox.App.Current.NotifyOnboardingFileImportCompleted(
-                importedItemCount);
             // Import funnels other than the OLE-level refusal (file picker,
             // routed WinUI drop) still reach this point with short counts when
             // the ViewModel gate refused undisplayable entries. The count was
@@ -3673,7 +3931,8 @@ public sealed partial class FileSurfaceContent :
         WidgetItem? targetItem = null,
         FileDropIntent? forcedIntent = null,
         int? screenX = null,
-        int? screenY = null)
+        int? screenY = null,
+        uint? allowedEffects = null)
     {
         if (_isDisposed || _isImportBusy)
         {
@@ -3787,6 +4046,15 @@ public sealed partial class FileSurfaceContent :
         bool sameVolume = FileDropIntentPolicy.AreAllOnSameVolume(
             droppedFiles.Select(file => file.Path),
             destinationPath);
+        // Null means the entry point had no OLE negotiation (WM_DROPFILES) and
+        // the source's capabilities are unknown: keep the permissive default.
+        // Otherwise the re-resolution must obey the same allowed-effect
+        // constraints the drop-time decision applied, so a copy-only source is
+        // never moved (and vice versa) regardless of which leg resolves last.
+        bool sourceCanCopy = allowedEffects is null ||
+            (allowedEffects & NativeDropEffectPolicy.Copy) != 0;
+        bool sourceCanMove = allowedEffects is null ||
+            (allowedEffects & NativeDropEffectPolicy.Move) != 0;
         FileDropIntent intent = forcedIntent ??
             (followWindows
                 ? FileDropIntentPolicy.ResolveMappedTransfer(
@@ -3795,6 +4063,8 @@ public sealed partial class FileSurfaceContent :
                     controlDown: Win32Helper.IsKeyPressed(VirtualKey.Control),
                     shiftDown: Win32Helper.IsKeyPressed(VirtualKey.Shift),
                     defaultMove: true,
+                    canCopy: sourceCanCopy,
+                    canMove: sourceCanMove,
                     followWindows: true,
                     sameVolume: sameVolume)
                 : copyWhenMapped switch
@@ -3810,13 +4080,13 @@ public sealed partial class FileSurfaceContent :
                             _settingsService.Settings.ManagedDropAction,
                             SettingsService.ManagedDropActionMove,
                             StringComparison.Ordinal),
+                        canCopy: sourceCanCopy,
+                        canMove: sourceCanMove,
                         altDown: Win32Helper.IsKeyPressed(VirtualKey.Menu),
                         followWindows: false,
                         sameVolume: sameVolume)
                 });
-        bool? moveWhenMapped = mapped
-            ? intent == FileDropIntent.Move
-            : null;
+        bool? moveWhenMapped = ResolveMoveWhenMapped(mapped, intent);
         if (targetItem is WidgetStackItem stack)
         {
             return await ImportNativeDroppedFilesIntoStackAsync(
@@ -3850,9 +4120,7 @@ public sealed partial class FileSurfaceContent :
             await ImportDroppedFilesAsync(
                 droppedFiles,
                 moveWhenMapped,
-                intentOverride: intent == FileDropIntent.Shortcut
-                    ? FileDropIntent.Shortcut
-                    : null,
+                intentOverride: ResolveShortcutIntentOverride(intent),
                 preferredManualIndex: preferredRawIndex,
                 activateManualSortOnSuccess: activateManualSortOnSuccess,
                 preferredStackAnchor: preferredStackAnchor);

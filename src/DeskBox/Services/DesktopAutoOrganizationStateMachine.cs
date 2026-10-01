@@ -169,7 +169,8 @@ internal sealed class DesktopAutoOrganizationStateMachine
 
     public bool MarkDeferred(
         DesktopAutoOrganizationWorkItem workItem,
-        DateTimeOffset nextRetryAt)
+        DateTimeOffset nextRetryAt,
+        bool countAttempt = true)
     {
         lock (_gate)
         {
@@ -179,7 +180,10 @@ internal sealed class DesktopAutoOrganizationStateMachine
             }
 
             entry.State = DesktopAutoOrganizationItemState.Deferred;
-            entry.RetryAttempts++;
+            if (countAttempt)
+            {
+                entry.RetryAttempts++;
+            }
             entry.NextRetryAt = nextRetryAt;
             return true;
         }
