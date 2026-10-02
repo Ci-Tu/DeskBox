@@ -67,6 +67,10 @@ public sealed partial class SettingsWindow
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.Border>("FileStorageSettings", "ManagedStoragePathWarningBorder")!;
     private global::Microsoft.UI.Xaml.Controls.TextBlock ManagedStoragePathWarningText =>
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.TextBlock>("FileStorageSettings", "ManagedStoragePathWarningText")!;
+    private global::Microsoft.UI.Xaml.Controls.TextBlock DragOutWin10Note =>
+        FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.TextBlock>("FileStorageSettings", "DragOutWin10Note")!;
+    private global::Microsoft.UI.Xaml.Controls.ToggleSwitch DragOutModifierTipToggle =>
+        FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.ToggleSwitch>("FileStorageSettings", "DragOutModifierTipToggle")!;
     private global::Microsoft.UI.Xaml.Controls.StackPanel PathActionsPanel =>
         FindCreatedSectionElement<global::Microsoft.UI.Xaml.Controls.StackPanel>("FileStorageSettings", "PathActionsPanel")!;
     private global::Microsoft.UI.Xaml.Controls.Button OpenPathButton =>

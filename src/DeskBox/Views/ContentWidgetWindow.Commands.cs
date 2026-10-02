@@ -150,7 +150,7 @@ public sealed partial class ContentWidgetWindow
 
     internal Task RevealItemAsync(string? itemId)
     {
-        return _contentHost.CurrentContent is QuickCaptureSurfaceContent quickCapture
+        return _contentHost.CurrentContent is QuickCaptureWidgetContentAdapter quickCapture
             ? quickCapture.RevealItemAsync(itemId)
             : Task.CompletedTask;
     }
@@ -286,6 +286,7 @@ public sealed partial class ContentWidgetWindow
         bool showCloseWhenClosed = false;
         IDisposable? closeWidgetFlyoutHandoff = null;
         bool showForegroundColorPickerWhenClosed = false;
+        IDisposable? pickerHandoff = null;
         rename.Click += (_, _) => startRenameWhenClosed = true;
         flyout.Closed += (_, _) =>
         {
@@ -300,10 +301,16 @@ public sealed partial class ContentWidgetWindow
             }
             else if (showForegroundColorPickerWhenClosed)
             {
-                DispatcherQueue.TryEnqueue(() =>
-                    ShowFlyoutWithInteraction(
-                        BuildWidgetForegroundColorPickerFlyout(),
-                        ContentWidgetShell));
+                QueueInteractionGuardedFlyout(
+                    pickerHandoff,
+                    () =>
+                    {
+                        ShowFlyoutWithInteraction(
+                            BuildWidgetForegroundColorPickerFlyout(),
+                            ContentWidgetShell);
+                        return Task.CompletedTask;
+                    });
+                pickerHandoff = null;
             }
         };
         flyout.Items.Add(rename);
@@ -332,7 +339,15 @@ public sealed partial class ContentWidgetWindow
             _config,
             App.Current.LocalizationService,
             SetWidgetForegroundModeOverride,
-            () => showForegroundColorPickerWhenClosed = true));
+            () =>
+            {
+                showForegroundColorPickerWhenClosed = true;
+                // Hold the interaction across the flyout transition like the
+                // close confirmation chain: without the handoff a Smart
+                // capsule collapses between the menu closing and the color
+                // picker opening.
+                pickerHandoff ??= AcquireCloseWidgetFlyoutHandoff();
+            }));
 
         if (_config.WidgetKind is WidgetKind.File)
         {
@@ -380,7 +395,7 @@ public sealed partial class ContentWidgetWindow
             _config,
             behavior);
         SettingsService.UpdateWidget(_config);
-        if (CurrentContent is FileSurfaceContent fileSurface)
+        if (CurrentContent is FileWidgetContentAdapter fileSurface)
         {
             _ = fileSurface.ApplyFolderOpenBehaviorChangeAsync();
         }
@@ -1045,15 +1060,28 @@ public sealed partial class ContentWidgetWindow
             RestoreDesktopLayerFromManager();
         };
 
-        if (position is Windows.Foundation.Point point)
+        try
         {
-            flyout.ShowAt(
-                target,
-                new FlyoutShowOptions { Position = point });
+            if (position is Windows.Foundation.Point point)
+            {
+                flyout.ShowAt(
+                    target,
+                    new FlyoutShowOptions { Position = point });
+            }
+            else
+            {
+                flyout.ShowAt(target);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            flyout.ShowAt(target);
+            // ShowAt can throw after the interaction pair above was taken
+            // (e.g. a torn-down XamlRoot during window closing). Without this
+            // rollback the compact lease leaks and a Smart capsule stays
+            // expanded forever; a failed show never raises Closed.
+            EndCompactInteraction();
+            App.Current.WidgetManager?.EndWidgetInteraction("content-flyout-show-failed");
+            App.Log($"[ContentWidget] Flyout show failed: {ex}");
         }
     }
 

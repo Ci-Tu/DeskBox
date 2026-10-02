@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DeskBox.Models;
@@ -39,7 +39,7 @@ public sealed class SettingsSliceOwnershipContractTests
     [Fact]
     public void EveryFacadeProperty_MapsToExactlyOneSliceProperty()
     {
-        Assert.Equal(221, FacadeProperties.Length);
+        Assert.Equal(227, FacadeProperties.Length);
 
         foreach (PropertyInfo facade in FacadeProperties)
         {
@@ -201,6 +201,13 @@ public sealed class SettingsSliceOwnershipContractTests
     // code should read the slices (Settings.<Slice>.Prop). Deleting a
     // passthrough forces its call sites to migrate or stop compiling, so the
     // name set self-maintains as the facade collapses.
+    // Batch 51 reconciliation: every budget was re-measured against the tree
+    // after the batch 40-50 editor migrations and tightened to the exact
+    // current counts (12 entries shrunk — 268 units of stale slack removed so
+    // any new facade access fails immediately; 4 files hit zero and lost
+    // their entries: QuickCaptureClipboardActivationHelper,
+    // SettingsViewModel.DisplayNames, SettingsViewModel.PreferenceCommands,
+    // SettingsViewModel.WidgetForeground).
     private static readonly IReadOnlyDictionary<string, int> FacadeAccessManifest =
         new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -216,7 +223,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/App.DiagnosticsBundle.cs"] = 6,
         ["src/DeskBox/App.ImmediateHiddenWorkingSetTrim.cs"] = 2,
         ["src/DeskBox/App.Tray.cs"] = 3,
-        ["src/DeskBox/App.xaml.cs"] = 31,
+        ["src/DeskBox/App.xaml.cs"] = 28,
         ["src/DeskBox/Controls/DesktopOrganizationPreviewCard.xaml.cs"] = 11,
         ["src/DeskBox/Controls/DesktopOrganizationTaskView.Appearance.cs"] = 1,
         ["src/DeskBox/Controls/DesktopOrganizationTaskView.xaml.cs"] = 1,
@@ -231,13 +238,17 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Controls/WidgetContents/TodoWidgetContent.Menus.cs"] = 1,
         ["src/DeskBox/Controls/WidgetContents/TodoWidgetContent.xaml.cs"] = 1,
         ["src/DeskBox/Controls/WidgetShell.xaml.cs"] = 2,
-        ["src/DeskBox/Helpers/QuickCaptureClipboardActivationHelper.cs"] = 1,
         ["src/DeskBox/Services/AutoStartDefaultPolicy.cs"] = 1,
         ["src/DeskBox/Services/DataBackupSettingsPolicy.cs"] = 15,
         ["src/DeskBox/Services/DesktopAutoOrganizationWatcher.cs"] = 13,
         // 5 = legacy 4 + DesktopDoubleClickEnabled read backing the hook
         // watchdog's HookProbeWanted gate (activation service line 122).
         ["src/DeskBox/Services/DesktopDoubleClickActivationService.cs"] = 5,
+        // TodoSettingsCoordinator reads Settings.Widgets once in the
+        // reminder-reconcile change guard: the Todo widget id set has no
+        // slice projection, and watching it keeps external widget deletions
+        // reconciled without reacting to unrelated debounced saves.
+        ["src/DeskBox/Services/TodoSettingsCoordinator.cs"] = 1,
         ["src/DeskBox/Services/DesktopOrganizationCoordinator.cs"] = 13,
         ["src/DeskBox/Services/DesktopOrganizationTransaction.Restore.cs"] = 3,
         ["src/DeskBox/Services/DesktopOrganizationTransaction.cs"] = 9,
@@ -258,8 +269,8 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/SearchHotkeyService.cs"] = 16,
         ["src/DeskBox/Services/SearchResultActionService.cs"] = 2,
         ["src/DeskBox/Services/SettingsMigrationService.cs"] = 35,
-        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 20,
-        ["src/DeskBox/Services/SettingsService.cs"] = 610,
+        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 22,
+        ["src/DeskBox/Services/SettingsService.cs"] = 608,
         ["src/DeskBox/Services/ThemeService.cs"] = 11,
         ["src/DeskBox/Services/TodoReminderService.cs"] = 8,
         ["src/DeskBox/Services/WeatherService.cs"] = 1,
@@ -272,10 +283,10 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/WidgetGroupSettings.cs"] = 19,
         ["src/DeskBox/Services/WidgetManager.CapsuleArrangement.cs"] = 45,
         ["src/DeskBox/Services/WidgetManager.FeatureWidgets.cs"] = 50,
-        ["src/DeskBox/Services/WidgetManager.Groups.cs"] = 57,
+        ["src/DeskBox/Services/WidgetManager.Groups.cs"] = 55,
         ["src/DeskBox/Services/WidgetManager.Storage.cs"] = 20,
         ["src/DeskBox/Services/WidgetManager.Surfaces.cs"] = 1,
-        ["src/DeskBox/Services/WidgetManager.TrayAnimation.cs"] = 3,
+        ["src/DeskBox/Services/WidgetManager.TrayAnimation.cs"] = 4,
         ["src/DeskBox/Services/WidgetManager.cs"] = 27,
         ["src/DeskBox/Services/WidgetStartupRestorePolicy.cs"] = 2,
         ["src/DeskBox/Services/WidgetTopologyLayoutService.cs"] = 22,
@@ -287,30 +298,61 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/ViewModels/QuickCaptureWidgetViewModel.SettingsAndRefresh.cs"] = 14,
         ["src/DeskBox/ViewModels/QuickCaptureWidgetViewModel.cs"] = 17,
         ["src/DeskBox/ViewModels/SearchPopupViewModel.cs"] = 13,
-        ["src/DeskBox/ViewModels/SettingsViewModel.AboutAndUpdates.cs"] = 1,
-        ["src/DeskBox/ViewModels/SettingsViewModel.AppearanceCallbacks.cs"] = 16,
-        ["src/DeskBox/ViewModels/SettingsViewModel.AppearanceOptions.cs"] = 18,
-        ["src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs"] = 34,
-        ["src/DeskBox/ViewModels/SettingsViewModel.ContentEditorOptions.cs"] = 24,
-        ["src/DeskBox/ViewModels/SettingsViewModel.DataBackupOptions.cs"] = 2,
+        // Batch 29 moved the appearance section writes into
+        // AppearanceSettingsCoordinator; AppearanceCallbacks reached zero and
+        // lost its entry. Batch 33 moved the capsule/compact section writes
+        // into CapsuleSettingsCoordinator (CapsuleOptions 34->20, leaving only
+        // widget/group override-list reads; AppearanceOptions 4->2). Batch 34
+        // moved the interaction section writes into
+        // InteractionSettingsCoordinator (PreferenceCallbacks 17->6, leaving
+        // the file-display section for batch 35; HoverActions 1->0 and lost
+        // its entry; AppearanceOptions 2->1, only the widget list read of the
+        // chrome-override reset remains). Batch 35 moved the file-display
+        // section writes into FileDisplaySettingsCoordinator
+        // (PreferenceCallbacks 6->0 and lost its entry; the only remaining
+        // facade-shaped access is the QuiescenceWorkingSetTrimEnabled write
+        // through the Performance slice, which is not a passthrough). Batch 36
+        // moved the file-stack section writes (master switch, auto-stacking,
+        // grouping, threshold, ordering, open mode, popover layout/style,
+        // unmatched behavior and the custom-rule collection) into
+        // FileStackSettingsCoordinator (FileStackOptions 32->22, leaving only
+        // the constructor/snapshot reads and the Widgets preview read).
+        // Batch 38 moved the feature-section writes (music presentation,
+        // weather options incl. the policy path, feature-card enable states,
+        // attachment storage, managed-drop action, folder-open behavior, and
+        // the music/weather feature-reset defaults) into
+        // FeatureWidgetsSettingsCoordinator, and the Quick Capture editor
+        // group into the existing QuickCaptureSettingsCoordinator
+        // (FeatureCallbacks 25->0 and lost its entry; WeatherOptions 2->1,
+        // only the city-name restore read remains; ContentEditorOptions
+        // 24->10, only the constructor/snapshot reads remain; batch 47 then
+        // deleted ContentEditorOptions/FeatureTextSize whole when the Todo
+        // section moved to its editor, and both lost their entries; batch 48
+        // deleted WeatherOptions whole when the Weather section moved to its
+        // editor — the city-name restore read went with the editor's
+        // coordinator read port).
+        // FeatureOptions
+        // 68->2: both remaining matches are localization-key string literals
+        // ("Settings.AttachmentStorageMode.Copy"/".Link"), not facade
+        // accesses. Batch 39 moved the storage/diagnostics tail writes into
+        // ManagedStorageSettingsCoordinator and MaintenanceSettingsCoordinator
+        // (AboutAndUpdates 1->0 and lost its entry; PreferenceCommands 2->1,
+        // only the ResizeSnapEnabled read of the restore-defaults
+        // guide-overlay sync remains).
+        ["src/DeskBox/ViewModels/SettingsViewModel.AppearanceOptions.cs"] = 1,
+        ["src/DeskBox/ViewModels/SettingsViewModel.CapsuleOptions.cs"] = 20,
         ["src/DeskBox/ViewModels/SettingsViewModel.DesktopOrganization.cs"] = 1,
-        ["src/DeskBox/ViewModels/SettingsViewModel.DisplayNames.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FeatureCallbacks.cs"] = 28,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FeatureOptions.cs"] = 71,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FeatureTextSize.cs"] = 5,
-        ["src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs"] = 32,
-        ["src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs"] = 28,
+        ["src/DeskBox/ViewModels/SettingsViewModel.FileStackOptions.cs"] = 1,
+        // Batch 37 moved the group-navigation default writes (wheel switch,
+        // hover switch, default title display mode, default navigation style)
+        // into GroupNavigationSettingsCoordinator (GroupNavigation 28->20,
+        // leaving only the property/summary/projection reads; the four
+        // setters no longer compare or write through the facade).
+        ["src/DeskBox/ViewModels/SettingsViewModel.GroupNavigation.cs"] = 15,
         ["src/DeskBox/ViewModels/SettingsViewModel.HotkeyAndStorage.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.HoverActions.cs"] = 1,
-        ["src/DeskBox/ViewModels/SettingsViewModel.Performance.cs"] = 11,
-        ["src/DeskBox/ViewModels/SettingsViewModel.PreferenceCallbacks.cs"] = 21,
-        ["src/DeskBox/ViewModels/SettingsViewModel.PreferenceCommands.cs"] = 2,
-        ["src/DeskBox/ViewModels/SettingsViewModel.QuickCaptureDiagnostics.cs"] = 2,
         ["src/DeskBox/ViewModels/SettingsViewModel.RuntimeDiagnostics.cs"] = 1,
-        ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 133,
-        ["src/DeskBox/ViewModels/SettingsViewModel.WeatherOptions.cs"] = 2,
-        ["src/DeskBox/ViewModels/SettingsViewModel.WidgetForeground.cs"] = 6,
-        ["src/DeskBox/ViewModels/SettingsViewModel.cs"] = 141,
+        ["src/DeskBox/ViewModels/SettingsViewModel.SettingsSync.cs"] = 7,
+        ["src/DeskBox/ViewModels/SettingsViewModel.cs"] = 15,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.DetailAndAttachments.cs"] = 1,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.FilteringAndAppearance.cs"] = 21,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.cs"] = 12,
@@ -328,13 +370,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Views/ContentWidgetWindow.QuickCapture.cs"] = 1,
         ["src/DeskBox/Views/ContentWidgetWindow.TrayAnimations.cs"] = 4,
         ["src/DeskBox/Views/ContentWidgetWindow.xaml.cs"] = 16,
-        ["src/DeskBox/Views/OnboardingWindow.Appearance.cs"] = 10,
-        ["src/DeskBox/Views/OnboardingWindow.Completion.cs"] = 5,
-        ["src/DeskBox/Views/OnboardingWindow.DesktopOrganization.cs"] = 1,
-        ["src/DeskBox/Views/OnboardingWindow.Features.cs"] = 1,
-        ["src/DeskBox/Views/OnboardingWindow.Hotkey.cs"] = 15,
-        ["src/DeskBox/Views/OnboardingWindow.Storage.cs"] = 5,
-        ["src/DeskBox/Views/OnboardingWindow.TaskFlow.cs"] = 5,
+        ["src/DeskBox/Views/OnboardingWindow.Steps.cs"] = 3,
         ["src/DeskBox/Views/OnboardingWindow.xaml.cs"] = 4,
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.Appearance.cs"] = 3,
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.Detail.cs"] = 2,
@@ -344,13 +380,13 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Views/QuickCaptureWidgetWindow.xaml.cs"] = 12,
         ["src/DeskBox/Views/SearchPopupWindow.xaml.cs"] = 22,
         ["src/DeskBox/Views/SettingsSections/DesktopOrganizationSettingsSection.xaml.cs"] = 22,
-        ["src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml.cs"] = 29,
+        ["src/DeskBox/Views/SettingsSections/SearchSettingsSection.xaml.cs"] = 3,
         ["src/DeskBox/Views/SettingsWindow.HotkeyAndAppearance.cs"] = 4,
         ["src/DeskBox/Views/SettingsWindow.Maintenance.cs"] = 3,
         ["src/DeskBox/Views/SettingsWindow.Navigation.cs"] = 3,
         ["src/DeskBox/Views/WidgetWindowBase.Backdrop.cs"] = 10,
         ["src/DeskBox/Views/WidgetWindowBase.Bounds.cs"] = 3,
-        ["src/DeskBox/Views/WidgetWindowBase.Collapse.cs"] = 35,
+        ["src/DeskBox/Views/WidgetWindowBase.Collapse.cs"] = 28,
     };
 
     private static readonly Regex FacadePassthroughAccess = new(

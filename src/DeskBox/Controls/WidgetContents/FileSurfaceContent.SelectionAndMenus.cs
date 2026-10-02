@@ -157,7 +157,7 @@ public sealed partial class FileSurfaceContent
     {
         if (sender is ListViewBase listView)
         {
-            FinishBoxSelection(listView);
+            HandleItemsPointerCaptureLost(listView);
         }
     }
 
@@ -179,6 +179,7 @@ public sealed partial class FileSurfaceContent
         }
 
         return !FileItemSelectionGeometry.IsWithinItemSurface(source) &&
+               !FileItemSelectionGeometry.HasAncestor<SelectorItem>(source) &&
                !FileItemSelectionGeometry.HasAncestor<ScrollBar>(source) &&
                !FileItemSelectionGeometry.HasAncestor<ButtonBase>(source) &&
                !FileItemSelectionGeometry.HasAncestor<TextBox>(source);

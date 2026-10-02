@@ -23,160 +23,59 @@ public sealed partial class SettingsWindow
 {
     private async void ChangeManagedStoragePathButton_Click(object sender, RoutedEventArgs e)
     {
-        if (SettingsRoot.XamlRoot is null)
-        {
-            return;
-        }
-
-        string? folderPath = await FolderPickerService.PickFolderAsync(_hWnd);
-        if (string.IsNullOrWhiteSpace(folderPath))
-        {
-            return;
-        }
-
-        string normalizedPath = SettingsService.NormalizeManagedStorageRootPath(folderPath);
-        if (string.Equals(normalizedPath, ViewModel.ManagedStorageRootPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        int affectedCount = App.Current.WidgetManager?.GetDefaultManagedStorageWidgetCount() ?? 0;
-        if (affectedCount > 0)
-        {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = SettingsRoot.XamlRoot,
-                Title = _localizationService.T("Settings.Dialog.MigrateTitle"),
-                PrimaryButtonText = _localizationService.T("Settings.Dialog.MigrateButton"),
-                CloseButtonText = _localizationService.T("Common.Cancel"),
-                DefaultButton = ContentDialogButton.Primary,
-                Content = new TextBlock
-                {
-                    Text = _localizationService.Format(
-                        "Settings.Dialog.MigrateBody",
-                        affectedCount,
-                        ViewModel.ManagedStorageRootPath,
-                        normalizedPath),
-                    TextWrapping = TextWrapping.Wrap
-                }
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-            {
-                return;
-            }
-        }
-
-        await ApplyManagedStoragePathChangeAsync(normalizedPath, allowStaleCleanupRetry: true);
+        await ChangeManagedStoragePathAsync();
     }
 
-    private async Task ApplyManagedStoragePathChangeAsync(
-        string normalizedPath,
-        bool allowStaleCleanupRetry)
+    private async Task ChangeManagedStoragePathAsync()
     {
-        if (SettingsRoot.XamlRoot is null)
+        while (true)
         {
+
+            if (SettingsRoot.XamlRoot is null)
+            {
+                return;
+            }
+
+            string? folderPath = await FolderPickerService.PickFolderAsync(_hWnd);
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return;
+            }
+
+            string normalizedPath = SettingsService.NormalizeManagedStorageRootPath(folderPath);
+            if (string.Equals(normalizedPath, ViewModel.ManagedStorageRootPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (App.Current.WidgetManager is not { } manager) return;
+            var choice = await ManagedStorageMigrationDialog.ConfirmAsync(SettingsRoot.XamlRoot, _localizationService,
+                manager.GetDefaultManagedStorageWidgetCount(), ViewModel.ManagedStorageRootPath, normalizedPath,
+                token => manager.PreviewManagedStorageMigrationAsync(normalizedPath, token));
+            if (choice is null) return;
+            if (choice == StorageMigrationStartChoice.ChooseLocation)
+            {
+                continue;
+            }
+            var outcome = await ManagedStorageMigrationDialog.RunAsync(
+                SettingsRoot.XamlRoot, SettingsRoot.DispatcherQueue, _localizationService,
+                ViewModel.ManagedStorageRootPath, normalizedPath,
+                options => manager.UpdateDefaultManagedStorageRootAsync(normalizedPath, options),
+                restart: choice == StorageMigrationStartChoice.Restart);
+            if (outcome.ChooseLocation)
+            {
+                continue;
+            }
+            ManagedStorageMigrationResult? result = outcome.Migration;
+            if (result is not null)
+            {
+                ViewModel.UpdateManagedStorageRootPath(result.NewRootPath);
+                try { await App.Current.ManagedStorageDesktopShortcutService.SyncAsync(result.OldRootPath); }
+                catch (Exception ex) { App.Log($"[ManagedStorageMigration] Desktop shortcut sync deferred: {ex.Message}"); }
+            }
+            RefreshManagedStoragePathWarning();
             return;
         }
-
-        if (App.Current.WidgetManager is not null)
-        {
-            ManagedStorageMigrationResult? result = null;
-            try
-            {
-                string oldRootPath = ViewModel.ManagedStorageRootPath;
-                result = await ManagedStorageMigrationDialog.RunAsync(
-                    SettingsRoot.XamlRoot,
-                    SettingsRoot.DispatcherQueue,
-                    _localizationService,
-                    oldRootPath,
-                    normalizedPath,
-                    options => App.Current.WidgetManager
-                        .UpdateDefaultManagedStorageRootAsync(normalizedPath, options),
-                    (items, options) => App.Current.WidgetManager
-                        .RetrySkippedMigrationItemsAsync(items, options));
-            }
-            catch (ManagedStorageDestinationResidueException ex) when (
-                allowStaleCleanupRetry &&
-                App.Current.WidgetManager is not null)
-            {
-                ContentDialogResult choice = await ManagedStorageMigrationResidueDialog
-                    .ShowStaleDestinationAsync(
-                        SettingsRoot.XamlRoot,
-                        _localizationService,
-                        ex.StaleDestinationFolders);
-                if (choice != ContentDialogResult.Primary)
-                {
-                    return;
-                }
-
-                await App.Current.WidgetManager.DeleteMigrationResidueFoldersAsync(
-                    ex.StaleDestinationFolders);
-                await ApplyManagedStoragePathChangeAsync(
-                    normalizedPath,
-                    allowStaleCleanupRetry: false);
-                return;
-            }
-            catch (ManagedStorageRollbackFailureException ex)
-            {
-                // The rollback left folders in both roots: list them and offer
-                // a conservative retry instead of a bare failure message (#112).
-                await ManagedStorageMigrationResidueDialog.ShowRollbackFailureAsync(
-                    SettingsRoot.XamlRoot,
-                    _localizationService,
-                    failures => App.Current.WidgetManager.RetryMigrationRollbackAsync(failures),
-                    ex);
-                return;
-            }
-            catch (Exception ex)
-            {
-                // The outer message only counts completed items; the inner
-                // exception names the file that failed (e.g. locked by an app).
-                string detail = ex.InnerException is { } inner
-                    ? $"{ex.Message} {inner.Message}"
-                    : ex.Message;
-                var errorDialog = new ContentDialog
-                {
-                    XamlRoot = SettingsRoot.XamlRoot,
-                    Title = _localizationService.T("Settings.Dialog.MigrateFailedTitle"),
-                    CloseButtonText = _localizationService.T("Common.Ok"),
-                    DefaultButton = ContentDialogButton.Close,
-                    Content = new TextBlock
-                    {
-                        Text = _localizationService.Format("Settings.Dialog.MigrateFailedBody", detail),
-                        TextWrapping = TextWrapping.Wrap
-                    }
-                };
-
-                await errorDialog.ShowAsync();
-                return;
-            }
-
-            if (result is null)
-            {
-                // Canceled or failed: the migration dialog already presented
-                // the outcome, and the rollback restored the stored root —
-                // ViewModel.ManagedStorageRootPath still shows the old path,
-                // so only the warning badge needs a refresh.
-                RefreshManagedStoragePathWarning();
-                return;
-            }
-
-            if (result.Residues.Count > 0)
-            {
-                // The migration itself finished; only the old-root cleanup
-                // left folders behind. Surface them with an explicit
-                // recycle-or-keep choice instead of a failure dialog.
-                await ManagedStorageMigrationResidueDialog.ShowMigrationResidueAsync(
-                    SettingsRoot.XamlRoot,
-                    _localizationService,
-                    folders => App.Current.WidgetManager.DeleteMigrationResidueFoldersAsync(folders),
-                    result);
-            }
-        }
-
-        ViewModel.UpdateManagedStorageRootPath(normalizedPath);
-        RefreshManagedStoragePathWarning();
     }
 
     private void RefreshManagedStoragePathWarning()
@@ -192,26 +91,46 @@ public sealed partial class SettingsWindow
         if (assessment.IsSystemDrive)
         {
             warnings.Add(_localizationService.T(assessment.HasSuitableNonSystemDrive
-                ? "Onboarding.Task.Step2.Warning.SystemDrive"
-                : "Onboarding.Task.Step2.Warning.SystemDriveOnly"));
+                ? "Settings.ManagedPath.Warning.SystemDrive"
+                : "Settings.ManagedPath.Warning.SystemDriveOnly"));
         }
         if (assessment.IsCloudSynced)
         {
-            warnings.Add(_localizationService.T("Onboarding.Task.Step2.Warning.CloudSync"));
+            warnings.Add(_localizationService.T("Settings.ManagedPath.Warning.CloudSync"));
         }
         if (assessment.DriveType == DriveType.Removable || assessment.IsTransientBusDrive)
         {
-            warnings.Add(_localizationService.T("Onboarding.Task.Step2.Warning.Removable"));
+            warnings.Add(_localizationService.T("Settings.ManagedPath.Warning.Removable"));
         }
         else if (assessment.DriveType == DriveType.Network)
         {
-            warnings.Add(_localizationService.T("Onboarding.Task.Step2.Warning.Network"));
+            warnings.Add(_localizationService.T("Settings.ManagedPath.Warning.Network"));
         }
 
         ManagedStoragePathWarningText.Text = string.Join(Environment.NewLine, warnings);
         ManagedStoragePathWarningBorder.Visibility = warnings.Count > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private void RefreshDragOutWin10State()
+    {
+        // Windows 10 cannot offer a modifier switch to external targets: a
+        // brokered drag there advertises a single effect only. The modifier
+        // tip therefore never fires and its toggle is disabled; the note
+        // under the drag-out combo explains the collapsed semantics.
+        bool modifiersReachExternalTargets =
+            WindowsCompatibilityService.IsWindows11OrLater;
+        if (DragOutWin10Note is { } note)
+        {
+            note.Visibility = modifiersReachExternalTargets
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+        if (DragOutModifierTipToggle is { } toggle)
+        {
+            toggle.IsEnabled = modifiersReachExternalTargets;
+        }
     }
 
     private bool _isSynchronizingManagedStorageDesktopShortcutToggle;
@@ -295,13 +214,13 @@ public sealed partial class SettingsWindow
 
     private async void PinManagedStorageToQuickAccessButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!ViewModel.CanInvokeQuickAccessAction)
+        if (!_managedStorageSettingsViewModel.CanInvokeQuickAccessAction)
         {
             return;
         }
 
         string path = ViewModel.ManagedStorageRootPath;
-        bool shouldUnpin = ViewModel.ShouldUnpinManagedStorageFromQuickAccess;
+        bool shouldUnpin = _managedStorageSettingsViewModel.ShouldUnpinQuickAccessAction;
 
         ViewModel.SetQuickAccessBusy(true);
         try
@@ -503,8 +422,9 @@ public sealed partial class SettingsWindow
     {
         try
         {
-            await App.Current.SettingsService.SaveAsync(notifySubscribers: false);
-            string? snapshotPath = await App.Current.DataBackupService.CreateAutomaticSnapshotNowAsync();
+            var result = await _backupCommands.CreateSnapshotNowAsync();
+            if (_isClosed || _backupCommands.IsStopping) return false;
+            string? snapshotPath = result.ArchivePath;
             if (!string.IsNullOrWhiteSpace(snapshotPath))
             {
                 return true;
@@ -514,9 +434,11 @@ public sealed partial class SettingsWindow
                 _localizationService.T("Settings.Update.PreUpdateBackupFailedTitle"),
                 _localizationService.T("Settings.Update.PreUpdateBackupFailedBody"));
         }
+        catch (OperationCanceledException) when (_backupCommands.IsStopping) { }
         catch (Exception ex)
         {
             App.Log($"[Update] Failed to create pre-update recovery snapshot: {ex}");
+            if (_isClosed || _backupCommands.IsStopping) return false;
             await ShowInfoDialogAsync(
                 _localizationService.T("Settings.Update.PreUpdateBackupFailedTitle"),
                 _localizationService.Format("Settings.Update.PreUpdateBackupFailedBodyWithError", ex.Message));

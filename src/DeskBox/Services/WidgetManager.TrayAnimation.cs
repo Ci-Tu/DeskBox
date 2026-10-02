@@ -293,7 +293,8 @@ public sealed partial class WidgetManager
                     options.DurationMs,
                     _settingsService.Settings.WidgetAnimationEasingIntensity,
                     isShowing: true,
-                    startDelayFrames: 1);
+                    startDelayFrames: 1,
+                    staggerIntervalMs: GetTrayStaggerIntervalMs(windows));
                 _ = RestoreInteractionBackdropsWhenIdleAsync(windows);
         }
         catch (Exception ex)
@@ -359,13 +360,29 @@ public sealed partial class WidgetManager
                     options.DurationMs,
                     _settingsService.Settings.WidgetAnimationEasingIntensity,
                     isShowing: false,
-                    startDelayFrames: 0);
+                    startDelayFrames: 0,
+                    staggerIntervalMs: GetTrayStaggerIntervalMs(windows));
                 _ = RestoreInteractionBackdropsWhenIdleAsync(windows);
         }
         catch (Exception ex)
         {
             App.Log($"[TrayBatch] Error during batch animation: {ex}");
         }
+    }
+
+    /// <summary>
+    /// Per-window stagger delay for batch animations. Zero keeps the default
+    /// lockstep; when enabled the interval shrinks as the group grows so the
+    /// whole batch stays within roughly one extra quarter-second.
+    /// </summary>
+    private int GetTrayStaggerIntervalMs(IReadOnlyList<IDesktopWidgetWindow> windows)
+    {
+        if (!_settingsService.Settings.WidgetAnimationStaggerEnabled || windows.Count < 2)
+        {
+            return 0;
+        }
+
+        return Math.Clamp(240 / (windows.Count - 1), 8, 48);
     }
 
     /// <summary>
@@ -408,6 +425,7 @@ public sealed partial class WidgetManager
         foreach (var window in windows)
         {
             window.SetTrayAnimationOffsetOverride(null, null);
+            window.SetTrayAnimationEdgeFade(false);
         }
 
         var options = WidgetAnimationSettings.From(_settingsService.Settings);
@@ -416,27 +434,8 @@ public sealed partial class WidgetManager
             return;
         }
 
-        string effect = options.Effect;
-        string direction = effect switch
-        {
-            SettingsService.WidgetAnimationEffectSlideLeft or
-            SettingsService.WidgetAnimationEffectSlideLeftFade =>
-                SettingsService.WidgetAnimationSlideDirectionLeft,
-            SettingsService.WidgetAnimationEffectSlideUp or
-            SettingsService.WidgetAnimationEffectSlideUpFade =>
-                SettingsService.WidgetAnimationSlideDirectionUp,
-            SettingsService.WidgetAnimationEffectSlideDown or
-            SettingsService.WidgetAnimationEffectSlideDownFade =>
-                SettingsService.WidgetAnimationSlideDirectionDown,
-            SettingsService.WidgetAnimationEffectSlideRight or
-            SettingsService.WidgetAnimationEffectSlideRightFade =>
-                SettingsService.WidgetAnimationSlideDirectionRight,
-            SettingsService.WidgetAnimationEffectSlideFade or
-            SettingsService.WidgetAnimationEffectScaleSlide =>
-                options.SlideDirection,
-            _ => SettingsService.WidgetAnimationSlideDirectionNone
-        };
-
+        string direction = WidgetAnimationSettings.GetEffectiveSlideDirection(
+            options.Effect, options.SlideDirection);
         if (direction == SettingsService.WidgetAnimationSlideDirectionNone)
         {
             return;
@@ -451,6 +450,9 @@ public sealed partial class WidgetManager
             }
 
             var workArea = GetAnimationWorkArea(groupWindows[0]);
+            bool hasAdjacentDisplay = WidgetSlideBoundaryPolicy.HasAdjacentDisplayBeyondEdge(
+                GetAnimationOuterBounds(groupWindows[0]), direction);
+
             // Use resting bounds: during prepare/play the HWNDs are physically
             // displaced offscreen, which would collapse the group offset to ~0
             // and leave windows parked at their final position when uncloaked.
@@ -459,31 +461,56 @@ public sealed partial class WidgetManager
             double groupRight = groupWindows.Max(window => window.RestingAnimationBounds.Right);
             double groupBottom = groupWindows.Max(window => window.RestingAnimationBounds.Bottom);
 
-            double offsetX = 0;
-            double offsetY = 0;
-            switch (direction)
+            // Unconfined targets eject the group past this monitor's work-area
+            // boundary; confined targets stop it flush with the boundary so it
+            // never drifts onto an adjacent display (fading out instead).
+            // The group slides on a single axis; the other override stays 0.
+            WidgetSlideBoundaryPolicy.SlideBoundaryDecision decision = direction switch
             {
-                case SettingsService.WidgetAnimationSlideDirectionLeft:
-                    offsetX = -(groupRight - workArea.X + OffscreenAnimationPadding);
-                    break;
+                SettingsService.WidgetAnimationSlideDirectionLeft =>
+                    WidgetSlideBoundaryPolicy.ResolveSlideOffset(
+                        -(groupRight - workArea.X + OffscreenAnimationPadding),
+                        farEdge: groupLeft,
+                        workAreaEdge: workArea.X,
+                        hasAdjacentDisplay),
+                SettingsService.WidgetAnimationSlideDirectionUp =>
+                    WidgetSlideBoundaryPolicy.ResolveSlideOffset(
+                        -(groupBottom - workArea.Y + OffscreenAnimationPadding),
+                        farEdge: groupTop,
+                        workAreaEdge: workArea.Y,
+                        hasAdjacentDisplay),
+                SettingsService.WidgetAnimationSlideDirectionDown =>
+                    WidgetSlideBoundaryPolicy.ResolveSlideOffset(
+                        workArea.Y + workArea.Height - groupTop + OffscreenAnimationPadding,
+                        farEdge: groupBottom,
+                        workAreaEdge: workArea.Y + workArea.Height,
+                        hasAdjacentDisplay),
+                _ => WidgetSlideBoundaryPolicy.ResolveSlideOffset(
+                        workArea.X + workArea.Width - groupLeft + OffscreenAnimationPadding,
+                        farEdge: groupRight,
+                        workAreaEdge: workArea.X + workArea.Width,
+                        hasAdjacentDisplay)
+            };
 
-                case SettingsService.WidgetAnimationSlideDirectionUp:
-                    offsetY = -(groupBottom - workArea.Y + OffscreenAnimationPadding);
-                    break;
-
-                case SettingsService.WidgetAnimationSlideDirectionDown:
-                    offsetY = workArea.Y + workArea.Height - groupTop + OffscreenAnimationPadding;
-                    break;
-
-                case SettingsService.WidgetAnimationSlideDirectionRight:
-                default:
-                    offsetX = workArea.X + workArea.Width - groupLeft + OffscreenAnimationPadding;
-                    break;
+            double confinedOffsetX = 0;
+            double confinedOffsetY = 0;
+            if (direction is SettingsService.WidgetAnimationSlideDirectionLeft or
+                SettingsService.WidgetAnimationSlideDirectionRight)
+            {
+                confinedOffsetX = decision.Offset;
+            }
+            else
+            {
+                confinedOffsetY = decision.Offset;
             }
 
             foreach (var window in groupWindows)
             {
-                window.SetTrayAnimationOffsetOverride(offsetX, offsetY);
+                window.SetTrayAnimationOffsetOverride(confinedOffsetX, confinedOffsetY);
+                if (decision.ConfineWithFade)
+                {
+                    window.SetTrayAnimationEdgeFade(true);
+                }
             }
         }
     }
@@ -496,11 +523,20 @@ public sealed partial class WidgetManager
 
     private static Windows.Graphics.RectInt32 GetAnimationWorkArea(IDesktopWidgetWindow window)
     {
+        return GetAnimationDisplayArea(window).WorkArea;
+    }
+
+    private static Windows.Graphics.RectInt32 GetAnimationOuterBounds(IDesktopWidgetWindow window)
+    {
+        return GetAnimationDisplayArea(window).OuterBounds;
+    }
+
+    private static DisplayArea GetAnimationDisplayArea(IDesktopWidgetWindow window)
+    {
         var point = new Windows.Graphics.PointInt32(
             (int)Math.Round(window.RestingAnimationBounds.Left),
             (int)Math.Round(window.RestingAnimationBounds.Top));
-        var displayArea = DisplayArea.GetFromPoint(point, DisplayAreaFallback.Primary);
-        return displayArea.WorkArea;
+        return DisplayArea.GetFromPoint(point, DisplayAreaFallback.Primary);
     }
 
     private static void ActivateIdleHighestWindow(IReadOnlyList<IDesktopWidgetWindow> windows)

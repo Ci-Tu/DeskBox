@@ -1,4 +1,8 @@
-using DeskBox.Controls;
+﻿using DeskBox.Controls;
+using DeskBox.Features.Todo;
+using DeskBox.Features.Search;
+using DeskBox.Features.Backup;
+using DeskBox.Contracts;
 using DeskBox.Helpers;
 using DeskBox.Models;
 using DeskBox.Platform;
@@ -128,8 +132,69 @@ public sealed partial class SettingsWindow : Window
         };
 
     public SettingsViewModel ViewModel { get; }
+    private readonly SearchSettingsViewModel _searchSettingsViewModel;
+    private readonly BackupSettingsViewModel _backupSettingsViewModel;
+    private readonly BackupRestoreActions _backupRestoreActions;
+    private readonly IBackupCommands _backupCommands;
+    private readonly DeskBox.Features.Music.MusicSettingsViewModel _musicSettingsViewModel;
+    private readonly DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel _quickCaptureSettingsViewModel;
+    private readonly TodoSettingsViewModel _todoSettingsViewModel;
+    private readonly DeskBox.Features.Weather.WeatherSettingsViewModel _weatherSettingsViewModel;
+    private readonly DeskBox.Features.Interaction.InteractionSettingsViewModel _interactionSettingsViewModel;
+    private readonly DeskBox.Features.FileStack.FileStackSettingsViewModel _fileStackSettingsViewModel;
+    private readonly DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel _featureWidgetsSettingsViewModel;
+    private readonly DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel _fileDisplaySettingsViewModel;
+    private readonly DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel _managedStorageSettingsViewModel;
+    private readonly DeskBox.Features.Appearance.AppearanceSettingsViewModel _appearanceSettingsViewModel;
+    private readonly DeskBox.Features.Capsule.CapsuleSettingsViewModel _capsuleSettingsViewModel;
+    private readonly DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel _groupNavigationSettingsViewModel;
+    private readonly DeskBox.Features.Performance.PerformanceSettingsViewModel _performanceSettingsViewModel;
 
-    public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService)
+    /// <summary>
+    /// The file-display section's editor. Exposed for the AOT managed-UI
+    /// persistence smoke, which toggles the section's real binding surface;
+    /// the section itself reaches the editor through its DataContext.
+    /// </summary>
+    public DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel FileDisplaySettings =>
+        _fileDisplaySettingsViewModel;
+
+    /// <summary>
+    /// The appearance-section editor. Exposed for the AOT managed-UI
+    /// persistence smoke, which drives the section family's real binding
+    /// surface; the sections themselves reach the editor through their
+    /// DataContext.
+    /// </summary>
+    public DeskBox.Features.Appearance.AppearanceSettingsViewModel AppearanceSettings =>
+        _appearanceSettingsViewModel;
+
+    /// <summary>
+    /// The file-stack section's editor. Exposed for the AOT deep-settings
+    /// smoke and the section's code-behind rule handlers; the section itself
+    /// reaches the editor through its DataContext.
+    /// </summary>
+    public DeskBox.Features.FileStack.FileStackSettingsViewModel FileStackSettings =>
+        _fileStackSettingsViewModel;
+
+    public SettingsWindow(SettingsService settingsService, ThemeService themeService, LocalizationService localizationService,
+        TodoSettingsViewModel todoSettings,
+        DeskBox.Features.Weather.WeatherSettingsViewModel weatherSettings,
+        SearchSettingsViewModel searchSettings,
+        BackupSettingsViewModel backupSettings, BackupRestoreActions backupRestoreActions,
+            IQuickCaptureSettings quickCaptureSettings,
+            DeskBox.Features.QuickCapture.QuickCaptureSettingsViewModel quickCaptureSettingsEditor,
+            ISearchFeatureSettings searchFeatureSettings,
+        IBackupCommands backupCommands,
+        DeskBox.Features.Appearance.AppearanceSettingsViewModel appearanceSettings,
+        DeskBox.Features.Capsule.CapsuleSettingsViewModel capsuleSettings,
+        DeskBox.Features.Interaction.InteractionSettingsViewModel interactionSettings,
+        DeskBox.Features.FileDisplay.FileDisplaySettingsViewModel fileDisplaySettings,
+        DeskBox.Features.FileStack.FileStackSettingsViewModel fileStackSettings,
+        DeskBox.Features.GroupNavigation.GroupNavigationSettingsViewModel groupNavigationSettings,
+        DeskBox.Features.FeatureWidgets.FeatureWidgetsSettingsViewModel featureWidgetsSettings,
+        DeskBox.Features.Music.MusicSettingsViewModel musicSettings,
+        DeskBox.Features.ManagedStorage.ManagedStorageSettingsViewModel managedStorageSettings,
+        DeskBox.Features.Maintenance.MaintenanceSettingsViewModel maintenanceSettings,
+        DeskBox.Features.Performance.PerformanceSettingsViewModel performanceSettings)
     {
         var constructionStopwatch = Stopwatch.StartNew();
         long previousCheckpointMilliseconds = 0;
@@ -144,9 +209,31 @@ public sealed partial class SettingsWindow : Window
         }
 
         _settingsService = settingsService;
+        _backupCommands = backupCommands;
+        _searchSettingsViewModel = searchSettings;
+        _backupSettingsViewModel = backupSettings;
+        _backupRestoreActions = backupRestoreActions;
+        _musicSettingsViewModel = musicSettings;
+        _quickCaptureSettingsViewModel = quickCaptureSettingsEditor;
+        _todoSettingsViewModel = todoSettings;
+        _weatherSettingsViewModel = weatherSettings;
+        _interactionSettingsViewModel = interactionSettings;
+        _fileStackSettingsViewModel = fileStackSettings;
+        _featureWidgetsSettingsViewModel = featureWidgetsSettings;
+        _fileDisplaySettingsViewModel = fileDisplaySettings;
+        _managedStorageSettingsViewModel = managedStorageSettings;
+        _appearanceSettingsViewModel = appearanceSettings;
+        _capsuleSettingsViewModel = capsuleSettings;
+        _groupNavigationSettingsViewModel = groupNavigationSettings;
+        _performanceSettingsViewModel = performanceSettings;
         _themeService = themeService;
         _localizationService = localizationService;
-        ViewModel = new SettingsViewModel(settingsService, themeService, localizationService, App.Current.AppUpdateService);
+        ViewModel = new SettingsViewModel(settingsService, themeService, todoSettings, weatherSettings,
+            backupSettings, quickCaptureSettings, quickCaptureSettingsEditor, searchFeatureSettings, appearanceSettings,
+            capsuleSettings, interactionSettings, fileDisplaySettings, fileStackSettings,
+            groupNavigationSettings, featureWidgetsSettings, musicSettings,
+            managedStorageSettings, maintenanceSettings, performanceSettings, localizationService,
+            App.Current.AppUpdateService);
         LogConstructionCheckpoint("view-model");
         _settingsRootPointerPressedHandler = SettingsRoot_PointerPressedHandled;
         _settingsRootPointerReleasedHandler = SettingsRoot_PointerReleasedHandled;
@@ -160,6 +247,15 @@ public sealed partial class SettingsWindow : Window
         LogConstructionCheckpoint("section-registry");
 
         SettingsRoot.DataContext = ViewModel;
+        // The General section stays on the shell (language and startup are
+        // host-lifeline surfaces, batch 50 adjudication), but its two
+        // cross-domain combos reach their section editors through
+        // element-level DataContexts: the inline performance preset combo
+        // and the attachment-storage combo resolve their {Binding} paths
+        // against the performance / feature-widgets editors exactly like
+        // the migrated sections do.
+        PerformanceModeInlineComboBox.DataContext = _performanceSettingsViewModel;
+        AttachmentStorageModeComboBox.DataContext = _featureWidgetsSettingsViewModel;
         Bindings.Initialize();
         SettingsRoot.AddHandler(
             UIElement.PointerPressedEvent,
@@ -239,6 +335,8 @@ public sealed partial class SettingsWindow : Window
         // frozen on a stale theme.
         _themeService.ApplyToWindow(this);
         _appWindow.Show();
+        UpdateSearchSettingsActivity();
+        UpdateBackupSettingsActivity();
         // Route through the manager so a quick-reveal raised session (widget
         // group held topmost) lifts this window above the widgets instead of
         // leaving it in the normal band below them. Outside a session this is
@@ -325,6 +423,8 @@ public sealed partial class SettingsWindow : Window
 
         args.Cancel = true;
         _appWindow.Hide();
+        UpdateSearchSettingsActivity();
+        UpdateBackupSettingsActivity();
         App.Current.WidgetManager?.ReleaseRaisedBandGuest(
             _hWnd,
             "settings-hidden");
@@ -342,6 +442,9 @@ public sealed partial class SettingsWindow : Window
         }
 
         _isClosed = true;
+        UpdateSearchSettingsActivity();
+        _searchSettingsViewModel.Dispose();
+        _backupSettingsViewModel.Deactivate();
         Activated -= SettingsWindow_Activated;
         _appWindow.Closing -= SettingsWindow_AppWindowClosing;
         Closed -= SettingsWindow_Closed;
@@ -350,7 +453,8 @@ public sealed partial class SettingsWindow : Window
         SettingsRoot.ActualThemeChanged -= SettingsRoot_ActualThemeChanged;
         SettingsRoot.RemoveHandler(UIElement.PointerPressedEvent, _settingsRootPointerPressedHandler);
         SettingsRoot.RemoveHandler(UIElement.PointerReleasedEvent, _settingsRootPointerReleasedHandler);
-        App.Current.CloudBackupService.BackupRunCompleted -= OnCloudBackupRunCompleted;
+        if (_cloudBackupCollectionChanged is not null)
+            _backupSettingsViewModel.RemoteSnapshotItems.CollectionChanged -= _cloudBackupCollectionChanged;
 
         _resizeSettleTimer.Stop();
         _resizeSettleTimer.Tick -= ResizeSettleTimer_Tick;
@@ -378,7 +482,9 @@ public sealed partial class SettingsWindow : Window
 
         if (AppearanceDetailSection is not null)
         {
-            AppearanceDetailSection.ViewModel = null;
+            AppearanceDetailSection.FileStack = null;
+            AppearanceDetailSection.FeatureWidgets = null;
+            AppearanceDetailSection.Interaction = null;
         }
         if (CapsuleModeSection is not null)
         {

@@ -754,6 +754,85 @@ public abstract partial class WidgetWindowBase
         RestoreDesktopLayer();
     }
 
+    // ── Chained flyout handoff ───────────────────────────────
+
+    /// <summary>
+    /// Holds the compact and widget-manager interaction leases across a
+    /// chained flyout transition, where one flyout closes and a successor
+    /// opens on a later dispatcher turn (for example a context menu handing
+    /// off to the foreground color picker). The lease intentionally does not
+    /// elevate; the successor flyout's own show path owns Z-order.
+    /// </summary>
+    protected IDisposable AcquireFlyoutHandoff(string reason)
+    {
+        BeginCompactInteraction();
+        WidgetManager? widgetManager = App.Current.WidgetManager;
+        widgetManager?.BeginWidgetInteraction(reason);
+        return new FlyoutInteractionHandoff(this, widgetManager, reason);
+    }
+
+    protected void QueueInteractionGuardedShow(
+        IDisposable? interactionHandoff,
+        Func<Task> showAsync)
+    {
+        if (DispatcherQueue.TryEnqueue(async () =>
+        {
+            try
+            {
+                // The show delegate acquires its own interaction (see the
+                // window-level flyout show helpers) before this handoff is
+                // released, so a grouped Smart capsule cannot collapse
+                // between the two flyouts.
+                await showAsync();
+            }
+            catch (Exception ex)
+            {
+                App.Log($"{LogPrefix} Queued flyout failed: {ex}");
+            }
+            finally
+            {
+                interactionHandoff?.Dispose();
+            }
+        }))
+        {
+            return;
+        }
+
+        interactionHandoff?.Dispose();
+    }
+
+    private sealed class FlyoutInteractionHandoff : IDisposable
+    {
+        private WidgetWindowBase? _owner;
+        private WidgetManager? _widgetManager;
+        private readonly string _reason;
+
+        public FlyoutInteractionHandoff(
+            WidgetWindowBase owner,
+            WidgetManager? widgetManager,
+            string reason)
+        {
+            _owner = owner;
+            _widgetManager = widgetManager;
+            _reason = reason;
+        }
+
+        public void Dispose()
+        {
+            WidgetWindowBase? owner = Interlocked.Exchange(ref _owner, null);
+            WidgetManager? widgetManager = Interlocked.Exchange(
+                ref _widgetManager,
+                null);
+            if (owner is null)
+            {
+                return;
+            }
+
+            owner.EndCompactInteraction();
+            widgetManager?.EndWidgetInteraction($"{_reason}-completed");
+        }
+    }
+
     // ── Tray animation helpers ─────────────────────────────────
 
     protected WidgetTrayAnimationProfile GetTrayAnimationProfile()

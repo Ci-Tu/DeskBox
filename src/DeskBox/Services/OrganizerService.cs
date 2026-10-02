@@ -24,7 +24,10 @@ public sealed class OrganizerService
             settingsService,
             fileService,
             desktopPathProvider,
-            new DesktopAutoOrganizationSuppressionRegistry())
+            new DesktopAutoOrganizationSuppressionRegistry(
+                ledgerPath: Path.Combine(
+                    DeskBoxDataPathService.Current.DataDirectory,
+                    "desktop-organization-suppressions.json")))
     {
     }
 

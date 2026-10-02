@@ -2606,13 +2606,25 @@ public static partial class Win32Helper
                 ExplorerShellLaunchBackendMode.Rust
                 ? "rust"
                 : "csharp";
-        if (ExplorerShellLaunchService.TryOpen(
+        if (ExplorerLaunchCircuitBreaker.ShouldBypassExplorerHostedLaunch())
+        {
+            // #455: RPC-class failures mean the Explorer desktop thread is
+            // unhealthy, and every further explorer-hosted open re-pays the
+            // same synchronous cross-process COM storm. Stay on the local
+            // path until the breaker sees a restarted shell.
+            App.Log(
+                "[OpenFile] Explorer-hosted launch bypassed (circuit open, explorer restarted or RPC failures) " +
+                $"path='{path}'");
+        }
+        else if (ExplorerShellLaunchService.TryOpen(
                 path,
                 directory,
                 "open",
                 out string? explorerLaunchError,
-                out ExplorerShellLaunchNativeCallResult? explorerLaunchResult))
+                out ExplorerShellLaunchNativeCallResult? explorerLaunchResult,
+                out int explorerLaunchHResult))
         {
+            ExplorerLaunchCircuitBreaker.RecordSuccess();
             App.Log(
                 $"[OpenFile] backend=explorer-hosted implementation={explorerBackend} " +
                 $"path='{path}'" +
@@ -2622,11 +2634,14 @@ public static partial class Win32Helper
                     : string.Empty));
             return true;
         }
-
-        App.Log(
-            $"[OpenFile] Explorer-hosted launch unavailable for '{path}': " +
-            $"implementation={explorerBackend} " +
-            $"{explorerLaunchError ?? "unknown error"}. Falling back to local ShellExecuteEx.");
+        else
+        {
+            ExplorerLaunchCircuitBreaker.RecordFailure(explorerLaunchHResult);
+            App.Log(
+                $"[OpenFile] Explorer-hosted launch unavailable for '{path}': " +
+                $"implementation={explorerBackend} " +
+                $"{explorerLaunchError ?? "unknown error"}. Falling back to local ShellExecuteEx.");
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -2636,48 +2651,14 @@ public static partial class Win32Helper
             WorkingDirectory = directory
         };
 
-        // ELECTRON_RUN_AS_NODE=1 makes any Electron-based default handler (MarkText,
-        // VS Code, Obsidian, ...) run as a plain Node.js process and crash trying to
-        // execute the target file as a script. Explorer doesn't carry this variable, so
-        // double-clicking there works; a process launched from developer tooling that
-        // sets it (e.g., an Electron-based host shell) would otherwise break opening
-        // such files. UseShellExecute=true cannot set a custom env block, so temporarily
-        // clear it from this process's environment around the launch and restore it
-        // afterwards, so the child behaves like it does from Explorer.
-        string? savedElectronRunAsNode = Environment.GetEnvironmentVariable("ELECTRON_RUN_AS_NODE");
-        if (savedElectronRunAsNode is not null)
-        {
-            Environment.SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", null);
-        }
-
-        // Observation only: never abort the call or release the caller's slot —
-        // native Shell calls cannot be safely aborted (BoundedStaOperationRunner
-        // relies on that invariant), and ShellExecuteEx may sit in legitimate
-        // modal UI (UAC, SmartScreen) for as long as the user takes. A pending
-        // marker after this threshold separates those opens from a wedged Shell
-        // (feedback #9: .lnk resolution never returned on a machine whose
-        // Explorer desktop window was missing from ShellWindows).
-        const int LocalShellExecutePendingLogSeconds = 15;
-        bool localLaunchCompleted = false;
-        _ = Task.Delay(TimeSpan.FromSeconds(LocalShellExecutePendingLogSeconds))
-            .ContinueWith(
-                _ =>
-                {
-                    // Volatile: the timer thread reads what the caller thread
-                    // writes; a stale read only costs a wrong pending log line.
-                    if (!Volatile.Read(ref localLaunchCompleted))
-                    {
-                        App.Log(
-                            $"[OpenFile] local ShellExecuteEx still pending for '{path}' after " +
-                            $"{LocalShellExecutePendingLogSeconds}s (system Shell may be unresponsive).");
-                    }
-                },
-                TaskScheduler.Default);
+        using IDisposable? electronRunAsNodeScope = SuppressElectronRunAsNodeForChildLaunch();
+        LocalShellExecuteCompletionMarker pendingLocalLaunch =
+            WatchPendingLocalShellExecute(path);
 
         try
         {
             Process.Start(startInfo);
-            Volatile.Write(ref localLaunchCompleted, true);
+            pendingLocalLaunch.MarkCompleted();
             App.Log(
                 $"[OpenFile] backend=local-shell-execute path='{path}'");
             return true;
@@ -2707,12 +2688,132 @@ public static partial class Win32Helper
             App.Log($"[OpenFile] Failed to open '{path}': {ex.Message}");
             return false;
         }
-        finally
+    }
+
+    /// <summary>
+    /// Opens <paramref name="path"/> locally with the Shell's default verb — the
+    /// dispatch a desktop double-click performs — instead of the explicit "open"
+    /// verb, and without delegating to the Explorer desktop process. Folder
+    /// shortcuts need this (#459): third-party file managers register as the
+    /// Folder default handler, and an explicit "open" verb never reaches that
+    /// registration. Shares the local-launch pipeline (environment scrub,
+    /// pending observation) with the fallback in
+    /// <see cref="OpenFileOrChooseApp(IntPtr, string)"/>.
+    /// </summary>
+    internal static bool OpenWithDefaultVerbLocally(string path, string workingDirectory)
+    {
+        var startInfo = new ProcessStartInfo
         {
-            if (savedElectronRunAsNode is not null)
-            {
-                Environment.SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", savedElectronRunAsNode);
-            }
+            FileName = path,
+            UseShellExecute = true,
+            WorkingDirectory = workingDirectory
+            // Deliberately no Verb: a NULL verb is the desktop double-click
+            // dispatch, which resolves the target's default handler.
+        };
+
+        using IDisposable? electronRunAsNodeScope = SuppressElectronRunAsNodeForChildLaunch();
+        LocalShellExecuteCompletionMarker pendingLocalLaunch =
+            WatchPendingLocalShellExecute(path);
+
+        try
+        {
+            Process.Start(startInfo);
+            pendingLocalLaunch.MarkCompleted();
+            App.Log(
+                $"[OpenFile] backend=local-default-verb path='{path}'");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[OpenFile] Failed to open '{path}' with the default verb: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// ELECTRON_RUN_AS_NODE=1 makes any Electron-based default handler (MarkText,
+    /// VS Code, Obsidian, ...) run as a plain Node.js process and crash trying to
+    /// execute the target file as a script. Explorer doesn't carry this variable, so
+    /// double-clicking there works; a process launched from developer tooling that
+    /// sets it (e.g., an Electron-based host shell) would otherwise break opening
+    /// such files. UseShellExecute=true cannot set a custom env block, so temporarily
+    /// clear it from this process's environment and restore it on disposal, so the
+    /// child behaves like it does from Explorer. Returns null when the variable is
+    /// not set.
+    /// </summary>
+    private static IDisposable? SuppressElectronRunAsNodeForChildLaunch()
+    {
+        string? savedElectronRunAsNode = Environment.GetEnvironmentVariable("ELECTRON_RUN_AS_NODE");
+        if (savedElectronRunAsNode is null)
+        {
+            return null;
+        }
+
+        Environment.SetEnvironmentVariable("ELECTRON_RUN_AS_NODE", null);
+        return new EnvironmentVariableRestoreScope("ELECTRON_RUN_AS_NODE", savedElectronRunAsNode);
+    }
+
+    private sealed class EnvironmentVariableRestoreScope : IDisposable
+    {
+        private readonly string _name;
+        private readonly string? _value;
+
+        internal EnvironmentVariableRestoreScope(string name, string? value)
+        {
+            _name = name;
+            _value = value;
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable(_name, _value);
+        }
+    }
+
+    private const int LocalShellExecutePendingLogSeconds = 15;
+
+    /// <summary>
+    /// Starts the one-shot pending marker shared by every local ShellExecuteEx
+    /// launch.
+    /// </summary>
+    private static LocalShellExecuteCompletionMarker WatchPendingLocalShellExecute(string path)
+    {
+        // Observation only: never abort the call or release the caller's slot —
+        // native Shell calls cannot be safely aborted (BoundedStaOperationRunner
+        // relies on that invariant), and ShellExecuteEx may sit in legitimate
+        // modal UI (UAC, SmartScreen) for as long as the user takes. A pending
+        // marker after this threshold separates those opens from a wedged Shell
+        // (feedback #9: .lnk resolution never returned on a machine whose
+        // Explorer desktop window was missing from ShellWindows).
+        var marker = new LocalShellExecuteCompletionMarker();
+        _ = Task.Delay(TimeSpan.FromSeconds(LocalShellExecutePendingLogSeconds))
+            .ContinueWith(
+                _ =>
+                {
+                    if (marker.Completed)
+                    {
+                        return;
+                    }
+
+                    App.Log(
+                        $"[OpenFile] local ShellExecuteEx still pending for '{path}' after " +
+                        $"{LocalShellExecutePendingLogSeconds}s (system Shell may be unresponsive).");
+                },
+                TaskScheduler.Default);
+        return marker;
+    }
+
+    private sealed class LocalShellExecuteCompletionMarker
+    {
+        // Volatile: the timer thread reads what the caller thread writes;
+        // a stale read only costs a wrong pending log line.
+        private volatile bool _completed;
+
+        internal bool Completed => _completed;
+
+        internal void MarkCompleted()
+        {
+            _completed = true;
         }
     }
 

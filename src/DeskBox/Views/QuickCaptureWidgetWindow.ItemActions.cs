@@ -78,7 +78,9 @@ public sealed partial class QuickCaptureWidgetWindow
                 return;
             }
 
-            e.Data.RequestedOperation = DataPackageOperation.Copy | DataPackageOperation.Move;
+            // Copy-only export: a multi-effect offer prompts Win10's picker
+            // and a Move answer would strip the attachment from storage.
+            e.Data.RequestedOperation = DataPackageOperation.Copy;
         }
         catch (Exception ex)
         {
@@ -117,7 +119,9 @@ public sealed partial class QuickCaptureWidgetWindow
         }
 
         e.Handled = true;
-        e.AcceptedOperation = DataPackageOperation.Move;
+        e.AcceptedOperation =
+            DeskBoxDragData.ResolveInternalMetadataOperation(
+                e.AllowedOperations);
         e.DragUIOverride.IsGlyphVisible = true;
         e.DragUIOverride.Caption = target == QuickCaptureViewMode.Pinned
             ? _localizationService.T("QuickCapture.DropTab.Pin")
@@ -287,7 +291,9 @@ public sealed partial class QuickCaptureWidgetWindow
 
             bool insertAfter = e.GetPosition(itemRoot).Y >= itemRoot.ActualHeight / 2;
             e.Handled = true;
-            e.AcceptedOperation = DataPackageOperation.Move;
+            e.AcceptedOperation =
+                DeskBoxDragData.ResolveInternalMetadataOperation(
+                    e.AllowedOperations);
             e.DragUIOverride.IsGlyphVisible = true;
             SetItemHoverState(itemRoot, true);
             SetItemReorderDropState(itemRoot, active: true, insertAfter);
@@ -301,7 +307,9 @@ public sealed partial class QuickCaptureWidgetWindow
 
         e.Handled = true;
         e.AcceptedOperation =
-            DeskBoxDragData.GetFileAssociationOperation(e.DataView);
+            DeskBoxDragData.GetFileAssociationOperation(
+                e.DataView,
+                e.AllowedOperations);
         e.DragUIOverride.IsGlyphVisible = true;
         SetItemHoverState(sender as DependencyObject, true);
     }
