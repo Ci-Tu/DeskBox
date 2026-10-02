@@ -113,6 +113,16 @@ public sealed partial class SearchPopupWindow : Window
     private bool _dragOccurred;
     private bool _restoreResultFocusAfterFlyout;
 
+    // Auto-hide on deactivation: when the user clicks another window, the
+    // hotkey-summoned popup hides itself instead of lingering in the background
+    // (an accidental hotkey hit is the common case). Suppressed while a
+    // QuickLook preview is being toggled — the external QuickLook window steals
+    // activation — and while an icon drag is in flight, since dropping onto
+    // another app moves activation away mid-gesture.
+    private DateTime _suppressAutoHideUntilUtc;
+    private bool _isDragInFlight;
+    private static readonly TimeSpan QuickLookAutoHideSuppression = TimeSpan.FromSeconds(3);
+
     // Multi-selection state: tracks all items selected via rubber-band or Ctrl+click.
     // When non-empty, batch operations (copy/cut/delete) act on these items.
     private readonly HashSet<SearchResultItem> _multiSelectedItems = new();
@@ -268,8 +278,9 @@ public sealed partial class SearchPopupWindow : Window
         PopupShown?.Invoke(this, EventArgs.Empty);
 
         // Bring the popup above all windows (including desktop-level widgets) at the
-        // moment it is invoked, but do NOT keep it always-on-top. After this, normal
-        // z-order rules apply: clicking another window will cover the popup.
+        // moment it is invoked, but do NOT keep it always-on-top. Activating
+        // another window hides the popup (see HidePopupOnDeactivation) instead of
+        // merely covering it.
         // During a quick-reveal raised session the widget group is held topmost,
         // so the manager routes this through the raised band instead of the
         // normal-band pulse, which would land the popup below the widgets.
@@ -560,10 +571,42 @@ public sealed partial class SearchPopupWindow : Window
                 args.WindowActivationState != WindowActivationState.Deactivated;
         }
 
-        if (args.WindowActivationState != WindowActivationState.Deactivated)
+        if (args.WindowActivationState == WindowActivationState.Deactivated)
+        {
+            HidePopupOnDeactivation();
+        }
+        else
         {
             UpdateSelectionActions();
         }
+    }
+
+    /// <summary>
+    /// Hides the popup when the user activates another window. A
+    /// hotkey-summoned search box is dismissed by clicking away (often the
+    /// hotkey was hit by accident), so it must not linger behind other
+    /// windows until ESC or the close button is pressed.
+    /// </summary>
+    private void HidePopupOnDeactivation()
+    {
+        if (!IsPopupVisible)
+        {
+            return;
+        }
+
+        // The external QuickLook preview window steals activation when toggled.
+        if (DateTime.UtcNow < _suppressAutoHideUntilUtc)
+        {
+            return;
+        }
+
+        // An icon drag to another app moves activation away mid-gesture.
+        if (_isDragInFlight)
+        {
+            return;
+        }
+
+        HidePopup();
     }
 
     // Borderless drag and resize gestures.
@@ -2842,12 +2885,16 @@ public sealed partial class SearchPopupWindow : Window
         };
         dragSource.DragStarting += handler;
 
+        // Dropping onto another app moves window activation away mid-gesture;
+        // the popup must stay alive until the drag completes.
+        _isDragInFlight = true;
         try
         {
             await dragSource.StartDragAsync(e.GetCurrentPoint(dragSource));
         }
         finally
         {
+            _isDragInFlight = false;
             dragSource.DragStarting -= handler;
             _dragCandidate = null;
             _dragSourceRow = null;
@@ -4080,8 +4127,15 @@ public sealed partial class SearchPopupWindow : Window
             return;
         }
 
+        // Toggling QuickLook opens its external preview window, which steals
+        // window activation. Suppress the deactivate-to-hide behavior briefly so
+        // previewing an item does not dismiss the popup.
         bool shown = await _quickLookService.TryToggleAsync(item.DetailPath);
-        if (!shown)
+        if (shown)
+        {
+            _suppressAutoHideUntilUtc = DateTime.UtcNow + QuickLookAutoHideSuppression;
+        }
+        else
         {
             App.Log($"[SearchPopup] QuickLook preview unavailable for '{item.DetailPath}'.");
         }
