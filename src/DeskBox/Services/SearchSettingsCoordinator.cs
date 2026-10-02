@@ -223,6 +223,17 @@ public sealed class SearchSettingsCoordinator : ISearchSettings, ISearchFeatureS
         return applied ? new(true) : FailedHotkey(error);
     }
 
+    public bool IsDoubleControlActive => _settings.Settings.SearchHotkeyUseDoubleControl;
+
+    public SearchHotkeyUpdateResult ApplyDoubleControl()
+    {
+        ISearchHotkeyController? hotkey = GetHotkeyForUserAction();
+        if (hotkey is null) return UnavailableHotkey();
+        bool applied = hotkey.TryApplyDoubleControl(out string? error);
+        StateChanged?.Invoke();
+        return applied ? new(true) : FailedHotkey(error);
+    }
+
     private SearchHotkeyUpdateResult UnavailableHotkey() =>
         new(false, _localization.T("Settings.Search.Hotkey.Status.Disabled"));
 

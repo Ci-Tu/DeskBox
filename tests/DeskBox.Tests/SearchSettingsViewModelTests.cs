@@ -170,6 +170,9 @@ public sealed class SearchSettingsViewModelTests
         public void UpdatePreferences(SearchPreferenceChange change) => Writes++;
         public SearchHotkeyUpdateResult SetHotkeyEnabled(bool enabled) { Writes++; return HotkeyResult; }
         public SearchHotkeyUpdateResult ApplyHotkey(GlobalHotkeyGesture gesture) { Writes++; LastGesture = gesture; return HotkeyResult; }
+        public SearchHotkeyUpdateResult ApplyDoubleControl() { Writes++; DoubleControlApplied = true; return HotkeyResult; }
+        public bool DoubleControlApplied { get; private set; }
+        public bool IsDoubleControlActive { get; set; }
         public async Task<EverythingConnectionSnapshot> RefreshConnectionAsync(CancellationToken cancellationToken)
         {
             LastToken = cancellationToken;

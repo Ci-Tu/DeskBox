@@ -383,7 +383,7 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
             SearchHotkeyCaptureButton.Content = hotkey.DisplayText;
         }
 
-        bool useDoubleControl = App.Current.SettingsService.Settings.SearchHotkeyUseDoubleControl;
+        bool useDoubleControl = _viewModel is not null && _viewModel.IsDoubleControlActive;
         SearchHotkeyPresetAltSpaceButton.IsChecked =
             !useDoubleControl &&
             hotkey.Gesture.Equals(SearchSettingsViewModel.AltSpaceGesture);
@@ -450,7 +450,7 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
 
         if (preset == "DoubleControl")
         {
-            await ApplySearchHotkeyDoubleControlAsync();
+            ApplySearchHotkeyDoubleControl();
             return;
         }
 
@@ -460,35 +460,23 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
         }
     }
 
-    private async Task ApplySearchHotkeyDoubleControlAsync()
+    private void ApplySearchHotkeyDoubleControl()
     {
         if (_viewModel is null)
         {
             return;
         }
 
-        if (App.Current.SearchHotkeyService is not { } service)
+        // The viewModel owns the hotkey runtime contract: enabling the
+        // double-Ctrl preset goes through ISearchSettings, which flips the
+        // persisted flag and engages the reserved low-level hook.
+        if (_viewModel.IsDoubleControlActive)
         {
             RefreshSearchHotkeyControls();
             return;
         }
 
-        if (App.Current.SettingsService.Settings.SearchHotkeyUseDoubleControl)
-        {
-            RefreshSearchHotkeyControls();
-            return;
-        }
-
-        if (!service.TryApplyDoubleControl(out string? error))
-        {
-            SearchHotkeyStatusText.Text = error ??
-                Localization.T("Settings.Search.Hotkey.Status.Failed");
-            _viewModel.RefreshState();
-            RefreshSearchHotkeyControls();
-            return;
-        }
-
-        _viewModel.RefreshState();
+        _viewModel.ApplyDoubleControl();
         RefreshSearchHotkeyControls();
     }
 
@@ -546,7 +534,8 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
 
     private void ResetSearchHotkeyButton_Click(object sender, RoutedEventArgs e)
     {
-        App.Current.SettingsService.Settings.SearchHotkeyUseDoubleControl = false;
+        // ResetHotkey applies the default chord through ISearchSettings, which
+        // also clears the double-Ctrl flag as part of applying a chord.
         _viewModel?.ResetHotkey();
         RefreshSearchHotkeyControls();
     }

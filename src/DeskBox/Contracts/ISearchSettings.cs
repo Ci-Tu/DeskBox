@@ -54,6 +54,14 @@ public interface ISearchSettings
     void UpdatePreferences(SearchPreferenceChange change);
     SearchHotkeyUpdateResult SetHotkeyEnabled(bool enabled);
     SearchHotkeyUpdateResult ApplyHotkey(GlobalHotkeyGesture gesture);
+    /// <summary>
+    /// Enables the double-Ctrl preset, which rides the reserved low-level
+    /// hook instead of a chord. Returns the outcome; the caller surfaces any
+    /// error through <see cref="SearchSettingsSnapshot"/>.
+    /// </summary>
+    SearchHotkeyUpdateResult ApplyDoubleControl();
+    /// <summary>Whether the double-Ctrl preset is currently engaged.</summary>
+    bool IsDoubleControlActive { get; }
     Task<EverythingConnectionSnapshot> RefreshConnectionAsync(CancellationToken cancellationToken);
     Task<EverythingConnectionSnapshot> DetectAutomaticallyAsync(CancellationToken cancellationToken);
     Task<bool> SelectExecutableAsync(string path, CancellationToken cancellationToken);
@@ -87,4 +95,9 @@ public interface ISearchHotkeyController
     GlobalHotkeyGesture CurrentGesture { get; }
     void SetEnabled(bool enabled);
     bool TryApplyGesture(GlobalHotkeyGesture gesture, out string? error);
+    /// <summary>
+    /// Engages the reserved double-Ctrl hook, keeping the current chord as
+    /// the fallback gesture.
+    /// </summary>
+    bool TryApplyDoubleControl(out string? error);
 }

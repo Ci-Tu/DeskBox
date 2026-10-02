@@ -245,12 +245,27 @@ public sealed class SearchHotkeyService : IDisposable, IHookHealthProbeTarget, I
         return TryApplyGesture(gesture, useDoubleControl: false, out error);
     }
 
+    /// <summary>
+    /// Engages the double-Ctrl preset, which rides the reserved low-level
+    /// hook. The persisted flag is what <see cref="RefreshRegistration"/>
+    /// reads to choose the hook path, so it must be set (and saved) before
+    /// re-running registration; the current chord stays as the fallback
+    /// gesture.
+    /// </summary>
     public bool TryApplyDoubleControl(out string? error)
     {
-        return TryApplyGesture(
+        if (!TryApplyGesture(
             CurrentGesture,
             useDoubleControl: true,
-            out error);
+            out error))
+        {
+            return false;
+        }
+
+        _settingsService.Settings.SearchHotkeyUseDoubleControl = true;
+        _settingsService.SaveDebounced();
+        RefreshRegistration();
+        return IsRegistered;
     }
 
     public bool TryApplyGesture(GlobalHotkeyGesture gesture, bool useDoubleControl, out string? error)

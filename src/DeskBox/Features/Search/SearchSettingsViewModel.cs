@@ -99,6 +99,8 @@ public sealed class SearchSettingsViewModel : ObservableObject, IDisposable
     public void SetHotkeyEnabled(bool enabled) => ApplyHotkeyChange(() => _settings.SetHotkeyEnabled(enabled));
     public void ApplyHotkey(GlobalHotkeyGesture gesture) => ApplyHotkeyChange(() => _settings.ApplyHotkey(gesture));
     public void ResetHotkey() => ApplyHotkey(DefaultGesture);
+    public bool IsDoubleControlActive => _settings.IsDoubleControlActive;
+    public void ApplyDoubleControl() => ApplyHotkeyChange(() => _settings.ApplyDoubleControl());
 
     private void ApplyHotkeyChange(Func<SearchHotkeyUpdateResult> action)
     {

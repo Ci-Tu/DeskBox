@@ -318,5 +318,12 @@ public sealed class SearchSettingsCoordinatorTests : IAsyncLifetime
             settings.Settings.Search.SearchHotkeyKey = gesture.VirtualKey;
             return true;
         }
+        public bool TryApplyDoubleControl(out string? error)
+        {
+            error = RejectGesture ? "already-owned" : null;
+            if (RejectGesture) return false;
+            settings.Settings.SearchHotkeyUseDoubleControl = true;
+            return true;
+        }
     }
 }
