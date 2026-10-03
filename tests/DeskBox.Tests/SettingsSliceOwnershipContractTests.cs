@@ -39,7 +39,7 @@ public sealed class SettingsSliceOwnershipContractTests
     [Fact]
     public void EveryFacadeProperty_MapsToExactlyOneSliceProperty()
     {
-        Assert.Equal(226, FacadeProperties.Length);
+        Assert.Equal(233, FacadeProperties.Length);
 
         foreach (PropertyInfo facade in FacadeProperties)
         {
@@ -162,6 +162,8 @@ public sealed class SettingsSliceOwnershipContractTests
             return 17;
         if (type == typeof(double))
             return 0.137;
+        if (type == typeof(double?))
+            return 0.137;
         if (type == typeof(long))
             return 638000000000000000L;
         if (type == typeof(DateTimeOffset?))
@@ -269,12 +271,12 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/Services/SearchHotkeyService.cs"] = 12,
         ["src/DeskBox/Services/SearchResultActionService.cs"] = 2,
         ["src/DeskBox/Services/SettingsMigrationService.cs"] = 35,
-        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 22,
-        ["src/DeskBox/Services/SettingsService.cs"] = 603,
+        ["src/DeskBox/Services/SettingsSearchCatalog.cs"] = 23,
+        ["src/DeskBox/Services/SettingsService.cs"] = 607,
         ["src/DeskBox/Services/ThemeService.cs"] = 11,
         ["src/DeskBox/Services/TodoReminderService.cs"] = 8,
         ["src/DeskBox/Services/WeatherService.cs"] = 1,
-        ["src/DeskBox/Services/WeatherSettingsPolicy.cs"] = 17,
+        ["src/DeskBox/Services/WeatherSettingsPolicy.cs"] = 18,
         ["src/DeskBox/Services/WidgetAnimationSettings.cs"] = 4,
         ["src/DeskBox/Services/WidgetChromeMenuBuilder.cs"] = 5,
         ["src/DeskBox/Services/WidgetChromeModeResolver.cs"] = 2,
@@ -358,7 +360,7 @@ public sealed class SettingsSliceOwnershipContractTests
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.cs"] = 12,
         ["src/DeskBox/ViewModels/WeatherWidgetViewModel.DataProcessing.cs"] = 21,
         ["src/DeskBox/ViewModels/WeatherWidgetViewModel.RefreshAndLayout.cs"] = 1,
-        ["src/DeskBox/ViewModels/WeatherWidgetViewModel.cs"] = 22,
+        ["src/DeskBox/ViewModels/WeatherWidgetViewModel.cs"] = 24,
         ["src/DeskBox/ViewModels/WidgetViewModel.ItemHydration.cs"] = 3,
         ["src/DeskBox/ViewModels/WidgetViewModel.LayoutAndSettings.cs"] = 17,
         ["src/DeskBox/ViewModels/WidgetViewModel.Operations.cs"] = 2,

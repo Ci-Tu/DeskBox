@@ -111,6 +111,19 @@
                 TextAlignment="Center"
                 TextTrimming="CharacterEllipsis"
                 Visibility="Collapsed" />
+            <Image
+                x:Name="CustomImage"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Stretch="Uniform"
+                Visibility="Collapsed" />
+            <TextBlock
+                x:Name="CustomEmojiElement"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontFamily="Segoe UI Emoji"
+                TextAlignment="Center"
+                Visibility="Collapsed" />
         </Grid>
     </Border>
 </UserControl>

@@ -4,8 +4,7 @@ using DeskBox.Services;
 using DeskBox.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
+using Microsoft.Windows.Storage.Pickers;
 
 namespace DeskBox.Views;
 
@@ -186,16 +185,13 @@ public sealed partial class SettingsWindow
             return;
         }
 
-        Windows.Storage.StorageFile? backupFile;
+        string? backupPath;
         try
         {
-            var picker = new FileOpenPicker
-            {
-                SuggestedStartLocation = PickerLocationId.DocumentsLibrary
-            };
-            picker.FileTypeFilter.Add(".zip");
-            InitializeWithWindow.Initialize(picker, _hWnd);
-            backupFile = await picker.PickSingleFileAsync();
+            backupPath = await FileOpenPickerService.PickSingleFileAsync(
+                _hWnd,
+                [".zip"],
+                PickerLocationId.DocumentsLibrary);
         }
         catch (Exception ex)
         {
@@ -206,12 +202,12 @@ public sealed partial class SettingsWindow
             return;
         }
 
-        if (backupFile is null || string.IsNullOrWhiteSpace(backupFile.Path))
+        if (string.IsNullOrWhiteSpace(backupPath))
         {
             return;
         }
 
-        await RestoreDataBackupFromPathAsync(backupFile.Path);
+        await RestoreDataBackupFromPathAsync(backupPath);
     }
 
     private async Task RestoreDataBackupFromPathAsync(string archivePath)

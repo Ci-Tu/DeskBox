@@ -19,7 +19,7 @@ public sealed class OrganizerServiceTests : IDisposable
 
         _settingsService = new SettingsService(Path.Combine(_tempRoot, "settings"));
         _fileService = new FileService();
-        _organizerService = new OrganizerService(_settingsService, _fileService, () => _desktopRoot);
+        _organizerService = TestOrganizerServices.Create(_settingsService, _fileService, () => _desktopRoot);
     }
 
     [Fact]

@@ -50,11 +50,50 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="GridViewItem">
-                        <ContentPresenter
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <Grid>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="1" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="PointerFocused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="1" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="0" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="0" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <Border
+                                x:Name="FocusVisualBorder"
+                                BorderBrush="{ThemeResource FocusStrokeColorOuterBrush}"
+                                BorderThickness="2"
+                                CornerRadius="2"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <Border
+                                x:Name="FocusVisualInnerBorder"
+                                Margin="2"
+                                BorderBrush="{ThemeResource FocusStrokeColorInnerBrush}"
+                                BorderThickness="1"
+                                CornerRadius="1"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -74,11 +113,50 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListViewItem">
-                        <ContentPresenter
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        <Grid>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="1" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="PointerFocused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="1" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="1" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused">
+                                        <VisualState.Setters>
+                                            <Setter Target="FocusVisualBorder.Opacity" Value="0" />
+                                            <Setter Target="FocusVisualInnerBorder.Opacity" Value="0" />
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <Border
+                                x:Name="FocusVisualBorder"
+                                BorderBrush="{ThemeResource FocusStrokeColorOuterBrush}"
+                                BorderThickness="2"
+                                CornerRadius="2"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                            <Border
+                                x:Name="FocusVisualInnerBorder"
+                                Margin="2"
+                                BorderBrush="{ThemeResource FocusStrokeColorInnerBrush}"
+                                BorderThickness="1"
+                                CornerRadius="1"
+                                IsHitTestVisible="False"
+                                Opacity="0" />
+                        </Grid>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -754,6 +832,15 @@
                     TextAlignment="Center"
                     TextWrapping="Wrap"
                     svc:Localized.Key="Widget.Empty.ActionsHint" />
+                <Button
+                    x:Name="EmptyAddButton"
+                    HorizontalAlignment="Center"
+                    Click="AddButton_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon FontSize="12" Glyph="&#xE710;" />
+                        <TextBlock x:Name="EmptyAddButtonText" />
+                    </StackPanel>
+                </Button>
                 <Button
                     x:Name="EmptyStateHelpButton"
                     Width="24"

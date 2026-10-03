@@ -101,17 +101,6 @@ public static class WidgetPositioningService
         return ResolveBoundsCore(config, fallbackWorkArea, GetAvailableMonitorWorkAreas());
     }
 
-    public static bool EnsureCurrentBoundsCoordinateVersion(
-        WidgetConfig config,
-        RectInt32 fallbackWorkArea,
-        IReadOnlyList<RectInt32> availableWorkAreas)
-    {
-        return EnsureCurrentBoundsCoordinateVersionCore(
-            config,
-            fallbackWorkArea,
-            availableWorkAreas.Select(workArea => new AvailableMonitorWorkArea(workArea, null, false)).ToList());
-    }
-
     public static bool EnsureCurrentBoundsCoordinateVersionForCurrentTopology(
         WidgetConfig config,
         RectInt32 fallbackWorkArea)
@@ -307,17 +296,6 @@ public static class WidgetPositioningService
                 string.IsNullOrWhiteSpace(area.DeviceName) ? null : area.DeviceName,
                 area.IsPrimary))
             .ToList();
-    }
-
-    public static RectInt32 SelectWorkArea(
-        WidgetConfig config,
-        RectInt32 fallbackWorkArea,
-        IReadOnlyList<RectInt32> availableWorkAreas)
-    {
-        return SelectWorkAreaCore(
-            config,
-            fallbackWorkArea,
-            availableWorkAreas.Select(workArea => new AvailableMonitorWorkArea(workArea, null, false)).ToList());
     }
 
     private static RectInt32 SelectWorkAreaCore(

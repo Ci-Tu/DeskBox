@@ -36,25 +36,6 @@ public static partial class Win32Helper
     [DllImport("winmm.dll", EntryPoint = "timeEndPeriod")]
     private static extern uint TimeEndPeriod(uint periodMilliseconds);
 
-    [LibraryImport("gdi32.dll", SetLastError = true)]
-    public static partial IntPtr CreateRoundRectRgn(
-        int left,
-        int top,
-        int right,
-        int bottom,
-        int ellipseWidth,
-        int ellipseHeight);
-
-    [LibraryImport("gdi32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool DeleteObject(IntPtr objectHandle);
-
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial int SetWindowRgn(
-        IntPtr hWnd,
-        IntPtr region,
-        [MarshalAs(UnmanagedType.Bool)] bool redraw);
-
     /// <summary>
     /// Requests the DirectComposition compositor clock to run at its active
     /// cadence while a short interactive animation is in progress. This is a
@@ -293,18 +274,12 @@ public static partial class Win32Helper
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetParent(IntPtr hWnd);
 
-    [LibraryImport("user32.dll", SetLastError = true)]
-    public static partial IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
-
     [LibraryImport("user32.dll")]
     public static partial IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool IsWindow(IntPtr hWnd);
-
-    [LibraryImport("user32.dll", EntryPoint = "FindWindowW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    public static partial IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
     [LibraryImport("user32.dll", EntryPoint = "FindWindowExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     public static partial IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string? lpszClass, string? lpszWindow);
@@ -606,79 +581,19 @@ public static partial class Win32Helper
     public static ushort GetRegisteredClipboardFormat(string format) =>
         (ushort)RegisterClipboardFormatW(format);
 
-    /// <summary>
-    /// True while the current thread is servicing a COM call that originated
-    /// in another process (CoGetCallerTID: S_OK = same-process caller,
-    /// S_FALSE = different-process caller). Not a security boundary: the OS
-    /// documents that the returned information can be spoofed and must never
-    /// drive security decisions — this is fit for UX-level filtering and
-    /// diagnostics only. Behavior when no COM call is in flight is pinned by
-    /// CoGetCallerTidProbeTests.
-    /// </summary>
-    public static bool IsComCallerOutOfProcess() =>
-        CoGetCallerTID(out _) == S_FALSE;
-
-    private const int S_FALSE = 1;
-
     [LibraryImport("user32.dll", EntryPoint = "RegisterClipboardFormatW",
         StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint RegisterClipboardFormatW(string format);
 
-    [LibraryImport("ole32.dll")]
-    private static partial int CoGetCallerTID(out uint threadId);
-
-    /// <summary>
-    /// Runs the OLE drag loop on the calling STA thread. Synchronous: it does
-    /// not return until the user drops, cancels, or the drop source ends the
-    /// operation. The returned HRESULT is DRAGDROP_S_DROP/DRAGDROP_S_CANCEL
-    /// on normal endings (both non-negative), and finalEffect carries the
-    /// target's chosen effect.
-    /// </summary>
-    public static unsafe int RunOleDragDrop(
-        nint dataObject,
-        nint dropSource,
-        uint allowedEffects,
-        out uint finalEffect) =>
-        DoDragDrop(dataObject, dropSource, allowedEffects, out finalEffect);
-
     /// <summary>
     /// Initializes COM with OLE support on the current thread (drag-and-drop
     /// requires the OLE apartment, not plain CoInitialize). Returns the
-    /// HRESULT; S_FALSE means already initialized (still balanced by
-    /// OleUninitialize).
+    /// HRESULT; S_FALSE means already initialized.
     /// </summary>
     public static int InitializeOleOnCurrentThread() => OleInitialize(0);
 
-    /// <summary>
-    /// Releases the OLE apartment established by
-    /// <see cref="InitializeOleOnCurrentThread"/> on the current thread.
-    /// </summary>
-    public static void UninitializeOleOnCurrentThread() => OleUninitialize();
-
     [LibraryImport("ole32.dll")]
     private static partial int OleInitialize(nint reserved);
-
-    [LibraryImport("ole32.dll")]
-    private static partial void OleUninitialize();
-
-    /// <summary>
-    /// Releases the mouse capture held by any window on the calling thread.
-    /// Used before starting a native drag loop: a cancelled WinUI drag
-    /// gesture keeps the XAML input island's capture, which starves
-    /// DoDragDrop's own capture and freezes the system-wide drag lock.
-    /// </summary>
-    public static bool TryReleaseMouseCapture() => ReleaseCapture();
-
-    [LibraryImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool ReleaseCapture();
-
-    [LibraryImport("ole32.dll", EntryPoint = "DoDragDrop")]
-    private static partial int DoDragDrop(
-        nint pDataObj,
-        nint pDropSource,
-        uint dwOKEffects,
-        out uint pdwEffect);
 
     /// <summary>
     /// Allocates movable global memory and copies <paramref name="data"/> into
@@ -716,62 +631,6 @@ public static partial class Win32Helper
     }
 
     /// <summary>
-    /// Frees global memory whose ownership did not transfer to a data object
-    /// (IDataObject::SetData rejected the medium).
-    /// </summary>
-    public static void FreeGlobalMemory(nint globalMemory)
-    {
-        if (globalMemory != 0)
-        {
-            GlobalFree(globalMemory);
-        }
-    }
-
-    /// <summary>
-    /// Reads a NUL-terminated UTF-16 string from global memory, bounded by
-    /// the allocation size so a malformed payload cannot run off the block.
-    /// </summary>
-    public static unsafe bool TryReadGlobalMemoryText(
-        nint globalMemory,
-        out string text)
-    {
-        text = string.Empty;
-        if (globalMemory == 0)
-        {
-            return false;
-        }
-
-        char* locked = (char*)GlobalLock(globalMemory);
-        if (locked == null)
-        {
-            return false;
-        }
-
-        try
-        {
-            nuint bytes = GlobalSize(globalMemory);
-            int maxChars = (int)Math.Min(bytes / 2, 8192);
-            int length = 0;
-            while (length < maxChars && locked[length] != '\0')
-            {
-                length++;
-            }
-
-            if (length == 0)
-            {
-                return false;
-            }
-
-            text = new string(locked, 0, length);
-            return true;
-        }
-        finally
-        {
-            _ = GlobalUnlock(globalMemory);
-        }
-    }
-
-    /// <summary>
     /// Releases a STGMEDIUM obtained from IDataObject::GetData; ownership of
     /// the contained medium transfers back to OLE.
     /// </summary>
@@ -783,9 +642,6 @@ public static partial class Win32Helper
             ReleaseStgMedium(pointer);
         }
     }
-
-    [LibraryImport("kernel32.dll", SetLastError = true)]
-    private static partial nuint GlobalSize(nint memory);
 
     [LibraryImport("ole32.dll")]
     private static unsafe partial void ReleaseStgMedium(void* medium);
@@ -899,20 +755,6 @@ public static partial class Win32Helper
         };
     }
 
-    public static bool HasMouseButtonActivity()
-    {
-        return HasAsyncKeyActivity(0x01) ||
-               HasAsyncKeyActivity(0x02) ||
-               HasAsyncKeyActivity(0x04) ||
-               HasAsyncKeyActivity(0x05) ||
-               HasAsyncKeyActivity(0x06);
-    }
-
-    private static bool HasAsyncKeyActivity(int virtualKey)
-    {
-        return IsKeyDown(virtualKey);
-    }
-
     /// <summary>
     /// Returns true if any mouse button was pressed since this thread last
     /// queried that button. Uses the low bit of GetAsyncKeyState, which resets
@@ -991,6 +833,13 @@ public static partial class Win32Helper
 
     public const int SM_CXSIZEFRAME = 32;
     public const int SM_CYSIZEFRAME = 33;
+
+    // Virtual desktop bounding box (physical pixels) for the panorama
+    // background mapping.
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -1843,6 +1692,9 @@ public static partial class Win32Helper
     public static partial int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int pvAttribute, int cbAttribute);
 
     [LibraryImport("dwmapi.dll")]
+    public static partial int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int pvAttribute, int cbAttribute);
+
+    [LibraryImport("dwmapi.dll")]
     public static partial int DwmFlush();
 
     /// <summary>
@@ -1855,6 +1707,32 @@ public static partial class Win32Helper
         try
         {
             return DwmFlush() == 0;
+        }
+        catch (Exception ex) when (
+            ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reports whether DWM is currently withholding the window from the
+    /// desktop (DWM_CLOAKED_APP or DWM_CLOAKED_SHELL — the shell cloaks
+    /// windows that live on a virtual desktop other than the active one).
+    /// An owned dialog is born on its owner's desktop and inherits the
+    /// cloak, so an interactive picker bound to a cloaked owner never
+    /// composes. A failed query reports not cloaked, preserving the
+    /// pre-check behavior on systems without the attribute.
+    /// </summary>
+    public static bool IsWindowCloaked(IntPtr hwnd)
+    {
+        try
+        {
+            return DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                out int cloaked,
+                sizeof(int)) == 0 && cloaked != 0;
         }
         catch (Exception ex) when (
             ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
@@ -1888,6 +1766,7 @@ public static partial class Win32Helper
 
     public const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
     public const int DWMWA_CLOAK = 13;
+    public const int DWMWA_CLOAKED = 14;
     public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_BORDER_COLOR = 34;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
@@ -2429,48 +2308,6 @@ public static partial class Win32Helper
         try
         {
             IntPtr monitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-            if (monitor == IntPtr.Zero)
-            {
-                return WidgetDisplayRefreshRatePolicy.DefaultRefreshRateHz;
-            }
-
-            var monitorInfo = new MONITORINFOEX
-            {
-                cbSize = Marshal.SizeOf<MONITORINFOEX>(),
-                szDevice = string.Empty
-            };
-            if (!GetMonitorInfoEx(monitor, ref monitorInfo) ||
-                string.IsNullOrWhiteSpace(monitorInfo.szDevice))
-            {
-                return WidgetDisplayRefreshRatePolicy.DefaultRefreshRateHz;
-            }
-
-            var mode = new DEVMODE
-            {
-                dmDeviceName = string.Empty,
-                dmFormName = string.Empty,
-                dmSize = (short)Marshal.SizeOf<DEVMODE>()
-            };
-            return EnumDisplaySettings(monitorInfo.szDevice, EnumCurrentSettings, ref mode)
-                ? WidgetDisplayRefreshRatePolicy.Normalize((uint)Math.Max(0, mode.dmDisplayFrequency))
-                : WidgetDisplayRefreshRatePolicy.DefaultRefreshRateHz;
-        }
-        catch (Exception ex) when (
-            ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
-        {
-            return WidgetDisplayRefreshRatePolicy.DefaultRefreshRateHz;
-        }
-    }
-
-    /// <summary>
-    /// Returns the refresh rate of the primary monitor for windowless pacing
-    /// consumers. Invalid driver values safely normalize to 60 Hz.
-    /// </summary>
-    public static int GetPrimaryDisplayRefreshRate()
-    {
-        try
-        {
-            IntPtr monitor = MonitorFromPoint(default, MONITOR_DEFAULTTOPRIMARY);
             if (monitor == IntPtr.Zero)
             {
                 return WidgetDisplayRefreshRatePolicy.DefaultRefreshRateHz;

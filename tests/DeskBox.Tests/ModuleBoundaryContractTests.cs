@@ -469,7 +469,10 @@ public sealed class ModuleBoundaryContractTests
         ["src/DeskBox/Services/DesktopOrganizationRecoveryStore.cs"] = 2,
         ["src/DeskBox/Services/DesktopOrganizationTransaction.cs"] = 1,
         ["src/DeskBox/Services/DirectStartupTaskBackend.cs"] = 2,
-        ["src/DeskBox/Services/FeedbackService.cs"] = 1,
+        // 2 = the anonymous client-id persist plus the #449 success-only
+        // cooldown persist; both are app-state tmp+move atomic writes, not
+        // user-file mutations.
+        ["src/DeskBox/Services/FeedbackService.cs"] = 2,
         ["src/DeskBox/Services/FileService.CaseOnlyRename.cs"] = 2,
         ["src/DeskBox/Services/FileService.TransferProgress.cs"] = 4,
         ["src/DeskBox/Services/FileService.cs"] = 9,
@@ -491,6 +494,11 @@ public sealed class ModuleBoundaryContractTests
         // folder after moving its contents back to the desktop (#112
         // migration rollback work in progress).
         ["src/DeskBox/Services/WidgetManager.Storage.cs"] = 5,
+        // 4: the title-icon asset store manages its own app-data surface
+        // only (data/widget-assets): stale-replace delete, icon delete,
+        // widget-asset directory cleanup, and the recent-emoji tmp+move
+        // atomic write. No user-file mutation.
+        ["src/DeskBox/Services/WidgetTitleIconAssetStore.cs"] = 4,
         ["src/DeskBox/ViewModels/TodoWidgetViewModel.DetailAndAttachments.cs"] = 1,
         ["src/DeskBox/Views/ContentWidgetWindow.NativeDragDrop.cs"] = 1,
         ["src/DeskBox/Views/SearchPopupWindow.xaml.cs"] = 2,

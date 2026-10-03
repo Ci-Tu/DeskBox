@@ -66,10 +66,8 @@ public sealed partial class MusicWidgetViewModel : ObservableObject, IDisposable
     private bool _isSeeking;
     private bool _isChangingPlaybackMode;
     private bool _isChangingSystemVolume;
-    private bool _isChangingSessionVolume;
     private bool _isRefreshingVolume;
     private double? _pendingSystemVolume;
-    private double? _pendingSessionVolume;
     private bool _isDisposed;
     private DateTimeOffset _lastPositionSyncAt;
     private TimeSpan _lastSyncedPosition;
@@ -154,10 +152,6 @@ public sealed partial class MusicWidgetViewModel : ObservableObject, IDisposable
     public string DisplayName => _config.IsDefaultTitle
         ? _localizationService.T("Music.Title")
         : _config.Name;
-
-    public double WidgetX => _config.X;
-
-    public double WidgetY => _config.Y;
 
     public string Title
     {

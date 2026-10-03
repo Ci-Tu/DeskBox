@@ -57,6 +57,8 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
         WeatherOptionKinds.SkinRich
     ];
 
+    private static readonly string[] IconStyleValues = WeatherOptionKinds.IconStyleValues;
+
     private static readonly string[] DataSourceValues =
     [
         WeatherOptionKinds.DataSourceMsn,
@@ -77,6 +79,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
     private string _selectedWindSpeedUnit = WeatherOptionKinds.WindSpeedUnitKmh;
     private string _selectedDefaultView = WeatherOptionKinds.DefaultViewToday;
     private string _selectedSkin = WeatherOptionKinds.SkinRich;
+    private string _selectedIconStyle = WeatherOptionKinds.DefaultIconStyle;
     private string _selectedDataSource = WeatherOptionKinds.DataSourceMsn;
     private int _selectedRefreshInterval = WeatherOptionKinds.DefaultRefreshIntervalMinutes;
     private bool _showForecast = true;
@@ -91,6 +94,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
     private string[]? _cachedWindSpeedUnitNames;
     private string[]? _cachedDefaultViewNames;
     private string[]? _cachedSkinNames;
+    private string[]? _cachedIconStyleNames;
     private string[]? _cachedDataSourceNames;
     private string[]? _cachedRefreshIntervalNames;
 
@@ -306,6 +310,35 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
         {
             _cachedSkinNames ??= SkinValues.Select(GetSkinDisplayName).ToArray();
             return WrapOptions(BuildOptions(SkinValues, _cachedSkinNames));
+        }
+    }
+
+    public string SelectedIconStyle
+    {
+        get => _selectedIconStyle;
+        set
+        {
+            string normalized = WeatherOptionKinds.NormalizeIconStyle(value);
+            if (!SetProperty(ref _selectedIconStyle, normalized))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            RunWrite(() => _settings.SetWeatherIconStyle(normalized));
+        }
+    }
+
+    public IReadOnlyList<SettingsOption> AvailableIconStyleOptions
+    {
+        get
+        {
+            _cachedIconStyleNames ??= IconStyleValues.Select(GetIconStyleDisplayName).ToArray();
+            return WrapOptions(BuildOptions(IconStyleValues, _cachedIconStyleNames));
         }
     }
 
@@ -637,6 +670,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
             SelectedWindSpeedUnit = snapshot.WindSpeedUnit;
             SelectedDefaultView = snapshot.DefaultView;
             SelectedSkin = snapshot.Skin;
+            SelectedIconStyle = snapshot.IconStyle;
             SelectedDataSource = snapshot.DataSource;
             SelectedRefreshInterval = snapshot.RefreshIntervalMinutes;
             ShowForecast = snapshot.ShowForecast;
@@ -670,6 +704,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
         _cachedWindSpeedUnitNames = null;
         _cachedDefaultViewNames = null;
         _cachedSkinNames = null;
+        _cachedIconStyleNames = null;
         _cachedDataSourceNames = null;
         _cachedRefreshIntervalNames = null;
         OnPropertyChanged(nameof(AvailableLocationModeOptions));
@@ -677,6 +712,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(AvailableWindSpeedUnitOptions));
         OnPropertyChanged(nameof(AvailableDefaultViewOptions));
         OnPropertyChanged(nameof(AvailableSkinOptions));
+        OnPropertyChanged(nameof(AvailableIconStyleOptions));
         OnPropertyChanged(nameof(AvailableDataSourceOptions));
         OnPropertyChanged(nameof(AvailableRefreshIntervalOptions));
         // Re-notify the current selections: replacing the localized option
@@ -686,6 +722,7 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedWindSpeedUnit));
         OnPropertyChanged(nameof(SelectedDefaultView));
         OnPropertyChanged(nameof(SelectedSkin));
+        OnPropertyChanged(nameof(SelectedIconStyle));
         OnPropertyChanged(nameof(SelectedDataSource));
         OnPropertyChanged(nameof(SelectedRefreshInterval));
         OnPropertyChanged(nameof(DisplayOptionsSummaryText));
@@ -717,6 +754,14 @@ public sealed partial class WeatherSettingsViewModel : ObservableObject
     {
         WeatherOptionKinds.SkinRich => _localize("Weather.Skin.Rich"),
         _ => _localize("Weather.Skin.Standard")
+    };
+
+    private string GetIconStyleDisplayName(string style) => style switch
+    {
+        WeatherOptionKinds.IconStyleDeskBox => _localize("Weather.IconStyle.DeskBox"),
+        WeatherOptionKinds.IconStyleLine => _localize("Weather.IconStyle.Line"),
+        WeatherOptionKinds.IconStyleFluent => _localize("Weather.IconStyle.Fluent"),
+        _ => _localize("Weather.IconStyle.Flat")
     };
 
     private string GetDataSourceDisplayName(string source) => source switch

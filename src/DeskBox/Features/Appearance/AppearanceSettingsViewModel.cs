@@ -187,6 +187,12 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
     private string _borderStyle = WidgetBorderKinds.StyleThin;
     private string _foregroundMode = WidgetForegroundKinds.FollowTheme;
     private string _foregroundColorHex = WidgetForegroundKinds.DefaultCustomColorHex;
+    private string _widgetBackgroundMode = WidgetBackgroundModeKinds.Material;
+    private string _widgetBackgroundUnifiedFit = WidgetBackgroundKinds.FitFill;
+    private double _widgetBackgroundDimPercent = WidgetBackgroundKinds.DefaultDimPercent;
+    private bool _widgetTextShadowEnabled;
+    private string[]? _cachedWidgetBackgroundModeNames;
+    private string[]? _cachedWidgetBackgroundUnifiedFitNames;
 
     // Density state.
     private string _layoutDensity = LayoutDensityKinds.Standard;
@@ -593,6 +599,229 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
     /// <summary>Whether the custom foreground color picker applies.</summary>
     public bool ShowForegroundCustomColor =>
         ForegroundMode == WidgetForegroundKinds.Custom;
+
+    private static readonly string[] WidgetBackgroundModes =
+    [
+        WidgetBackgroundModeKinds.Material,
+        WidgetBackgroundModeKinds.UnifiedImage,
+        WidgetBackgroundModeKinds.Panorama
+    ];
+
+    private static readonly string[] WidgetBackgroundUnifiedFits =
+    [
+        WidgetBackgroundKinds.FitFill,
+        WidgetBackgroundKinds.FitContain
+    ];
+
+    public string WidgetBackgroundMode
+    {
+        get => _widgetBackgroundMode;
+        set
+        {
+            string normalized = WidgetBackgroundModeKinds.Normalize(value);
+            if (!SetProperty(ref _widgetBackgroundMode, normalized))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(ShowUnifiedBackgroundOptions));
+            OnPropertyChanged(nameof(ShowPanoramaBackgroundOptions));
+            OnPropertyChanged(nameof(ShowImageBackgroundOptions));
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetWidgetBackgroundMode(normalized);
+            AppearanceValueCommitted?.Invoke();
+        }
+    }
+
+    public IReadOnlyList<SettingsOption> AvailableWidgetBackgroundModeOptions
+    {
+        get
+        {
+            string[] keys =
+            [
+                "Settings.WidgetBackground.Mode.Material",
+                "Settings.WidgetBackground.Mode.UnifiedImage",
+                "Settings.WidgetBackground.Mode.Panorama"
+            ];
+            _cachedWidgetBackgroundModeNames ??= keys.Select(key => _localize(key)).ToArray();
+            var options = new SettingsOption[WidgetBackgroundModes.Length];
+            for (int index = 0; index < WidgetBackgroundModes.Length; index++)
+            {
+                options[index] = new SettingsOption(
+                    WidgetBackgroundModes[index],
+                    _cachedWidgetBackgroundModeNames[index]);
+            }
+
+            return options;
+        }
+    }
+
+    public string WidgetBackgroundUnifiedFit
+    {
+        get => _widgetBackgroundUnifiedFit;
+        set
+        {
+            string normalized = WidgetBackgroundKinds.NormalizeFit(value);
+            if (!SetProperty(ref _widgetBackgroundUnifiedFit, normalized))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetWidgetBackgroundUnifiedFit(normalized);
+            AppearanceValueCommitted?.Invoke();
+        }
+    }
+
+    public IReadOnlyList<SettingsOption> AvailableWidgetBackgroundUnifiedFitOptions
+    {
+        get
+        {
+            string[] keys =
+            [
+                "Settings.WidgetBackground.FitFill",
+                "Settings.WidgetBackground.FitContain"
+            ];
+            _cachedWidgetBackgroundUnifiedFitNames ??= keys.Select(key => _localize(key)).ToArray();
+            var options = new SettingsOption[WidgetBackgroundUnifiedFits.Length];
+            for (int index = 0; index < WidgetBackgroundUnifiedFits.Length; index++)
+            {
+                options[index] = new SettingsOption(
+                    WidgetBackgroundUnifiedFits[index],
+                    _cachedWidgetBackgroundUnifiedFitNames[index]);
+            }
+
+            return options;
+        }
+    }
+
+    /// <summary>Scrim strength over image backgrounds, 0-100.</summary>
+    public double WidgetBackgroundDimPercent
+    {
+        get => _widgetBackgroundDimPercent;
+        set
+        {
+            double clamped = Math.Clamp(
+                double.IsFinite(value) ? value : WidgetBackgroundKinds.DefaultDimPercent,
+                WidgetBackgroundKinds.MinDimPercent,
+                WidgetBackgroundKinds.MaxDimPercent);
+            if (!SetProperty(ref _widgetBackgroundDimPercent, clamped))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(WidgetBackgroundDimValueText));
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            AppearanceValueUpdate update = _settings.UpdateWidgetBackgroundDim(clamped);
+            if (!update.Committed)
+            {
+                WidgetBackgroundDimPercent = update.Value;
+                return;
+            }
+
+            AppearanceValueCommitted?.Invoke();
+        }
+    }
+
+    public string WidgetBackgroundDimValueText =>
+        ((int)Math.Round(WidgetBackgroundDimPercent)).ToString();
+
+    /// <summary>Unified-image options only apply in UnifiedImage mode.</summary>
+    public bool ShowUnifiedBackgroundOptions =>
+        WidgetBackgroundMode == WidgetBackgroundModeKinds.UnifiedImage;
+
+    /// <summary>Panorama options only apply in Panorama mode.</summary>
+    public bool ShowPanoramaBackgroundOptions =>
+        WidgetBackgroundMode == WidgetBackgroundModeKinds.Panorama;
+
+    /// <summary>The dim slider applies to any image background mode.</summary>
+    public bool ShowImageBackgroundOptions =>
+        WidgetBackgroundMode != WidgetBackgroundModeKinds.Material;
+
+    /// <summary>
+    /// Dual-layer text shadow behind widget titles and file names — the
+    /// Windows-native icon-label shadow look. Default off.
+    /// </summary>
+    public bool WidgetTextShadowEnabled
+    {
+        get => _widgetTextShadowEnabled;
+        set
+        {
+            if (!SetProperty(ref _widgetTextShadowEnabled, value))
+            {
+                return;
+            }
+
+            if (_isSyncingPresentation)
+            {
+                return;
+            }
+
+            _settings.SetWidgetTextShadowEnabled(value);
+            AppearanceValueCommitted?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Removes every per-widget background override; the settings page's
+    /// batch-reset button calls this after picking a new image.
+    /// </summary>
+    public int ClearPerWidgetBackgrounds()
+    {
+        int cleared = _settings.ClearPerWidgetBackgrounds();
+        AppearanceValueCommitted?.Invoke();
+        return cleared;
+    }
+
+    /// <summary>
+    /// Called by the settings shell after a unified/panorama image pick so
+    /// dependent option visibility can re-evaluate.
+    /// </summary>
+    public void NotifyWidgetBackgroundImageChanged()
+    {
+        OnPropertyChanged(nameof(ShowUnifiedBackgroundOptions));
+        OnPropertyChanged(nameof(ShowPanoramaBackgroundOptions));
+        AppearanceValueCommitted?.Invoke();
+    }
+
+    /// <summary>
+    /// Stores a freshly picked unified image; picking an image also selects
+    /// the unified mode so the result is visible immediately.
+    /// </summary>
+    public void SetUnifiedBackgroundImage(string fileName)
+    {
+        _settings.SetWidgetBackgroundUnifiedImage(fileName);
+        if (WidgetBackgroundMode != WidgetBackgroundModeKinds.UnifiedImage)
+        {
+            WidgetBackgroundMode = WidgetBackgroundModeKinds.UnifiedImage;
+        }
+
+        NotifyWidgetBackgroundImageChanged();
+    }
+
+    /// <summary>Stores a picked panorama image and selects panorama mode.</summary>
+    public void SetPanoramaBackgroundImage(string fileName)
+    {
+        _settings.SetWidgetBackgroundPanoramaImage(fileName);
+        if (WidgetBackgroundMode != WidgetBackgroundModeKinds.Panorama)
+        {
+            WidgetBackgroundMode = WidgetBackgroundModeKinds.Panorama;
+        }
+
+        NotifyWidgetBackgroundImageChanged();
+    }
 
     /// <summary>
     /// The custom widget foreground color as <c>#RRGGBB</c>; the color picker
@@ -1678,6 +1907,12 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
             BorderStyle = material.BorderStyle;
             ForegroundMode = foreground.ForegroundMode;
             ForegroundColorHex = NormalizeHexColor(foreground.ForegroundColor);
+            AppearanceWidgetBackgroundSettings widgetBackground =
+                _settings.ReadWidgetBackground();
+            WidgetBackgroundMode = widgetBackground.Mode;
+            WidgetBackgroundUnifiedFit = widgetBackground.UnifiedFit;
+            WidgetBackgroundDimPercent = widgetBackground.DimPercent;
+            WidgetTextShadowEnabled = _settings.ReadWidgetTextShadowEnabled();
 
             LayoutDensity = density.LayoutDensity;
             IconSize = density.IconSize;
@@ -1788,6 +2023,8 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
         _cachedTrayIconStyleNames = null;
         _cachedMaterialTypeNames = null;
         _cachedForegroundModeNames = null;
+        _cachedWidgetBackgroundModeNames = null;
+        _cachedWidgetBackgroundUnifiedFitNames = null;
         _cachedBorderColorModeNames = null;
         _cachedBorderStyleNames = null;
         _cachedCornerPreferenceNames = null;
@@ -1798,6 +2035,9 @@ public sealed partial class AppearanceSettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(AvailableAccentColorSourceOptions));
         OnPropertyChanged(nameof(AvailableMaterialTypeOptions));
         OnPropertyChanged(nameof(AvailableForegroundModeOptions));
+        OnPropertyChanged(nameof(AvailableWidgetBackgroundModeOptions));
+        OnPropertyChanged(nameof(AvailableWidgetBackgroundUnifiedFitOptions));
+        OnPropertyChanged(nameof(WidgetBackgroundDimValueText));
         OnPropertyChanged(nameof(AvailableBorderColorModeOptions));
         OnPropertyChanged(nameof(AvailableBorderStyleOptions));
         OnPropertyChanged(nameof(AvailableCornerPreferenceOptions));

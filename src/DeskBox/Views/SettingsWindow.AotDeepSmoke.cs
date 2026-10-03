@@ -123,6 +123,19 @@ public sealed partial class SettingsWindow
             App.Log($"[AotManagedUiSmoke] DeepSettings route completed: {sectionTag}");
         }
 
+        // P1-1 regression net (incident 2026-09-30 §4): on an unfixed NativeAOT
+        // retail build the cloud-backup password box's typed lookup throws
+        // InvalidCastException, and a wrongly-"fixed" build resolves it as a
+        // base class and yields null. With the DynamicDependency root the
+        // visited section must expose the typed element.
+        NavigateToSettingsSection("CloudBackupSettings");
+        await WaitForAotDeepSettingsPageAsync("CloudBackupSettings");
+        if (CloudBackupPasswordBox is null)
+        {
+            throw new InvalidOperationException(
+                "The cloud-backup password box did not resolve as a typed section element.");
+        }
+
         return new AotDeepSettingsSnapshot(
             searchQuery,
             searchSuggestions,

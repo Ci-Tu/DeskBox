@@ -85,6 +85,7 @@ public partial class App : Application
 
     private TaskbarIcon? _trayIcon;
     private Window? _trayWindow;
+    private Window? _folderPickerHelperWindow;
     private MenuFlyout? _trayContextMenu;
     private bool _traySecondWindowSyncLogged;
     private MenuFlyoutItem? _trayOrganizeDesktopItem;
@@ -3007,17 +3008,6 @@ public partial class App : Application
 
         ScheduleLightMemoryCleanup(completedHeavyOperation: true);
         ScheduleBackgroundMemoryCleanup("settings-closed");
-    }
-
-    public void RefreshSettingsWindow()
-    {
-        if (_settingsWindow is null)
-        {
-            OpenSettings();
-            return;
-        }
-
-        _settingsWindow.RefreshLocalizedContent();
     }
 
     public void ShowSettings()

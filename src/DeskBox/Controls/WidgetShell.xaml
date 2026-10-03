@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DeskBox.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:helpers="using:DeskBox.Helpers"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:widgetContents="using:DeskBox.Controls.WidgetContents"
     Foreground="{ThemeResource TextFillColorPrimaryBrush}"
@@ -42,7 +43,27 @@
             x:Name="BackgroundPlate"
             Grid.RowSpan="2"
             BorderThickness="0"
-            CornerRadius="0" />
+            CornerRadius="0">
+            <Grid IsHitTestVisible="False">
+                <Grid x:Name="CustomBackgroundPanoramaHost" Visibility="Collapsed">
+                    <Image
+                        x:Name="CustomBackgroundPanoramaImage"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Stretch="Fill" />
+                </Grid>
+                <Image
+                    x:Name="CustomBackgroundImage"
+                    Stretch="UniformToFill"
+                    Visibility="Collapsed" />
+                <!-- Theme-aware scrim (dark/light from code) keeps the widget
+                     content readable over the user's image. -->
+                <Border
+                    x:Name="CustomBackgroundScrim"
+                    Background="Black"
+                    Visibility="Collapsed" />
+            </Grid>
+        </Border>
 
         <Grid
             x:Name="TitleBarGrid"
@@ -78,17 +99,31 @@
                     <controls:WidgetTitleIcon
                         x:Name="TitleIcon"
                         AccentColor="{x:Bind TitleIconAccentColor, Mode=OneWay}"
+                        CustomEmoji="{x:Bind TitleIconCustomEmoji, Mode=OneWay}"
+                        CustomImageSource="{x:Bind TitleIconCustomSource, Mode=OneWay}"
                         Glyph="{x:Bind TitleGlyph, Mode=OneWay}"
                         IconSize="{Binding TitleIconSize}"
                         IconKind="{x:Bind TitleIconKind, Mode=OneWay}"
                         LabelText="{Binding DisplayName}"
                         Mode="{x:Bind TitleIconMode, Mode=OneWay}" />
-                    <TextBlock
-                        x:Name="TitleText"
-                        FontSize="{Binding TitleTextSize}"
-                        Text="{Binding DisplayName}"
-                        TextTrimming="CharacterEllipsis"
-                        VerticalAlignment="Center" />
+                    <Grid>
+                        <TextBlock
+                            x:Name="TitleTextShadow"
+                            Margin="1,1,0,0"
+                            helpers:WidgetTextShadow.Layer="True"
+                            FontSize="{Binding TitleTextSize}"
+                            Foreground="Black"
+                            IsHitTestVisible="False"
+                            Text="{Binding DisplayName}"
+                            TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center" />
+                        <TextBlock
+                            x:Name="TitleText"
+                            FontSize="{Binding TitleTextSize}"
+                            Text="{Binding DisplayName}"
+                            TextTrimming="CharacterEllipsis"
+                            VerticalAlignment="Center" />
+                    </Grid>
                     <ContentPresenter
                         x:Name="TitleEditorPresenter"
                         Content="{x:Bind TitleEditorContent, Mode=OneWay}"
@@ -379,17 +414,21 @@
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         AccentColor="{x:Bind TitleIconAccentColor, Mode=OneWay}"
+                        CustomEmoji="{x:Bind TitleIconCustomEmoji, Mode=OneWay}"
+                        CustomImageSource="{x:Bind TitleIconCustomSource, Mode=OneWay}"
                         Glyph="{x:Bind TitleGlyph, Mode=OneWay}"
                         IconSize="14"
                         IconKind="{x:Bind TitleIconKind, Mode=OneWay}"
                         LabelText="{x:Bind OverlayTitle, Mode=OneWay}" />
-                    <TextBlock
-                        x:Name="CompactEmojiIcon"
+                    <Image
+                        x:Name="CompactIconImage"
+                        Width="22"
+                        Height="22"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        FontSize="15"
                         Visibility="Collapsed"
-                        IsHitTestVisible="False" />
+                        IsHitTestVisible="False"
+                        Stretch="Uniform" />
                     <Border
                         x:Name="CompactThumbnailHost"
                         Width="28"
@@ -516,6 +555,20 @@
                     <Grid x:Name="CompactTitleViewport" Height="18">
                         <Grid x:Name="CompactTitleMarqueeTrack">
                             <TextBlock
+                                x:Name="CompactTitleTextShadow"
+                                Margin="1,1,0,0"
+                                helpers:WidgetTextShadow.Layer="True"
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="Black"
+                                IsHitTestVisible="False"
+                                MaxLines="1"
+                                Text="{Binding Text, ElementName=CompactTitleText}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center" />
+                            <TextBlock
                                 x:Name="CompactTitleText"
                                 HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
@@ -524,6 +577,21 @@
                                 MaxLines="1"
                                 TextWrapping="NoWrap"
                                 TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="CompactTitleMarqueeCloneShadow"
+                                Margin="1,1,0,0"
+                                helpers:WidgetTextShadow.Layer="True"
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="Black"
+                                IsHitTestVisible="False"
+                                MaxLines="1"
+                                Text="{Binding Text, ElementName=CompactTitleMarqueeClone}"
+                                TextTrimming="Clip"
+                                TextWrapping="NoWrap"
+                                Visibility="{Binding Visibility, ElementName=CompactTitleMarqueeClone}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center" />
                             <TextBlock
                                 x:Name="CompactTitleMarqueeClone"
                                 HorizontalAlignment="Left"
@@ -546,6 +614,20 @@
                     <Grid x:Name="CompactSummaryViewport" Height="17">
                         <Grid x:Name="CompactSummaryMarqueeTrack">
                             <TextBlock
+                                x:Name="CompactSummaryTextShadow"
+                                Margin="1,1,0,0"
+                                helpers:WidgetTextShadow.Layer="True"
+                                FontSize="11.5"
+                                Foreground="Black"
+                                IsHitTestVisible="False"
+                                MaxLines="1"
+                                MinWidth="0"
+                                Text="{Binding Text, ElementName=CompactSummaryText}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center" />
+                            <TextBlock
                                 x:Name="CompactSummaryText"
                                 MinWidth="0"
                                 HorizontalAlignment="Left"
@@ -555,6 +637,21 @@
                                 MaxLines="1"
                                 TextWrapping="NoWrap"
                                 TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                x:Name="CompactSummaryMarqueeCloneShadow"
+                                Margin="1,1,0,0"
+                                helpers:WidgetTextShadow.Layer="True"
+                                FontSize="11.5"
+                                Foreground="Black"
+                                IsHitTestVisible="False"
+                                MaxLines="1"
+                                MinWidth="0"
+                                Text="{Binding Text, ElementName=CompactSummaryMarqueeClone}"
+                                TextTrimming="Clip"
+                                TextWrapping="NoWrap"
+                                Visibility="{Binding Visibility, ElementName=CompactSummaryMarqueeClone}"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center" />
                             <TextBlock
                                 x:Name="CompactSummaryMarqueeClone"
                                 MinWidth="0"
@@ -790,6 +887,8 @@
                     <controls:WidgetTitleIcon
                         x:Name="OverlayTitleIcon"
                         AccentColor="{x:Bind TitleIconAccentColor, Mode=OneWay}"
+                        CustomEmoji="{x:Bind TitleIconCustomEmoji, Mode=OneWay}"
+                        CustomImageSource="{x:Bind TitleIconCustomSource, Mode=OneWay}"
                         Glyph="{x:Bind TitleGlyph, Mode=OneWay}"
                         IconSize="12"
                         IconKind="{x:Bind TitleIconKind, Mode=OneWay}"

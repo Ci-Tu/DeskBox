@@ -326,7 +326,7 @@ public sealed partial class WidgetManager
         if (!string.Equals(currentFolderPath, destinationFolderPath, StringComparison.OrdinalIgnoreCase) &&
             !Directory.Exists(destinationFolderPath))
         {
-            await Task.Run(() => Directory.Move(currentFolderPath, destinationFolderPath));
+            await Task.Run(() => MoveManagedFolderWithRetry(currentFolderPath, destinationFolderPath));
         }
 
         WidgetFileStackSettings.RebaseManagedFolderPaths(
@@ -337,6 +337,41 @@ public sealed partial class WidgetManager
         config.MappedFolderPath = destinationFolderPath;
 
         await RefreshFileWidgetAsync(config.Id);
+    }
+
+    /// <summary>
+    /// A managed-folder rename can be denied by a transient handle (antivirus
+    /// scan, search indexer) or a long-lived one (an Explorer window parked
+    /// inside the folder). A short bounded retry absorbs the transient class;
+    /// the persistent class surfaces as a localized, actionable message
+    /// instead of the raw OS denial (feedback 240).
+    /// </summary>
+    private void MoveManagedFolderWithRetry(string sourcePath, string destinationPath)
+    {
+        const int maxAttempts = 3;
+        const int retryDelayMilliseconds = 300;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                Directory.Move(sourcePath, destinationPath);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt >= maxAttempts)
+                {
+                    App.Log(
+                        "[WidgetManager] Managed folder rename denied after " +
+                        $"{attempt} attempts '{sourcePath}': {ex.Message}");
+                    throw new IOException(
+                        _localizationService.T("Widget.Error.ManagedFolderInUse"),
+                        ex);
+                }
+
+                Thread.Sleep(retryDelayMilliseconds);
+            }
+        }
     }
 
     private void RemoveMappedWidgetShortcut(WidgetConfig config)

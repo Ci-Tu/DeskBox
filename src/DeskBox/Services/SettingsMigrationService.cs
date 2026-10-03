@@ -21,7 +21,7 @@ public interface ISettingsMigration
 public sealed class SettingsMigrationPipeline
 {
     /// <summary>The current schema version that the application expects.</summary>
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 11;
 
     private readonly List<ISettingsMigration> _migrations = [];
 
@@ -37,6 +37,8 @@ public sealed class SettingsMigrationPipeline
         _migrations.Add(new Migration_6_To_7());
         _migrations.Add(new Migration_7_To_8());
         _migrations.Add(new Migration_8_To_9());
+        _migrations.Add(new Migration_9_To_10());
+        _migrations.Add(new Migration_10_To_11());
     }
 
     /// <summary>
@@ -341,6 +343,34 @@ internal sealed class Migration_8_To_9 : ISettingsMigration
     {
         settings.FileStackAutoStacking = settings.FileStacksEnabled;
         settings.FileStacksEnabled = true;
+    }
+}
+
+/// <summary>
+/// Schema v10 adds the global widget background fields (mode, unified and
+/// panorama image names, dim, unified fit). All of them are nullable with
+/// "follow material" defaults, so an existing profile loads correctly
+/// without data movement — this step only advances the recorded version.
+/// </summary>
+internal sealed class Migration_9_To_10 : ISettingsMigration
+{
+    public int FromVersion => 9;
+
+    public void Migrate(AppSettings settings)
+    {
+    }
+}
+
+/// <summary>
+/// Schema v11 adds the dual-layer text shadow switch (default off, so
+/// existing profiles load correctly without data movement).
+/// </summary>
+internal sealed class Migration_10_To_11 : ISettingsMigration
+{
+    public int FromVersion => 10;
+
+    public void Migrate(AppSettings settings)
+    {
     }
 }
 

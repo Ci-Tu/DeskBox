@@ -181,20 +181,6 @@ public sealed partial class SettingsWindow
         }
     }
 
-    private void SettingsSearchBox_GotFocus(object sender, RoutedEventArgs e)
-    {
-        // Dim the search icon when typing
-        SettingsSearchIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)
-            Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorTertiaryBrush"];
-    }
-
-    private void SettingsSearchBox_LostFocus(object sender, RoutedEventArgs e)
-    {
-        // Restore icon color
-        SettingsSearchIcon.Foreground = (Microsoft.UI.Xaml.Media.Brush)
-            Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorSecondaryBrush"];
-    }
-
     private void SettingsSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
         SettingsSearchResult? result = args.ChosenSuggestion as SettingsSearchResult;
@@ -650,7 +636,7 @@ public sealed partial class SettingsWindow
 
     private void NestedSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { Tag: string sectionTag })
+        if (sender is FrameworkElement { Tag: string sectionTag })
         {
             NavigateToSettingsSection(sectionTag);
         }
@@ -676,16 +662,6 @@ public sealed partial class SettingsWindow
         if (sender is Button { Tag: string groupId })
         {
             ViewModel.ResetWidgetGroupOverrides(groupId);
-        }
-    }
-
-    private void WidgetGroupNameTextBox_LostFocus(
-        object sender,
-        RoutedEventArgs e)
-    {
-        if (sender is TextBox { Tag: string groupId } textBox)
-        {
-            ViewModel.RenameWidgetGroup(groupId, textBox.Text);
         }
     }
 

@@ -357,6 +357,9 @@ public sealed partial class ContentWidgetWindow
         }
 
         _contentHost.OnActivated();
+        // A long-hidden release dropped the decoded custom background; the
+        // surface is cheap to rebuild from disk on the way back in.
+        RecoverCustomBackgroundIfReleased();
         App.Current.WidgetManager?.ReassertRaisedWidgetGroupAfterDeskBoxActivation(
             HWnd,
             "content-window-activated");

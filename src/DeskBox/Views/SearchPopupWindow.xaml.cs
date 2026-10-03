@@ -1290,6 +1290,7 @@ public sealed partial class SearchPopupWindow : Window
         ToolTipService.SetToolTip(ClosePopupButton, _localizationService.T("Search.Close"));
         NoResultsTitle.Text = _localizationService.T("Search.NoResults.Title");
         NoResultsSubtitle.Text = _localizationService.T("Search.NoResults.Subtitle");
+        NoResultsEverythingHint.Text = _localizationService.T("Search.NoResults.EverythingHint");
         EmptyTabHintText.Text = _localizationService.T("Search.Tab.Empty");
 
         OpenSettingsLabel.Text = _localizationService.T("Search.Action.OpenSettings");
@@ -1692,6 +1693,16 @@ public sealed partial class SearchPopupWindow : Window
         NoResultsPanel.Visibility = hasQuery && !searching && !hasResults
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        // File-name search is fully delegated to Everything and requires the
+        // user's opt-in. When nothing matched and that provider is not
+        // connected, say so instead of leaving an unexplained empty state
+        // (feedback 291).
+        NoResultsEverythingHint.Visibility =
+            NoResultsPanel.Visibility == Visibility.Visible &&
+            _viewModel.IsFileSearchProviderUnavailable
+                ? Visibility.Visible
+                : Visibility.Collapsed;
 
         bool showResults = hasQuery && hasResults && tabHasItems;
         ResultsPanel.Visibility = showResults ? Visibility.Visible : Visibility.Collapsed;
@@ -2132,38 +2143,6 @@ public sealed partial class SearchPopupWindow : Window
         _selectedAppIndex = -1;
     }
 
-    /// <summary>
-    /// Animates the recommended-apps panel with a smooth fade-in + slide-up.
-    /// Uses Composition API for GPU-accelerated rendering.
-    /// </summary>
-    private void AnimateRecommendedAppsIn()
-    {
-        var visual = ElementCompositionPreview.GetElementVisual(RecommendedAppsPanel);
-        if (visual is null) return;
-
-        ElementCompositionPreview.SetIsTranslationEnabled(RecommendedAppsPanel, true);
-
-        var compositor = visual.Compositor;
-        var easing = compositor.CreateCubicBezierEasingFunction(
-            new System.Numerics.Vector2(0.0f, 0.0f),
-            new System.Numerics.Vector2(0.1f, 1.0f));
-
-        // Fade in: 0 → 1
-        var opacityAnim = compositor.CreateScalarKeyFrameAnimation();
-        opacityAnim.InsertKeyFrame(0f, 0f);
-        opacityAnim.InsertKeyFrame(1f, 1f, easing);
-        opacityAnim.Duration = TimeSpan.FromMilliseconds(250);
-
-        // Slide up: 16px → 0
-        var translateAnim = compositor.CreateScalarKeyFrameAnimation();
-        translateAnim.InsertKeyFrame(0f, 16f);
-        translateAnim.InsertKeyFrame(1f, 0f, easing);
-        translateAnim.Duration = TimeSpan.FromMilliseconds(250);
-
-        visual.StartAnimation("Opacity", opacityAnim);
-        visual.StartAnimation("Translation.Y", translateAnim);
-    }
-
     // ── Skeleton screen ─────────────────────────────────────────────────────────
 
     private async Task ShowAppsSkeletonAfterDelayAsync(
@@ -2486,13 +2465,6 @@ public sealed partial class SearchPopupWindow : Window
 
     private Microsoft.UI.Xaml.Media.Brush? ResolveThemeBrush(string key) =>
         NeutralInteractionBrush.ResolveThemedResource(key, RootGrid);
-
-    // ── Legacy: kept for compatibility ──
-
-    private void RecommendedAppButton_Click(object sender, RoutedEventArgs e)
-    {
-        // Replaced by PointerPressed/DoubleTapped handlers.
-    }
 
     private void RecommendedAppsPanel_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {

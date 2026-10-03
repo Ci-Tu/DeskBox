@@ -68,16 +68,6 @@
             <Setter Property="CornerRadius" Value="{StaticResource WidgetCornerRadiusSmall}" />
         </Style>
 
-        <Style x:Key="TodoCardIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SubtleButtonStyle}">
-            <Setter Property="Width" Value="32" />
-            <Setter Property="Height" Value="32" />
-            <Setter Property="MinWidth" Value="32" />
-            <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="{StaticResource WidgetCornerRadiusSmall}" />
-        </Style>
-
         <Style x:Key="TodoDetailHeaderIconButtonStyle" TargetType="Button" BasedOn="{StaticResource SubtleButtonStyle}">
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
@@ -123,13 +113,6 @@
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CornerRadius" Value="0" />
-        </Style>
-
-        <Style x:Key="TodoDetailGroupStyle" TargetType="Border">
-            <Setter Property="Background" Value="{ThemeResource WidgetLayerFillSecondaryBrush}" />
-            <Setter Property="BorderBrush" Value="{ThemeResource WidgetLayerStrokeBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="{StaticResource WidgetCornerRadiusSmall}" />
         </Style>
 
         <Style x:Key="TodoDetailTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource WidgetBorderlessInputTextBoxStyle}">
@@ -401,7 +384,7 @@
                                             Visibility="{Binding DueStatusNormalVisibility}" />
                                         <TextBlock
                                             FontSize="{Binding ElementName=TodoListView, Path=DataContext.SecondaryTextSize}"
-                                            Foreground="#F7630C"
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                             MaxLines="1"
                                             Text="{Binding DueStatusText}"
                                             TextTrimming="CharacterEllipsis"

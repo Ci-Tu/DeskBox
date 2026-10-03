@@ -404,13 +404,6 @@ public sealed class GlobalHotkeyService : IDisposable, IHookHealthProbeTarget
                    (int)VirtualKey.F12;
     }
 
-    public static bool IsRiskyActivation(GlobalHotkeyActivation activation)
-    {
-        return activation.Kind == HotkeyActivationKind.WindowsTap ||
-               (activation.Kind == HotkeyActivationKind.Chord &&
-                IsRiskyGesture(activation.Gesture));
-    }
-
     public static string FormatActivation(
         GlobalHotkeyActivation activation,
         LocalizationService localization)
@@ -627,26 +620,6 @@ public sealed class GlobalHotkeyService : IDisposable, IHookHealthProbeTarget
         }
 
         return value;
-    }
-
-    internal static bool AreCurrentModifiersPressed(HotkeyModifierKeys modifiers)
-    {
-        bool ctrl = Win32Helper.IsKeyDown((int)VirtualKey.Control) ||
-                    Win32Helper.IsKeyDown((int)VirtualKey.LeftControl) ||
-                    Win32Helper.IsKeyDown((int)VirtualKey.RightControl);
-        bool alt = Win32Helper.IsKeyDown((int)VirtualKey.Menu) ||
-                   Win32Helper.IsKeyDown((int)VirtualKey.LeftMenu) ||
-                   Win32Helper.IsKeyDown((int)VirtualKey.RightMenu);
-        bool shift = Win32Helper.IsKeyDown((int)VirtualKey.Shift) ||
-                     Win32Helper.IsKeyDown((int)VirtualKey.LeftShift) ||
-                     Win32Helper.IsKeyDown((int)VirtualKey.RightShift);
-        bool windows = Win32Helper.IsKeyDown((int)VirtualKey.LeftWindows) ||
-                       Win32Helper.IsKeyDown((int)VirtualKey.RightWindows);
-
-        return ctrl == modifiers.HasFlag(HotkeyModifierKeys.Control) &&
-               alt == modifiers.HasFlag(HotkeyModifierKeys.Alt) &&
-               shift == modifiers.HasFlag(HotkeyModifierKeys.Shift) &&
-               windows == modifiers.HasFlag(HotkeyModifierKeys.Windows);
     }
 
     private static bool IsReservedHookDisabledByEnvironment()

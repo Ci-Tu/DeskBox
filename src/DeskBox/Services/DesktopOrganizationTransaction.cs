@@ -314,17 +314,19 @@ public sealed partial class DesktopOrganizationTransaction
                 Path.TrimEndingDirectorySeparator(storageRoot),
                 StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("A drive root cannot be used as the managed storage folder.");
+            throw new DesktopOrganizationInvalidStorageRootException(
+                "A drive root cannot be used as the managed storage folder.");
         }
 
         if (string.Equals(desktop, storage, StringComparison.OrdinalIgnoreCase) ||
             storage.StartsWith($"{desktop}{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("The managed storage root cannot be the desktop or one of its subfolders.");
+            throw new DesktopOrganizationInvalidStorageRootException(
+                "The managed storage root cannot be the desktop or one of its subfolders.");
         }
 
         if (!string.IsNullOrWhiteSpace(plan.PublicDesktopPath) && FileService.PathsOverlap(storage, plan.PublicDesktopPath))
-            throw new InvalidOperationException("Managed storage overlaps the public desktop.");
+            throw new DesktopOrganizationInvalidStorageRootException("Managed storage overlaps the public desktop.");
         foreach (var item in plan.Targets.SelectMany(target => target.Items))
         {
             string root = item.SourceScope == DesktopOrganizationSourceScope.Public ? plan.PublicDesktopPath : plan.DesktopPath;
