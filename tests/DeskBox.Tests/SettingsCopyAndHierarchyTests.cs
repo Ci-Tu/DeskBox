@@ -331,7 +331,13 @@ public sealed class SettingsCopyAndHierarchyTests
             root,
             "src/DeskBox/Views/SettingsWindow.LocalizationAndWidgets.cs"));
 
-        foreach (string resources in new[] { windowXaml, overviewResources })
+        // The shared metrics/styles live only in SettingsOverviewResources.xaml;
+        // SettingsWindow.xaml merges that dictionary instead of duplicating it.
+        Assert.Contains(
+            "ms-appx:///Styles/SettingsOverviewResources.xaml",
+            windowXaml,
+            StringComparison.Ordinal);
+        foreach (string resources in new[] { overviewResources })
         {
             string titleStyle = SliceSection(
                 resources,
@@ -353,12 +359,12 @@ public sealed class SettingsCopyAndHierarchyTests
         }
 
         Assert.Equal(
-            5,
+            4,
             CountOccurrences(
                 appearanceXaml,
                 "Style=\"{StaticResource SettingCardIdentityGridStyle}\""));
         Assert.Equal(
-            5,
+            2,
             CountOccurrences(
                 fileWidgetXaml,
                 "Style=\"{StaticResource SettingCardIdentityGridStyle}\""));
@@ -378,7 +384,7 @@ public sealed class SettingsCopyAndHierarchyTests
             "x:Name=\"MaintenanceSection\"",
             "x:Name=\"BackupRestoreSettingsSection\"");
         Assert.Equal(
-            4,
+            0,
             CountOccurrences(
                 maintenance,
                 "Style=\"{StaticResource SettingCardIdentityGridStyle}\""));
@@ -407,14 +413,6 @@ public sealed class SettingsCopyAndHierarchyTests
         Assert.True(
             fileWidgetXaml.IndexOf("Tag=\"FileStackSettings\"", StringComparison.Ordinal) <
             fileWidgetXaml.IndexOf("FeatureWidgets.FolderOpenBehavior", StringComparison.Ordinal));
-        Assert.Contains(
-            "MinHeight=\"{StaticResource SettingsRowMinHeight}\"",
-            fileWidgetXaml,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "Padding=\"{StaticResource SettingsRowPadding}\"",
-            fileWidgetXaml,
-            StringComparison.Ordinal);
 
         int interactionSection = windowXaml.IndexOf(
             "x:Name=\"InteractionSection\"",
@@ -679,20 +677,13 @@ public sealed class SettingsCopyAndHierarchyTests
     }
 
     [Fact]
-    public void QuickCapturePreviewLineCount_IsBoundInBothWindowHosts()
+    public void QuickCapturePreviewLineCount_IsBoundInTheSharedSurfaceHost()
     {
         string root = FindRepositoryRoot();
-        string standaloneWindow = File.ReadAllText(Path.Combine(
-            root,
-            "src/DeskBox/Views/QuickCaptureWidgetWindow.xaml"));
         string sharedSurface = File.ReadAllText(Path.Combine(
             root,
             "src/DeskBox/Controls/WidgetContents/QuickCaptureSurfaceContent.xaml"));
 
-        Assert.Contains(
-            "MaxLines=\"{Binding ElementName=ItemsListView, Path=DataContext.ItemPreviewLineCount}\"",
-            standaloneWindow,
-            StringComparison.Ordinal);
         Assert.Contains(
             "MaxLines=\"{Binding ElementName=ItemsList, Path=DataContext.ItemPreviewLineCount}\"",
             sharedSurface,

@@ -139,14 +139,25 @@ public sealed partial class WidgetFeedbackPresenter : UserControl
             WidgetFeedbackSeverity.Error => "\uEA39",
             _ => "\uE946"
         };
-        SeverityIcon.Foreground = new SolidColorBrush(severity switch
+        SeverityIcon.Foreground = severity switch
         {
-            WidgetFeedbackSeverity.Success => Windows.UI.Color.FromArgb(255, 16, 124, 65),
-            WidgetFeedbackSeverity.Warning => Windows.UI.Color.FromArgb(255, 157, 93, 0),
-            WidgetFeedbackSeverity.Error => Windows.UI.Color.FromArgb(255, 196, 43, 28),
-            _ => Windows.UI.Color.FromArgb(255, 0, 120, 212)
-        });
+            WidgetFeedbackSeverity.Success => ResolveThemedBrush(
+                "SystemFillColorSuccessBrush", Windows.UI.Color.FromArgb(255, 16, 124, 65)),
+            WidgetFeedbackSeverity.Warning => ResolveThemedBrush(
+                "SystemFillColorCautionBrush", Windows.UI.Color.FromArgb(255, 157, 93, 0)),
+            WidgetFeedbackSeverity.Error => ResolveThemedBrush(
+                "SystemFillColorCriticalBrush", Windows.UI.Color.FromArgb(255, 196, 43, 28)),
+            _ => ResolveThemedBrush(
+                "AccentFillColorDefaultBrush", Windows.UI.Color.FromArgb(255, 0, 120, 212))
+        };
     }
+
+    // Element-scoped resolution follows the presenter's own theme override
+    // (NeutralInteractionBrush), not the system theme; the fallbacks are the
+    // Fluent light-theme values.
+    private Brush ResolveThemedBrush(string resourceKey, Windows.UI.Color fallback) =>
+        DeskBox.Helpers.NeutralInteractionBrush.ResolveThemedBrush(resourceKey, SeverityIcon) ??
+        new SolidColorBrush(fallback);
 
     private void AnimateIn()
     {

@@ -1,3 +1,4 @@
+using DeskBox.Contracts;
 using DeskBox.Helpers;
 using DeskBox.Models;
 using DeskBox.Platform;
@@ -14,37 +15,13 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Shapes;
 using System.Runtime.InteropServices;
+using Microsoft.Windows.Storage.Pickers;
 using Windows.System;
-using WinRT.Interop;
 
 namespace DeskBox.Views;
 
 public sealed partial class SettingsWindow
 {
-    private void EditableSettingsTextBox_GotFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is TextBox textBox)
-        {
-            textBox.Tag = textBox.Text;
-        }
-    }
-
-    private void EditableSettingsTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key != Windows.System.VirtualKey.Escape || sender is not TextBox textBox)
-        {
-            return;
-        }
-
-        if (textBox.Tag is string originalText)
-        {
-            textBox.Text = originalText;
-        }
-
-        SettingsRoot.Focus(FocusState.Programmatic);
-        e.Handled = true;
-    }
-
     private void WeatherCitySearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         // Suppress search when a city is being selected (SuggestionChosen → TextChanged → QuerySubmitted chain)
@@ -588,4 +565,66 @@ public sealed partial class SettingsWindow
         }
     }
 
+    private async void ChooseWidgetBackgroundImage_Click(object sender, RoutedEventArgs e)
+    {
+        bool panorama = _appearanceSettingsViewModel.WidgetBackgroundMode ==
+            WidgetBackgroundModeKinds.Panorama;
+        string? pickedPath = await PickWidgetBackgroundImageFromSettingsAsync();
+        if (pickedPath is null)
+        {
+            return;
+        }
+
+        WidgetTitleIconAssetResult result = panorama
+            ? await WidgetTitleIconAssetStore.Current.CopyPanoramaBackgroundImageAsync(pickedPath)
+            : await WidgetTitleIconAssetStore.Current.CopyUnifiedBackgroundImageAsync(pickedPath);
+        if (result != WidgetTitleIconAssetResult.Copied)
+        {
+            string feedbackKey = result switch
+            {
+                WidgetTitleIconAssetResult.TooLarge => "Widget.CustomIcon.TooLarge",
+                WidgetTitleIconAssetResult.UnsupportedFormat => "Widget.CustomIcon.UnsupportedFormat",
+                _ => "Widget.CustomIcon.ImageFailed"
+            };
+            App.Log(
+                $"[Settings] Global background pick rejected ({result}): {pickedPath}");
+            await ShowInfoDialogAsync(
+                _localizationService.T("Widget.CustomBackground.Title"),
+                _localizationService.T(feedbackKey));
+            return;
+        }
+
+        string storedFileName = panorama
+            ? WidgetTitleIconAssetStore.GetStoredPanoramaFileName(pickedPath)
+            : WidgetTitleIconAssetStore.GetStoredBackgroundFileName(pickedPath);
+        if (panorama)
+        {
+            _appearanceSettingsViewModel.SetPanoramaBackgroundImage(storedFileName);
+        }
+        else
+        {
+            _appearanceSettingsViewModel.SetUnifiedBackgroundImage(storedFileName);
+        }
+    }
+
+    private async Task<string?> PickWidgetBackgroundImageFromSettingsAsync()
+    {
+        try
+        {
+            return await FileOpenPickerService.PickSingleFileAsync(
+                _hWnd,
+                [".png", ".jpg", ".jpeg", ".bmp", ".ico", ".svg"],
+                PickerLocationId.PicturesLibrary);
+        }
+        catch (Exception ex)
+        {
+            App.Log($"[Settings] Global background picker failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void ClearPerWidgetBackgroundsButton_Click(object sender, RoutedEventArgs e)
+    {
+        _appearanceSettingsViewModel.ClearPerWidgetBackgrounds();
+    }
 }

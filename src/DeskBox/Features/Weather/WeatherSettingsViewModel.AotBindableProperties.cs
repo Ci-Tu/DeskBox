@@ -8,6 +8,7 @@ namespace DeskBox.Features.Weather;
 [WinRT.GeneratedBindableCustomProperty([
     nameof(AvailableDataSourceOptions),
     nameof(AvailableDefaultViewOptions),
+    nameof(AvailableIconStyleOptions),
     nameof(AvailableLocationModeOptions),
     nameof(AvailableRefreshIntervalOptions),
     nameof(AvailableSkinOptions),
@@ -21,6 +22,7 @@ namespace DeskBox.Features.Weather;
     nameof(NoCityResultsText),
     nameof(SelectedDataSource),
     nameof(SelectedDefaultView),
+    nameof(SelectedIconStyle),
     nameof(SelectedLocationMode),
     nameof(SelectedRefreshInterval),
     nameof(SelectedSkin),

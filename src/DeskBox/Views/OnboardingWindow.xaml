@@ -16,11 +16,6 @@
         MinHeight="540">
 
         <Grid.Resources>
-            <Style x:Key="StepEyebrowText" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="12.5"/>
-                <Setter Property="FontWeight" Value="SemiBold"/>
-                <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-            </Style>
             <Style x:Key="StepTitleText" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="28"/>
                 <Setter Property="FontWeight" Value="Normal"/>

@@ -15,10 +15,9 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
+using Microsoft.Windows.Storage.Pickers;
 using Windows.Storage;
-using Windows.Storage.Pickers;
 using Windows.UI;
-using WinRT.Interop;
 
 namespace DeskBox.Controls.WidgetContents;
 
@@ -1602,20 +1601,19 @@ public sealed partial class QuickCaptureSurfaceContent :
 
         try
         {
-            var picker = new FileOpenPicker
-            {
-                SuggestedStartLocation = PickerLocationId.Desktop
-            };
-            picker.FileTypeFilter.Add("*");
             IntPtr foreground = Win32Helper.GetForegroundWindow();
             IntPtr owner = Win32Helper.GetAncestor(foreground, Win32Helper.GA_ROOT);
-            InitializeWithWindow.Initialize(
-                picker,
-                owner == IntPtr.Zero ? foreground : owner);
-            IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
+            IReadOnlyList<string> files =
+                await FileOpenPickerService.PickMultipleFilesAsync(
+                    owner == IntPtr.Zero ? foreground : owner,
+                    [],
+                    PickerLocationId.Desktop);
             DroppedFilePath[] paths = files
-                .Where(file => !string.IsNullOrWhiteSpace(file.Path) && File.Exists(file.Path))
-                .Select(file => new DroppedFilePath(file.Path, file.Name, ForceManagedCopy: false))
+                .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                .Select(path => new DroppedFilePath(
+                    path,
+                    Path.GetFileName(path),
+                    ForceManagedCopy: false))
                 .ToArray();
             if (paths.Length == 0)
             {

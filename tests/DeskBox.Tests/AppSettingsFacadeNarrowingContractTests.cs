@@ -38,16 +38,20 @@ public sealed class AppSettingsFacadeNarrowingContractTests
     [Fact]
     public void PassthroughCount_IsFrozenAtBatch51Level()
     {
-        // 226 = batch-51 (220) plus desktopAutoOrganizationDelaySeconds plus
+        // 227 = batch-51 (220) plus desktopAutoOrganizationDelaySeconds plus
         // managedDragOutAction plus the two drag-out tip flags plus
-        // widgetAnimationStaggerEnabled plus silentStartup (13 slice
+        // widgetAnimationStaggerEnabled plus silentStartup plus
+        // weatherIconStyle; +5 = schema v10 global widget background fields
+        // (mode, unified/panorama image, dim, unified fit — all nullable,
+        // carried by Migration_9_To_10); +1 = schema v11 text shadow switch
+        // (carried by Migration_10_To_11) (13 slice
         // accessors and SchemaVersion are the
         // only other members). Growing this count adds a settings.json field
         // without a schema-versioned migration; shrinking
         // it drops a field from every file written henceforth. Either change
         // is a disk-schema decision — update this pin consciously alongside
         // the SettingsSliceContractBaselineTests order pin.
-        Assert.Equal(226, Passthroughs.Length);
+        Assert.Equal(233, Passthroughs.Length);
         Assert.Equal(13, SliceAccessors.Length);
     }
 
@@ -65,8 +69,8 @@ public sealed class AppSettingsFacadeNarrowingContractTests
         expected.Add("schemaVersion");
         Assert.True(
             SerializedMemberNames.SetEquals(expected),
-            "Serialized member set must equal schemaVersion + the 226 passthrough wire names.");
-        Assert.Equal(227, SerializedMemberNames.Count);
+            "Serialized member set must equal schemaVersion + the 233 passthrough wire names.");
+        Assert.Equal(234, SerializedMemberNames.Count);
     }
 
     [Fact]
@@ -90,7 +94,9 @@ public sealed class AppSettingsFacadeNarrowingContractTests
         // The single legacy wire-attribute pair (rename + null omission for
         // the migration-era widgetCapsuleModeEnabled key) is a root cause of
         // why slice-direct serialization cannot be byte-equivalent. It must
-        // stay exactly here, exactly this shape, exactly this count.
+        // stay exactly here, exactly this shape, exactly this count. The
+        // schema-v10 background fields share the WhenWritingNull omission so
+        // untouched profiles stay byte-stable, but carry no rename.
         PropertyInfo[] renamed = Passthroughs
             .Where(p => p.GetCustomAttribute<JsonPropertyNameAttribute>() is not null)
             .ToArray();
@@ -100,18 +106,38 @@ public sealed class AppSettingsFacadeNarrowingContractTests
             .ToArray();
 
         Assert.Single(renamed);
-        Assert.Single(conditionallyIgnored);
-        Assert.Same(renamed[0], conditionallyIgnored[0]);
+        Assert.Equal(6, conditionallyIgnored.Length);
+        Assert.Same(renamed[0], conditionallyIgnored.Single(p => p.Name == nameof(AppSettings.LegacyWidgetCapsuleModeEnabled)));
         Assert.Equal(nameof(AppSettings.LegacyWidgetCapsuleModeEnabled), renamed[0].Name);
         Assert.Equal(
             "widgetCapsuleModeEnabled",
             renamed[0].GetCustomAttribute<JsonPropertyNameAttribute>()!.Name);
+        Assert.Equal(
+            new[]
+            {
+                nameof(AppSettings.LegacyWidgetCapsuleModeEnabled),
+                nameof(AppSettings.WidgetBackgroundMode),
+                nameof(AppSettings.WidgetBackgroundUnifiedImage),
+                nameof(AppSettings.WidgetBackgroundPanoramaImage),
+                nameof(AppSettings.WidgetBackgroundDim),
+                nameof(AppSettings.WidgetBackgroundUnifiedFit)
+            }.Order(),
+            conditionallyIgnored.Select(p => p.Name).Order());
     }
 
     private static HashSet<string> SerializeMemberNames()
     {
-        // Legacy prop set so the WhenWritingNull member is emitted too.
-        var settings = new AppSettings { LegacyWidgetCapsuleModeEnabled = true };
+        // Legacy prop and the schema-v10 background fields set non-default so
+        // every WhenWritingNull member is emitted too.
+        var settings = new AppSettings
+        {
+            LegacyWidgetCapsuleModeEnabled = true,
+            WidgetBackgroundMode = "Panorama",
+            WidgetBackgroundUnifiedImage = "background.png",
+            WidgetBackgroundPanoramaImage = "panorama.png",
+            WidgetBackgroundDim = 42,
+            WidgetBackgroundUnifiedFit = "Contain"
+        };
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
             settings, SettingsJsonContext.Default.AppSettings));
         return doc.RootElement.EnumerateObject()

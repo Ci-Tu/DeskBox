@@ -183,6 +183,52 @@ public sealed partial class WidgetShell : UserControl
             typeof(WidgetShell),
             new PropertyMetadata(AccentColorHelper.DefaultAccentColor, OnTitleIconAppearanceChanged));
 
+    public static readonly DependencyProperty TitleIconCustomEmojiProperty =
+        DependencyProperty.Register(
+            nameof(TitleIconCustomEmoji),
+            typeof(string),
+            typeof(WidgetShell),
+            new PropertyMetadata(string.Empty, OnTitleIconAppearanceChanged));
+
+    public static readonly DependencyProperty TitleIconCustomSourceProperty =
+        DependencyProperty.Register(
+            nameof(TitleIconCustomSource),
+            typeof(ImageSource),
+            typeof(WidgetShell),
+            new PropertyMetadata(null, OnTitleIconAppearanceChanged));
+
+    public static readonly DependencyProperty CustomBackgroundSourceProperty =
+        DependencyProperty.Register(
+            nameof(CustomBackgroundSource),
+            typeof(ImageSource),
+            typeof(WidgetShell),
+            new PropertyMetadata(null, OnCustomBackgroundChanged));
+
+    public static readonly DependencyProperty CustomBackgroundFitProperty =
+        DependencyProperty.Register(
+            nameof(CustomBackgroundFit),
+            typeof(string),
+            typeof(WidgetShell),
+            new PropertyMetadata(
+                Services.WidgetBackgroundCustomization.FitFill,
+                OnCustomBackgroundChanged));
+
+    public static readonly DependencyProperty CustomBackgroundDimProperty =
+        DependencyProperty.Register(
+            nameof(CustomBackgroundDim),
+            typeof(double),
+            typeof(WidgetShell),
+            new PropertyMetadata(
+                Services.WidgetBackgroundCustomization.DefaultDimPercent / 100d,
+                OnCustomBackgroundChanged));
+
+    public static readonly DependencyProperty CustomBackgroundPanoramaSourceProperty =
+        DependencyProperty.Register(
+            nameof(CustomBackgroundPanoramaSource),
+            typeof(ImageSource),
+            typeof(WidgetShell),
+            new PropertyMetadata(null, OnCustomBackgroundChanged));
+
     public static readonly DependencyProperty OverlayTitleProperty =
         DependencyProperty.Register(
             nameof(OverlayTitle),
@@ -236,8 +282,6 @@ public sealed partial class WidgetShell : UserControl
             typeof(WidgetShell),
             new PropertyMetadata(null, OnTitleEditorContentChanged));
 
-    private Storyboard? _showButtonsStoryboard;
-    private Storyboard? _hideButtonsStoryboard;
     private readonly StoryboardSlot _overlayHandleVisualStoryboard = new();
     private readonly StoryboardSlot _compactLiveStoryboard = new();
     private readonly StoryboardSlot _compactUpdateStoryboard = new();
@@ -437,7 +481,15 @@ public sealed partial class WidgetShell : UserControl
                 RestartCompactVisualTimers();
             }
         };
-        ActualThemeChanged += (_, _) => ApplyFullBleedOverlayTheme();
+        ActualThemeChanged += (_, _) =>
+        {
+            ApplyFullBleedOverlayTheme();
+            UpdateCustomBackgroundVisual();
+        };
+        // The clip must track the HOST's size, not the shell's: the panorama
+        // host flips Collapsed→Visible without the shell itself resizing, and
+        // a zero RenderSize at that moment would clip the image away forever.
+        CustomBackgroundPanoramaHost.SizeChanged += (_, _) => UpdateCustomPanoramaClip();
         ActualThemeChanged += (_, _) =>
             UpdateCompactGroupPositionRail(_groupPresentation);
         Unloaded += (_, _) =>
@@ -553,6 +605,69 @@ public sealed partial class WidgetShell : UserControl
         get => (Color)GetValue(TitleIconAccentColorProperty);
         set => SetValue(TitleIconAccentColorProperty, value);
     }
+
+    public string TitleIconCustomEmoji
+    {
+        get => (string)GetValue(TitleIconCustomEmojiProperty);
+        set => SetValue(TitleIconCustomEmojiProperty, value);
+    }
+
+    public ImageSource? TitleIconCustomSource
+    {
+        get => (ImageSource?)GetValue(TitleIconCustomSourceProperty);
+        set => SetValue(TitleIconCustomSourceProperty, value);
+    }
+
+    /// <summary>Per-widget background image; null follows the global material.</summary>
+    public ImageSource? CustomBackgroundSource
+    {
+        get => (ImageSource?)GetValue(CustomBackgroundSourceProperty);
+        set => SetValue(CustomBackgroundSourceProperty, value);
+    }
+
+    /// <summary>Fill (cover) or Contain (fit) for the custom background.</summary>
+    public string CustomBackgroundFit
+    {
+        get => (string)GetValue(CustomBackgroundFitProperty);
+        set => SetValue(CustomBackgroundFitProperty, value);
+    }
+
+    /// <summary>Scrim strength over the background image, 0 (clear) to 1 (solid).</summary>
+    public double CustomBackgroundDim
+    {
+        get => (double)GetValue(CustomBackgroundDimProperty);
+        set => SetValue(CustomBackgroundDimProperty, value);
+    }
+
+    /// <summary>
+    /// Shared panorama bitmap; takes precedence over
+    /// <see cref="CustomBackgroundSource"/> when set. WinUI has no
+    /// ImageBrush.Viewbox, so the shell positions an oversized image with
+    /// <see cref="SetCustomPanoramaPlacement"/> and clips it to the plate.
+    /// </summary>
+    public ImageSource? CustomBackgroundPanoramaSource
+    {
+        get => (ImageSource?)GetValue(CustomBackgroundPanoramaSourceProperty);
+        set => SetValue(CustomBackgroundPanoramaSourceProperty, value);
+    }
+
+    /// <summary>
+    /// Places the panorama image so the slice under the widget's desktop
+    /// position lands inside the plate; values are DIPs relative to the
+    /// plate's top-left corner.
+    /// </summary>
+    public void SetCustomPanoramaPlacement(
+        double width,
+        double height,
+        double left,
+        double top)
+    {
+        CustomBackgroundPanoramaImage.Width = width;
+        CustomBackgroundPanoramaImage.Height = height;
+        CustomBackgroundPanoramaImage.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    public bool IsCustomBackgroundActive => CustomBackgroundSource is not null;
 
     public string OverlayTitle
     {
@@ -2285,7 +2400,7 @@ public sealed partial class WidgetShell : UserControl
             previous.ShowMediaControls != presentation.ShowMediaControls ||
             previous.UseStackedText != presentation.UseStackedText ||
             previous.UseFullBleedBackground != presentation.UseFullBleedBackground ||
-            !string.IsNullOrWhiteSpace(previous.EmojiIcon) != !string.IsNullOrWhiteSpace(presentation.EmojiIcon) ||
+            (previous.IconImage is not null) != (presentation.IconImage is not null) ||
             string.IsNullOrWhiteSpace(previous.Summary) != string.IsNullOrWhiteSpace(presentation.Summary);
 
         // Tear down the previous moving canvas before replacing either text.
@@ -2341,11 +2456,13 @@ public sealed partial class WidgetShell : UserControl
         CompactVinylHost.Visibility = showVinyl ? Visibility.Visible : Visibility.Collapsed;
         CompactVinylLabelBrush.ImageSource = showVinyl ? presentation.Thumbnail : null;
 
-        bool hasEmoji = !string.IsNullOrWhiteSpace(presentation.EmojiIcon);
-        CompactEmojiIcon.Text = presentation.EmojiIcon;
-        CompactEmojiIcon.Visibility = hasEmoji ? Visibility.Visible : Visibility.Collapsed;
+        bool hasIconImage = presentation.IconImage is not null;
+        CompactIconImage.Source = presentation.IconImage;
+        CompactIconImage.Visibility = hasIconImage
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
-        // When an emoji (e.g. weather) is shown, the default widget glyph must be
+        // When an icon image (e.g. weather) is shown, the default widget glyph must be
         // hidden. We cannot just set CompactTitleIcon.Visibility = Collapsed, because
         // WidgetTitleIcon re-applies Visibility = Visible on its own Loaded /
         // ActualThemeChanged and whenever an appearance property changes. So the hide
@@ -2356,10 +2473,10 @@ public sealed partial class WidgetShell : UserControl
         // WidgetShell.TitleIconMode DP): the content-widget appearance path
         // (ContentWidgetWindow) resets that DP to the global setting on every
         // theme/appearance refresh, which would re-show the glyph on top of the
-        // emoji. Setting the target property directly is immune to that reset.
+        // icon image. Setting the target property directly is immune to that reset.
         // When the icon should be visible we honor the user's global icon-mode
         // preference so the compact glyph still respects their setting.
-        bool showTitleIcon = !hasEmoji && !useFullBleed && presentation.Thumbnail is null && !showVinyl;
+        bool showTitleIcon = !hasIconImage && !useFullBleed && presentation.Thumbnail is null && !showVinyl;
         CompactTitleIcon.Visibility = showTitleIcon ? Visibility.Visible : Visibility.Collapsed;
         // When the icon is visible we honor the user's global icon-mode
         // preference so the compact glyph still respects their setting; fall back
@@ -2401,7 +2518,7 @@ public sealed partial class WidgetShell : UserControl
         {
             CompactBadgeText.Text = presentation.BadgeText;
             CompactBadge.Background = presentation.BadgeIsWarning
-                ? new SolidColorBrush(Windows.UI.Color.FromArgb(0xE6, 0xD8, 0x3B, 0x01))
+                ? ResolveCriticalBadgeBrush()
                 : new SolidColorBrush(
                     App.Current.ThemeService?.GetEffectiveAccentColor() ??
                     AccentColorHelper.DefaultAccentColor);
@@ -2993,11 +3110,10 @@ public sealed partial class WidgetShell : UserControl
         StartCompactLiveIndeterminate(isFullBleed);
     }
 
-    private DispatcherQueueTimer? _compactLiveBreathingTimer;
+    private ScalarKeyFrameAnimation? _compactLiveBreathingAnimation;
     private ScalarKeyFrameAnimation? _compactLiveTranslationAnimation;
     private ScalarKeyFrameAnimation? _compactLiveOpacityAnimation;
     private double _compactLiveIndeterminateSegment;
-    private double _compactLiveBreathingPhase;
 
     private void StartCompactLiveBreathing()
     {
@@ -3011,37 +3127,25 @@ public sealed partial class WidgetShell : UserControl
             return;
         }
 
-        if (_compactLiveBreathingTimer is not null)
+        if (_compactLiveBreathingAnimation is not null)
         {
             return;
         }
 
-        _compactLiveBreathingPhase = 0;
-        _compactLiveBreathingTimer = DispatcherQueue.CreateTimer();
-        _compactLiveBreathingTimer.Interval = TimeSpan.FromMilliseconds(50);
-        _compactLiveBreathingTimer.Tick += CompactLiveBreathingTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerCreated();
-        _compactLiveBreathingTimer.Start();
+        _compactLiveBreathingAnimation = StartSineOpacityBreathing(
+            CompactLiveProgress,
+            baseOpacity: 0.6,
+            amplitude: 0.2,
+            phaseStepPerTick: 0.06);
     }
 
     private void StopCompactLiveBreathing()
     {
-        if (_compactLiveBreathingTimer is not { } timer)
-        {
-            return;
-        }
-
-        _compactLiveBreathingTimer = null;
-        timer.Stop();
-        timer.Tick -= CompactLiveBreathingTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerReleased();
-    }
-
-    private void CompactLiveBreathingTimer_Tick(DispatcherQueueTimer sender, object args)
-    {
-        _compactLiveBreathingPhase += 0.06;
-        CompactLiveProgress.Opacity =
-            0.6 + 0.2 * Math.Sin(_compactLiveBreathingPhase);
+        StopSineOpacityBreathing(
+            _compactLiveBreathingAnimation,
+            CompactLiveProgress,
+            resetOpacity: 0.6,
+            out _compactLiveBreathingAnimation);
     }
 
     private void ApplyFullBleedVisibility(bool visible)
@@ -3499,8 +3603,7 @@ public sealed partial class WidgetShell : UserControl
 
     // ── Bottom glow (music playback) ─────────────────────────
 
-    private DispatcherQueueTimer? _bottomGlowTimer;
-    private double _bottomGlowPhase;
+    private ScalarKeyFrameAnimation? _bottomGlowAnimation;
 
     private void ApplySpectrum(WidgetCompactPresentation p)
     {
@@ -3509,56 +3612,18 @@ public sealed partial class WidgetShell : UserControl
         StopBottomGlow();
     }
 
-    private void StartBottomGlow()
-    {
-        if (!_isHostVisualActivityEnabled ||
-            !IsLoaded ||
-            !_isCollapsed ||
-            !CompactAmbientAnimationsEnabled() ||
-            !SystemAnimationsEnabled())
-        {
-            StopBottomGlow();
-            CompactBottomGlow.Opacity = 0.6;
-            return;
-        }
-
-        if (_bottomGlowTimer is not null)
-        {
-            return;
-        }
-
-        _bottomGlowPhase = 0;
-        _bottomGlowTimer = DispatcherQueue.CreateTimer();
-        _bottomGlowTimer.Interval = TimeSpan.FromMilliseconds(50);
-        _bottomGlowTimer.Tick += BottomGlowTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerCreated();
-        _bottomGlowTimer.Start();
-    }
-
     private void StopBottomGlow()
     {
-        if (_bottomGlowTimer is not { } timer)
-        {
-            return;
-        }
-
-        _bottomGlowTimer = null;
-        timer.Stop();
-        timer.Tick -= BottomGlowTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerReleased();
-    }
-
-    private void BottomGlowTimer_Tick(DispatcherQueueTimer sender, object args)
-    {
-        _bottomGlowPhase += 0.035;
-        CompactBottomGlow.Opacity =
-            0.35 + 0.3 * Math.Sin(_bottomGlowPhase);
+        StopSineOpacityBreathing(
+            _bottomGlowAnimation,
+            CompactBottomGlow,
+            resetOpacity: 0.6,
+            out _bottomGlowAnimation);
     }
 
     // ── Breathing border (search) ──────────────────────────────
 
-    private DispatcherQueueTimer? _breathBorderTimer;
-    private double _breathBorderPhase;
+    private ScalarKeyFrameAnimation? _breathBorderAnimation;
 
     private void ApplyShimmer(WidgetCompactPresentation p)
     {
@@ -3566,50 +3631,68 @@ public sealed partial class WidgetShell : UserControl
         StopBreathBorder();
     }
 
-    private void StartBreathBorder()
-    {
-        if (!_isHostVisualActivityEnabled ||
-            !IsLoaded ||
-            !_isCollapsed ||
-            !CompactAmbientAnimationsEnabled() ||
-            !SystemAnimationsEnabled())
-        {
-            StopBreathBorder();
-            CompactEdgeGlow.Opacity = 0.35;
-            return;
-        }
-
-        if (_breathBorderTimer is not null)
-        {
-            return;
-        }
-
-        _breathBorderPhase = 0;
-        _breathBorderTimer = DispatcherQueue.CreateTimer();
-        _breathBorderTimer.Interval = TimeSpan.FromMilliseconds(50);
-        _breathBorderTimer.Tick += BreathBorderTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerCreated();
-        _breathBorderTimer.Start();
-    }
-
     private void StopBreathBorder()
     {
-        if (_breathBorderTimer is not { } timer)
+        StopSineOpacityBreathing(
+            _breathBorderAnimation,
+            CompactEdgeGlow,
+            resetOpacity: 0.35,
+            out _breathBorderAnimation);
+    }
+
+    /// <summary>
+    /// Compositor-owned replacement for the retired 50 ms UI-thread ambient
+    /// timers: each collapsed widget used to wake the dispatcher at 20 Hz
+    /// just to oscillate one Opacity sine. The keyframes reproduce the old
+    /// base + amplitude * sin curve at eighth-cycle resolution, with the
+    /// period derived from the legacy per-tick phase step.
+    /// </summary>
+    private const int AmbientBreathingTickMilliseconds = 50;
+    private const int AmbientBreathingKeyFrameSteps = 8;
+
+    private static ScalarKeyFrameAnimation StartSineOpacityBreathing(
+        FrameworkElement element,
+        double baseOpacity,
+        double amplitude,
+        double phaseStepPerTick)
+    {
+        double periodMilliseconds =
+            (2 * Math.PI / phaseStepPerTick) * AmbientBreathingTickMilliseconds;
+        var visual = ElementCompositionPreview.GetElementVisual(element);
+        var animation = visual.Compositor.CreateScalarKeyFrameAnimation();
+        animation.Duration = TimeSpan.FromMilliseconds(periodMilliseconds);
+        animation.IterationBehavior = AnimationIterationBehavior.Forever;
+        for (int step = 0; step <= AmbientBreathingKeyFrameSteps; step++)
+        {
+            double value = baseOpacity +
+                amplitude * Math.Sin(
+                    step * 2 * Math.PI / AmbientBreathingKeyFrameSteps);
+            animation.InsertKeyFrame(
+                (float)step / AmbientBreathingKeyFrameSteps,
+                (float)value);
+        }
+
+        visual.StartAnimation("Opacity", animation);
+        return animation;
+    }
+
+    private static void StopSineOpacityBreathing(
+        ScalarKeyFrameAnimation? animation,
+        FrameworkElement element,
+        double resetOpacity,
+        out ScalarKeyFrameAnimation? cleared)
+    {
+        cleared = null;
+        if (animation is null)
         {
             return;
         }
 
-        _breathBorderTimer = null;
-        timer.Stop();
-        timer.Tick -= BreathBorderTimer_Tick;
-        PerformanceLogger.RecordTransientUiTimerReleased();
-    }
-
-    private void BreathBorderTimer_Tick(DispatcherQueueTimer sender, object args)
-    {
-        _breathBorderPhase += 0.03;
-        CompactEdgeGlow.Opacity =
-            0.35 + 0.15 * Math.Sin(_breathBorderPhase);
+        ElementCompositionPreview.GetElementVisual(element)
+            .StopAnimation("Opacity");
+        // StopAnimation reverts the visual to its XAML property value; park
+        // it at the caller's resting opacity instead.
+        element.Opacity = resetOpacity;
     }
 
     // ── Conditional animations (todo flash, capture bounce) ────
@@ -3835,6 +3918,15 @@ public sealed partial class WidgetShell : UserControl
         // A Grid keeps both copies vertically centered, including while the
         // track scrolls. Canvas children ignore VerticalAlignment.
         marquee.Clone.Margin = new Thickness(marquee.NaturalWidth + CompactMarqueeGap, 0, 0, 0);
+        // The clone's shadow layer mirrors the clone placement, plus the
+        // one-pixel drop offset it normally carries in its own Margin.
+        TextBlock cloneShadow = ResolveMarqueeCloneShadow(marquee.Clone);
+        cloneShadow.Width = marquee.NaturalWidth;
+        cloneShadow.Margin = new Thickness(
+            marquee.NaturalWidth + CompactMarqueeGap + 1,
+            1,
+            0,
+            0);
 
         var transform = new TranslateTransform();
         marquee.Track.RenderTransform = transform;
@@ -3889,6 +3981,17 @@ public sealed partial class WidgetShell : UserControl
 
     private bool ShouldSuspendCompactMarquee() =>
         _compactPresentation is { ShowVinyl: true, IsPlaying: false };
+
+    /// <summary>
+    /// The shadow layer that mirrors a marquee clone; its Margin is managed
+    /// by the marquee start/stop code alongside the clone's own placement.
+    /// </summary>
+    private TextBlock ResolveMarqueeCloneShadow(TextBlock clone)
+    {
+        return ReferenceEquals(clone, CompactTitleMarqueeClone)
+            ? CompactTitleMarqueeCloneShadow
+            : CompactSummaryMarqueeCloneShadow;
+    }
 
     private (TextBlock Primary, TextBlock Clone, Grid Track, FrameworkElement Viewport, double NaturalWidth)?
         ResolveCompactMarqueeElements()
@@ -4029,6 +4132,9 @@ public sealed partial class WidgetShell : UserControl
             _compactMarqueeClone.ClearValue(WidthProperty);
             _compactMarqueeClone.Margin = new Thickness(0);
             _compactMarqueeClone.Visibility = Visibility.Collapsed;
+            TextBlock cloneShadow = ResolveMarqueeCloneShadow(_compactMarqueeClone);
+            cloneShadow.ClearValue(WidthProperty);
+            cloneShadow.Margin = new Thickness(1, 1, 0, 0);
         }
 
         _compactMarqueePrimary = null;
@@ -4174,61 +4280,6 @@ public sealed partial class WidgetShell : UserControl
         ApplyActionButtonVisibility();
     }
 
-    private void EnsureStoryboards()
-    {
-        if (_showButtonsStoryboard is not null)
-        {
-            return;
-        }
-
-        _rightButtonsTransform = new TranslateTransform { X = 12 };
-        RightActionButtons.RenderTransform = _rightButtonsTransform;
-
-        _showButtonsStoryboard = new Storyboard();
-
-        var showOpacity = new DoubleAnimation
-        {
-            To = 1.0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(250)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
-        Storyboard.SetTarget(showOpacity, RightActionButtons);
-        Storyboard.SetTargetProperty(showOpacity, "Opacity");
-        _showButtonsStoryboard.Children.Add(showOpacity);
-
-        var showX = new DoubleAnimation
-        {
-            To = 0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(250)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
-        Storyboard.SetTarget(showX, _rightButtonsTransform);
-        Storyboard.SetTargetProperty(showX, "X");
-        _showButtonsStoryboard.Children.Add(showX);
-
-        _hideButtonsStoryboard = new Storyboard();
-
-        var hideOpacity = new DoubleAnimation
-        {
-            To = 0.0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-        };
-        Storyboard.SetTarget(hideOpacity, RightActionButtons);
-        Storyboard.SetTargetProperty(hideOpacity, "Opacity");
-        _hideButtonsStoryboard.Children.Add(hideOpacity);
-
-        var hideX = new DoubleAnimation
-        {
-            To = 12,
-            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
-        };
-        Storyboard.SetTarget(hideX, _rightButtonsTransform);
-        Storyboard.SetTargetProperty(hideX, "X");
-        _hideButtonsStoryboard.Children.Add(hideX);
-    }
-
     private static void OnTitleBarContentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is WidgetShell shell)
@@ -4252,6 +4303,80 @@ public sealed partial class WidgetShell : UserControl
             shell.Bindings.Update();
             shell.UpdateCompactGroupPositionRail(shell._groupPresentation);
         }
+    }
+
+    /// <summary>
+    /// Clips the oversized panorama image to the plate bounds; a plain grid
+    /// does not clip children, so the rectangle geometry does it explicitly.
+    /// </summary>
+    private void UpdateCustomPanoramaClip()
+    {
+        Windows.Foundation.Size size = CustomBackgroundPanoramaHost.RenderSize;
+        if (size.Width <= 0 || size.Height <= 0)
+        {
+            // Not laid out yet (e.g. the host just became visible): the
+            // host's SizeChanged re-runs this with real bounds. A zero rect
+            // here would permanently clip the image away.
+            return;
+        }
+
+        CustomBackgroundPanoramaHost.Clip = new RectangleGeometry
+        {
+            Rect = new Windows.Foundation.Rect(0, 0, size.Width, size.Height)
+        };
+    }
+
+    private static void OnCustomBackgroundChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is WidgetShell shell)
+        {
+            shell.UpdateCustomBackgroundVisual();
+        }
+    }
+
+    private void UpdateCustomBackgroundVisual()
+    {
+        bool active = CustomBackgroundSource is not null ||
+            CustomBackgroundPanoramaSource is not null;
+
+        // Panorama rendering positions an oversized image and clips it to
+        // the plate; the plain Image path covers per-widget and unified
+        // backgrounds.
+        CustomBackgroundPanoramaImage.Source = CustomBackgroundPanoramaSource;
+        CustomBackgroundPanoramaHost.Visibility =
+            CustomBackgroundPanoramaSource is not null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        UpdateCustomPanoramaClip();
+        CustomBackgroundImage.Source = CustomBackgroundPanoramaSource is null
+            ? CustomBackgroundSource
+            : null;
+        CustomBackgroundImage.Stretch =
+            Services.WidgetBackgroundCustomization.NormalizeFit(CustomBackgroundFit) ==
+                Services.WidgetBackgroundCustomization.FitContain
+                ? Stretch.Uniform
+                : Stretch.UniformToFill;
+        CustomBackgroundImage.Visibility =
+            CustomBackgroundSource is not null && CustomBackgroundPanoramaSource is null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+        // Theme-aware scrim: dark theme dims with black, light theme with
+        // white, so foreground text keeps its contrast in both themes. High
+        // contrast forces a stronger floor — text contrast wins over the
+        // photo there.
+        double dim = Math.Clamp(CustomBackgroundDim, 0d, 1d);
+        if (WindowsCompatibilityService.IsHighContrast)
+        {
+            dim = Math.Max(dim, 0.6d);
+        }
+
+        CustomBackgroundScrim.Background = new SolidColorBrush(
+            NeutralInteractionBrush.IsDarkTheme(this)
+                ? Windows.UI.Color.FromArgb(0xFF, 0x00, 0x00, 0x00)
+                : Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+        CustomBackgroundScrim.Opacity = dim;
+        CustomBackgroundScrim.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static void OnShowAddButtonChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -4402,8 +4527,6 @@ public sealed partial class WidgetShell : UserControl
 
     private void ApplyActionButtonVisibility()
     {
-        _showButtonsStoryboard?.Stop();
-        _hideButtonsStoryboard?.Stop();
         HoverActionButtons.Visibility = ShowHoverButtons ? Visibility.Visible : Visibility.Collapsed;
         RightActionButtons.Opacity = 1;
         RightActionButtons.IsHitTestVisible = ShowHoverButtons || _isCollapseActionAvailable;
@@ -4993,6 +5116,13 @@ public sealed partial class WidgetShell : UserControl
             ? Color.FromArgb(0x52, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x2E, 0x00, 0x00, 0x00));
     }
+
+    // Element-scoped resolution follows the shell's theme override
+    // (NeutralInteractionBrush), not the system theme; the fallback is the
+    // Fluent light-theme critical fill.
+    private Brush ResolveCriticalBadgeBrush() =>
+        NeutralInteractionBrush.ResolveThemedBrush("SystemFillColorCriticalBrush", this) ??
+        new SolidColorBrush(Windows.UI.Color.FromArgb(0xE6, 0xD8, 0x3B, 0x01));
 
     private void UpdateTitleEditorVisibility()
     {

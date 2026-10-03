@@ -13,7 +13,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
         Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void ProductionInventory_IsFrozenAtThirtySevenFilesAndEightySevenCalls()
+    public void ProductionInventory_IsFrozenAtThirtyEightFilesAndNinetyCalls()
     {
         var expected = new Dictionary<string, int>(StringComparer.Ordinal)
         {
@@ -53,7 +53,10 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             ["src/DeskBox/Services/TodoWidgetStore.cs"] = 3,
             ["src/DeskBox/Services/WeatherService.cs"] = 5,
             ["src/DeskBox/Services/WidgetFileStackSettings.cs"] = 7,
-            ["src/DeskBox/Services/WidgetLayoutStore.cs"] = 2
+            ["src/DeskBox/Services/WidgetLayoutStore.cs"] = 2,
+            // 3: the title-icon asset store's recent-emoji state file
+            // (load deserialize, add deserialize, atomic save serialize).
+            ["src/DeskBox/Services/WidgetTitleIconAssetStore.cs"] = 3
         };
 
         Dictionary<string, int> actual = ProductionSourceFiles()
@@ -73,8 +76,8 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             Assert.Equal(expectedCount, actual[path]);
         }
 
-        Assert.Equal(37, actual.Count);
-        Assert.Equal(87, actual.Values.Sum());
+        Assert.Equal(38, actual.Count);
+        Assert.Equal(90, actual.Values.Sum());
 
         string[] expectedContextOwners =
         [
@@ -110,6 +113,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             "src/DeskBox/Services/WeatherService.cs",
             "src/DeskBox/Services/WidgetFileStackSettings.cs",
             "src/DeskBox/Services/WidgetLayoutStore.cs",
+            "src/DeskBox/Services/WidgetTitleIconAssetStore.cs",
             "src/DeskBox/Sync/SyncJsonContext.cs"
         ];
         string[] actualContextOwners = ProductionSourceFiles()
@@ -120,7 +124,7 @@ public sealed class JsonSerializationBaselineContractTests : IDisposable
             .Order()
             .ToArray();
 
-        Assert.Equal(33, actualContextOwners.Length);
+        Assert.Equal(34, actualContextOwners.Length);
         Assert.Equal(expectedContextOwners, actualContextOwners);
     }
 

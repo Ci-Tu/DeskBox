@@ -55,37 +55,6 @@ public partial class WidgetViewModel
     }
 
     /// <summary>
-    /// Moves an item to a new position within the Items collection.
-    /// Only effective when SortMode is Manual; otherwise the call is ignored.
-    /// </summary>
-    public bool TryReorderItem(WidgetItem item, int targetIndex)
-    {
-        if (Config.SortMode != WidgetSortMode.Manual || !IsAtMappedRoot)
-        {
-            return false;
-        }
-
-        int currentIndex = Items.IndexOf(item);
-        if (currentIndex < 0 || currentIndex == targetIndex)
-        {
-            return false;
-        }
-
-        // Clamp targetIndex to valid range.
-        targetIndex = Math.Clamp(targetIndex, 0, Items.Count - 1);
-        if (currentIndex == targetIndex)
-        {
-            return false;
-        }
-
-        Items.Move(currentIndex, targetIndex);
-        NormalizeSortOrder();
-        SyncConfigItemsOrder();
-        _settingsService.UpdateWidget(Config, notifySubscribers: false);
-        return true;
-    }
-
-    /// <summary>
     /// Moves an item to a new position without persisting to config.
     /// Used for real-time reordering during drag-over for visual feedback.
     /// Switches to Manual mode if needed.  Call PersistManualOrder on drop.

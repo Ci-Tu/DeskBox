@@ -26,7 +26,7 @@ namespace DeskBox.Views;
 /// Shared base class for all desktop widget windows (file, content, quick-capture).
 /// Consolidates window setup, backdrop management, layer/Z-order control,
 /// drag/resize logic, and display-change restoration that was previously
-/// duplicated across ContentWidgetWindow and QuickCaptureWidgetWindow.
+/// duplicated across per-widget window implementations.
 /// </summary>
 public abstract partial class WidgetWindowBase : Window
 {
