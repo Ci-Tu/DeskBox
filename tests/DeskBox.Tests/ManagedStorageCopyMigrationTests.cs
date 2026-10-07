@@ -26,7 +26,7 @@ public sealed class ManagedStorageCopyMigrationTests : IDisposable
             MappedFolderPath = Source, FollowsDefaultStoragePath = true
         });
         var files = new FileService();
-        _manager = new WidgetManager(_settings, files, new OrganizerService(_settings, files),
+        _manager = new WidgetManager(_settings, files, TestOrganizerServices.Create(_settings, files),
             new ThemeService(_settings), new QuickCaptureService(new QuickCaptureStore(Path.Combine(_root, "notes"))),
             () => Path.Combine(_root, "desktop"), recycleManagedFolderDeletes: false);
     }

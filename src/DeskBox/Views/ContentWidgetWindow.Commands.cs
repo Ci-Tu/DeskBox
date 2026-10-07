@@ -286,41 +286,137 @@ public sealed partial class ContentWidgetWindow
         bool showCloseWhenClosed = false;
         IDisposable? closeWidgetFlyoutHandoff = null;
         bool showForegroundColorPickerWhenClosed = false;
+        bool showTitleIconCustomizerWhenClosed = false;
+        bool showBackgroundCustomizerWhenClosed = false;
         IDisposable? pickerHandoff = null;
         rename.Click += (_, _) => startRenameWhenClosed = true;
         flyout.Closed += (_, _) =>
         {
-            if (startRenameWhenClosed)
+            try
             {
-                DispatcherQueue.TryEnqueue(StartTitleRename);
+                if (startRenameWhenClosed)
+                {
+                    DispatcherQueue.TryEnqueue(StartTitleRename);
+                }
+                else if (showCloseWhenClosed)
+                {
+                    QueueCloseWidgetFlyout(closeWidgetFlyoutHandoff);
+                    closeWidgetFlyoutHandoff = null;
+                }
+                else if (showForegroundColorPickerWhenClosed)
+                {
+                    QueueInteractionGuardedFlyout(
+                        pickerHandoff,
+                        () =>
+                        {
+                            ShowFlyoutWithInteraction(
+                                BuildWidgetForegroundColorPickerFlyout(),
+                                ContentWidgetShell);
+                            return Task.CompletedTask;
+                        });
+                    pickerHandoff = null;
+                }
+                else if (showTitleIconCustomizerWhenClosed)
+                {
+                    QueueInteractionGuardedFlyout(
+                        pickerHandoff,
+                        () =>
+                        {
+                            ShowTitleIconCustomizer();
+                            return Task.CompletedTask;
+                        });
+                    pickerHandoff = null;
+                }
+                else if (showBackgroundCustomizerWhenClosed)
+                {
+                    QueueInteractionGuardedFlyout(
+                        pickerHandoff,
+                        () =>
+                        {
+                            ShowWidgetBackgroundCustomizer();
+                            return Task.CompletedTask;
+                        });
+                    pickerHandoff = null;
+                }
             }
-            else if (showCloseWhenClosed)
+            finally
             {
-                QueueCloseWidgetFlyout(closeWidgetFlyoutHandoff);
-                closeWidgetFlyoutHandoff = null;
-            }
-            else if (showForegroundColorPickerWhenClosed)
-            {
-                QueueInteractionGuardedFlyout(
-                    pickerHandoff,
-                    () =>
-                    {
-                        ShowFlyoutWithInteraction(
-                            BuildWidgetForegroundColorPickerFlyout(),
-                            ContentWidgetShell);
-                        return Task.CompletedTask;
-                    });
-                pickerHandoff = null;
+                // The color toggle keeps this menu open (#437), so rename,
+                // disable, or settings can still win the dismissal after the
+                // picker handoff was armed. A handoff its branch did not
+                // queue must release here, or the compact lease leaks and a
+                // Smart capsule stays expanded forever.
+                pickerHandoff?.Dispose();
+                closeWidgetFlyoutHandoff?.Dispose();
             }
         };
         flyout.Items.Add(rename);
 
-        flyout.Items.Add(WidgetChromeMenuBuilder.Create(
+        // All per-widget appearance entries live under one top-level submenu
+        // (Windows 11 keeps primary context commands few and grouped).
+        // WidgetCustomIconAndBackgroundLiveUnderStyleMenu: the icon and
+        // background customizers and their flyout handoffs are children of
+        // this submenu, not top-level items.
+        var styleMenu = new MenuFlyoutSubItem
+        {
+            Text = App.Current.LocalizationService.T("Widget.StyleMenu.Label"),
+            Icon = new FontIcon { Glyph = "\uE790" }
+        };
+
+        var customizeIcon = new MenuFlyoutItem
+        {
+            Text = App.Current.LocalizationService.T("Widget.CustomIcon.MenuLabel"),
+            Icon = new FontIcon { Glyph = "\uE890" }
+        };
+        customizeIcon.Click += (_, _) =>
+        {
+            showTitleIconCustomizerWhenClosed = true;
+            // Same transition gap as the color picker chain: hold the
+            // interaction until the customizer flyout takes over.
+            pickerHandoff ??= AcquireCloseWidgetFlyoutHandoff();
+        };
+        styleMenu.Items.Add(customizeIcon);
+
+        var customizeBackground = new MenuFlyoutItem
+        {
+            Text = App.Current.LocalizationService.T("Widget.CustomBackground.MenuLabel"),
+            Icon = new FontIcon { Glyph = "\uE91B" }
+        };
+        customizeBackground.Click += (_, _) =>
+        {
+            showBackgroundCustomizerWhenClosed = true;
+            // Same handoff chain as the icon customizer above.
+            pickerHandoff ??= AcquireCloseWidgetFlyoutHandoff();
+        };
+        styleMenu.Items.Add(customizeBackground);
+
+        styleMenu.Items.Add(WidgetBorderMenuBuilder.Create(
+            App.Current.LocalizationService,
+            _config,
+            SetWidgetBorderModeOverride));
+
+        styleMenu.Items.Add(WidgetChromeMenuBuilder.Create(
             _config,
             _descriptor,
             App.Current.LocalizationService,
             App.Current.WidgetManager,
             SetChromeModeOverride));
+
+        styleMenu.Items.Add(WidgetForegroundMenuBuilder.Create(
+            _config,
+            App.Current.LocalizationService,
+            SetWidgetForegroundModeOverride,
+            () =>
+            {
+                showForegroundColorPickerWhenClosed = true;
+                // Hold the interaction across the flyout transition like the
+                // close confirmation chain: without the handoff a Smart
+                // capsule collapses between the menu closing and the color
+                // picker opening.
+                pickerHandoff ??= AcquireCloseWidgetFlyoutHandoff();
+            }));
+        flyout.Items.Add(styleMenu);
+
         flyout.Items.Add(WidgetCollapseMenuBuilder.Create(
             _config,
             SettingsService.Settings.WidgetCollapseBehavior,
@@ -335,19 +431,6 @@ public sealed partial class ContentWidgetWindow
             _config.IsSizeLocked,
             SetPositionLocked,
             SetSizeLocked));
-        flyout.Items.Add(WidgetForegroundMenuBuilder.Create(
-            _config,
-            App.Current.LocalizationService,
-            SetWidgetForegroundModeOverride,
-            () =>
-            {
-                showForegroundColorPickerWhenClosed = true;
-                // Hold the interaction across the flyout transition like the
-                // close confirmation chain: without the handoff a Smart
-                // capsule collapses between the menu closing and the color
-                // picker opening.
-                pickerHandoff ??= AcquireCloseWidgetFlyoutHandoff();
-            }));
 
         if (_config.WidgetKind is WidgetKind.File)
         {
@@ -799,14 +882,6 @@ public sealed partial class ContentWidgetWindow
         return item;
     }
 
-    private void ShowTodoClearAllConfirmation()
-    {
-        if (_contentHost.CurrentContent?.View is TodoWidgetContent todoContent)
-        {
-            todoContent.ClearAllTodos();
-        }
-    }
-
     private void SetChromeModeOverride(WidgetChromeMode mode)
     {
         if (App.Current.WidgetManager is { } manager &&
@@ -820,6 +895,13 @@ public sealed partial class ContentWidgetWindow
         }
 
         WidgetChromeModeNames.SetOverrideMode(_config, mode);
+        SettingsService.UpdateWidget(_config);
+        ApplyAppearancePreview();
+    }
+
+    private void SetWidgetBorderModeOverride(string? mode)
+    {
+        WidgetBorderCustomization.SetModeOverride(_config, mode);
         SettingsService.UpdateWidget(_config);
         ApplyAppearancePreview();
     }
@@ -1042,6 +1124,20 @@ public sealed partial class ContentWidgetWindow
         }
 
         RestoreDesktopLayerFromManager();
+    }
+
+    private void ShowTitleIconCustomizer()
+    {
+        ShowFlyoutWithInteraction(
+            BuildTitleIconCustomizerFlyout(ShowTitleIconCustomizer),
+            ContentWidgetShell);
+    }
+
+    private void ShowWidgetBackgroundCustomizer()
+    {
+        ShowFlyoutWithInteraction(
+            BuildWidgetBackgroundCustomizerFlyout(ShowWidgetBackgroundCustomizer),
+            ContentWidgetShell);
     }
 
     private void ShowFlyoutWithInteraction(FlyoutBase flyout, FrameworkElement target, Windows.Foundation.Point? position = null)

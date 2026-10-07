@@ -627,6 +627,14 @@ public abstract partial class WidgetWindowBase
                     observedNativeVisibility: sender.IsVisible);
         }
 
+        // Panorama backgrounds sample the slice under the window, so they
+        // must follow drags and resizes in real time — this runs before the
+        // drag/resize config guards below on purpose.
+        if (args.DidPositionChange || args.DidSizeChange)
+        {
+            UpdateCustomPanoramaViewport();
+        }
+
         if (IsApplyingBounds ||
             TrayAnimation.IsApplyingBounds ||
             _deferTitleBarDragConfigUpdates ||

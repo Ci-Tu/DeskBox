@@ -36,9 +36,6 @@
         </Style>
 
         <local:BoolToVisibilityConverter x:Key="TrueVisibilityConverter" />
-        <local:BoolToVisibilityConverter
-            x:Key="FalseVisibilityConverter"
-            Invert="True" />
         <local:TempBarMarginConverter
             x:Key="TempBarMarginConverter"
             BarWidth="72" />
@@ -156,13 +153,14 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
+                <Image
                     Grid.Column="0"
                     VerticalAlignment="Center"
-                    FontFamily="Segoe UI Emoji"
-                    FontSize="{Binding CurrentEmojiSize}"
-                    IsTextScaleFactorEnabled="False"
-                    Text="{Binding CurrentEmoji}" />
+                    Width="{Binding CurrentEmojiSize}"
+                    Height="{Binding CurrentEmojiSize}"
+                    IsHitTestVisible="False"
+                    Source="{Binding CurrentIcon}"
+                    Stretch="Uniform" />
                 <StackPanel
                     Grid.Column="1"
                     VerticalAlignment="Center"
@@ -249,12 +247,13 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
+                <Image
                     VerticalAlignment="Center"
-                    FontFamily="Segoe UI Emoji"
-                    FontSize="{Binding CurrentEmojiSize}"
-                    IsTextScaleFactorEnabled="False"
-                    Text="{Binding CurrentEmoji}" />
+                    Width="{Binding CurrentEmojiSize}"
+                    Height="{Binding CurrentEmojiSize}"
+                    IsHitTestVisible="False"
+                    Source="{Binding CurrentIcon}"
+                    Stretch="Uniform" />
                 <StackPanel
                     Grid.Column="1"
                     VerticalAlignment="Center"
@@ -460,12 +459,13 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
+                <Image
                     VerticalAlignment="Center"
-                    FontFamily="Segoe UI Emoji"
-                    FontSize="{Binding CurrentEmojiSize}"
-                    IsTextScaleFactorEnabled="False"
-                    Text="{Binding CurrentEmoji}" />
+                    Width="{Binding CurrentEmojiSize}"
+                    Height="{Binding CurrentEmojiSize}"
+                    IsHitTestVisible="False"
+                    Source="{Binding CurrentIcon}"
+                    Stretch="Uniform" />
                 <StackPanel
                     Grid.Column="1"
                     VerticalAlignment="Center"
@@ -746,14 +746,15 @@
                                             FontSize="{x:Bind ForecastHourTextSize, Mode=OneWay}"
                                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                             Text="{Binding HourLabel}" />
-                                        <TextBlock
+                                        <Image
                                             Grid.Row="1"
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
-                                            FontFamily="Segoe UI Emoji"
-                                            FontSize="{Binding DataContext.ForecastEmojiSize, ElementName=ExpandedLayout}"
-                                            IsTextScaleFactorEnabled="False"
-                                            Text="{Binding Emoji}" />
+                                            Width="{Binding DataContext.ForecastEmojiSize, ElementName=ExpandedLayout}"
+                                            Height="{Binding DataContext.ForecastEmojiSize, ElementName=ExpandedLayout}"
+                                            IsHitTestVisible="False"
+                                            Source="{Binding Icon}"
+                                            Stretch="Uniform" />
                                         <TextBlock
                                             x:Name="HourlyTemperatureText"
                                             Grid.Row="2"
@@ -831,13 +832,14 @@
                                             FontSize="{Binding DataContext.WeekDayLabelTextSize, ElementName=ExpandedLayout}"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Text="{Binding DayLabel}" />
-                                        <TextBlock
+                                        <Image
                                             Grid.Column="1"
                                             VerticalAlignment="Center"
-                                            FontFamily="Segoe UI Emoji"
-                                            FontSize="{Binding DataContext.WeekEmojiSize, ElementName=ExpandedLayout}"
-                                            IsTextScaleFactorEnabled="False"
-                                            Text="{Binding Emoji}" />
+                                            Width="{Binding DataContext.WeekEmojiSize, ElementName=ExpandedLayout}"
+                                            Height="{Binding DataContext.WeekEmojiSize, ElementName=ExpandedLayout}"
+                                            IsHitTestVisible="False"
+                                            Source="{Binding Icon}"
+                                            Stretch="Uniform" />
                                         <Grid
                                             Grid.Column="3"
                                             Width="72"

@@ -172,7 +172,7 @@ public sealed class DesktopAutoOrganizationWatcherDelayTests : IDisposable
             var requestedDelays = new ConcurrentQueue<TimeSpan>();
             var completed = new ConcurrentQueue<DesktopAutoOrganizationCompleted>();
             var fileService = new FileService();
-            var organizer = new OrganizerService(settingsService, fileService);
+            var organizer = TestOrganizerServices.Create(settingsService, fileService);
             var widgetManager = new WidgetManager(
                 settingsService,
                 fileService,

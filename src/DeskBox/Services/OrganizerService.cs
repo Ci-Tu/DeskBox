@@ -51,14 +51,6 @@ public sealed class OrganizerService
     internal DesktopAutoOrganizationSuppressionRegistry AutoOrganizationSuppressions =>
         _autoOrganizationSuppressions;
 
-    public IReadOnlyList<OrganizationHistoryEntry> GetRecentHistory(int maxCount = 6)
-    {
-        return _settingsService.OrganizationHistory.Entries
-            .OrderByDescending(entry => entry.TimestampUtc)
-            .Take(Math.Max(0, maxCount))
-            .ToList();
-    }
-
     public OrganizationHistoryEntry? GetLatestUndoableEntry()
     {
         return _settingsService.OrganizationHistory.Entries

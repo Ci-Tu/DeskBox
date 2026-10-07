@@ -349,6 +349,90 @@ public sealed class FileItemMultiDragTests
     }
 
     [Theory]
+    [InlineData(
+        DataPackageOperation.Copy,
+        DataPackageOperation.Copy | DataPackageOperation.Move,
+        "Widget.DragOutTip.AfterCopy")]
+    [InlineData(
+        DataPackageOperation.Move,
+        DataPackageOperation.Copy | DataPackageOperation.Move,
+        "Widget.DragOutTip.AfterMove")]
+    // Windows 10 collapses the advertisement to a single effect: nothing
+    // can be flipped, so the receipt stays a plain statement.
+    [InlineData(
+        DataPackageOperation.Copy,
+        DataPackageOperation.Copy,
+        "Widget.DragOutTip.AfterCopy.NoModifiers")]
+    [InlineData(
+        DataPackageOperation.Copy,
+        DataPackageOperation.Move,
+        "Widget.DragOutTip.AfterCopy.NoModifiers")]
+    [InlineData(
+        DataPackageOperation.Move,
+        DataPackageOperation.Copy,
+        "Widget.DragOutTip.AfterMove.NoModifiers")]
+    [InlineData(
+        DataPackageOperation.Move,
+        DataPackageOperation.Move,
+        "Widget.DragOutTip.AfterMove.NoModifiers")]
+    // None is an optimized move or a cancel; Link is not a drag-out outcome.
+    [InlineData(
+        DataPackageOperation.Link,
+        DataPackageOperation.Copy | DataPackageOperation.Move,
+        null)]
+    [InlineData(
+        DataPackageOperation.None,
+        DataPackageOperation.Copy | DataPackageOperation.Move,
+        null)]
+    [InlineData(DataPackageOperation.Link, DataPackageOperation.Copy, null)]
+    [InlineData(DataPackageOperation.None, DataPackageOperation.Move, null)]
+    // An extra advertised bit (Link) does not loosen the Copy+Move rule.
+    [InlineData(
+        DataPackageOperation.Copy,
+        DataPackageOperation.Copy | DataPackageOperation.Move |
+            DataPackageOperation.Link,
+        "Widget.DragOutTip.AfterCopy")]
+    public void GetDragOutResultHintKey_TeachesModifiersOnlyWhenCopyAndMoveAdvertised(
+        DataPackageOperation dropResult,
+        DataPackageOperation allowedOperations,
+        string? expected)
+    {
+        Assert.Equal(
+            expected,
+            FileSurfaceContent.GetDragOutResultHintKey(
+                dropResult,
+                allowedOperations));
+    }
+
+    [Theory]
+    [InlineData(SettingsService.ManagedDragOutActionFollowWindows)]
+    [InlineData(SettingsService.ManagedDragOutActionMove)]
+    [InlineData(SettingsService.ManagedDragOutActionCopy)]
+    [InlineData("Nonsense")]
+    [InlineData(null)]
+    public void GetDragOutResultHintKey_Win10AdvertisementNeverTeachesModifiers(
+        string? action)
+    {
+        // Windows 10 resolves every setting to a single-effect
+        // advertisement, so the receipt there must never claim a modifier
+        // could have flipped the result.
+        DataPackageOperation allowed =
+            FileItemDragPackage.ResolveDragOutAllowedOperations(action, false);
+
+        string? copyKey = FileSurfaceContent.GetDragOutResultHintKey(
+            DataPackageOperation.Copy,
+            allowed);
+        string? moveKey = FileSurfaceContent.GetDragOutResultHintKey(
+            DataPackageOperation.Move,
+            allowed);
+
+        Assert.True(copyKey is null ||
+            copyKey.EndsWith(".NoModifiers", StringComparison.Ordinal));
+        Assert.True(moveKey is null ||
+            moveKey.EndsWith(".NoModifiers", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData(DataPackageOperation.Move, true, 1, 1, DataPackageOperation.None)]
     [InlineData(DataPackageOperation.Move, false, 1, 1, DataPackageOperation.Move)]
     [InlineData(DataPackageOperation.Move, false, 1, 0, DataPackageOperation.None)]

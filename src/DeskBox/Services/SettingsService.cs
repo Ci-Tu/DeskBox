@@ -261,8 +261,6 @@ public sealed class SettingsService
     public const int MaxFileStackExtensionsPerRule = FileStackOptionKinds.MaxExtensionsPerRule;
     public const int DefaultQuickCaptureItemPreviewLineCount = 3;
     public const int DefaultTodoItemPreviewLineCount = TodoOptionKinds.DefaultItemPreviewLineCount;
-    [Obsolete("Use the feature-specific preview line defaults.")]
-    public const int DefaultItemPreviewLineCount = DefaultQuickCaptureItemPreviewLineCount;
     public const int MinItemPreviewLineCount = QuickCaptureOptionKinds.MinItemPreviewLineCount;
     public const int MaxItemPreviewLineCount = QuickCaptureOptionKinds.MaxItemPreviewLineCount;
     public const string EditorEnterBehaviorCtrlEnterSaves = QuickCaptureOptionKinds.EnterBehaviorCtrlEnterSaves;
@@ -355,6 +353,10 @@ public const string WeatherDefaultViewToday = WeatherOptionKinds.DefaultViewToda
 public const string WeatherDefaultViewWeek = WeatherOptionKinds.DefaultViewWeek;
 public const string WeatherSkinStandard = WeatherOptionKinds.SkinStandard;
 public const string WeatherSkinRich = WeatherOptionKinds.SkinRich;
+public const string WeatherIconStyleDeskBox = WeatherOptionKinds.IconStyleDeskBox;
+public const string WeatherIconStyleFlat = WeatherOptionKinds.IconStyleFlat;
+public const string WeatherIconStyleLine = WeatherOptionKinds.IconStyleLine;
+public const string WeatherIconStyleFluent = WeatherOptionKinds.IconStyleFluent;
 public const string WeatherDataSourceMsn = WeatherOptionKinds.DataSourceMsn;
 public const string WeatherDataSourceOpenMeteo = WeatherOptionKinds.DataSourceOpenMeteo;
 public const int WeatherRefreshMinMinutes = WeatherOptionKinds.RefreshMinMinutes;
@@ -503,6 +505,15 @@ public const int DefaultSearchMaxResults = 100;
         settings.WidgetForegroundColor = WidgetForegroundSettings.DefaultCustomColorHex;
         settings.WidgetBorderColorMode = WidgetBorderColorModeNeutral;
         settings.WidgetBorderStyle = WidgetBorderStyleThin;
+        // Schema-v10 background fields reset through the slice so the
+        // facade-access ratchet stays untouched.
+        WidgetShellSettingsSlice backgroundShell = settings.WidgetShell;
+        backgroundShell.WidgetBackgroundMode = null;
+        backgroundShell.WidgetBackgroundUnifiedImage = null;
+        backgroundShell.WidgetBackgroundPanoramaImage = null;
+        backgroundShell.WidgetBackgroundDim = null;
+        backgroundShell.WidgetBackgroundUnifiedFit = null;
+        backgroundShell.WidgetTextShadowEnabled = false;
         settings.WidgetAnimationEffect = WidgetAnimationEffectSlideFade;
         settings.WidgetAnimationSpeed = WidgetAnimationSpeedStandard;
         settings.WidgetAnimationSlideDirection = WidgetAnimationSlideDirectionRight;
@@ -605,6 +616,7 @@ settings.WeatherTemperatureUnit = WeatherTemperatureUnitCelsius;
 settings.WeatherWindSpeedUnit = WeatherWindSpeedUnitKmh;
 settings.WeatherDefaultView = WeatherDefaultViewToday;
 settings.WeatherSkin = WeatherSkinStandard;
+settings.WeatherIconStyle = WeatherIconStyleFluent;
 settings.WeatherDataSource = WeatherDataSourceMsn;
 settings.WeatherShowForecast = true;
 settings.WeatherShowSunrise = true;
@@ -1529,6 +1541,7 @@ settings.FocusClickedWidgetOnRaise = false;
         }
 
         changed |= WidgetForegroundSettings.NormalizeGlobal(settings);
+        changed |= WidgetBackgroundCustomization.NormalizeGlobal(settings);
 
         if (settings.WidgetBorderColorMode is not (
             WidgetBorderColorModeNeutral or
@@ -2469,6 +2482,21 @@ settings.FocusClickedWidgetOnRaise = false;
                 changed = true;
             }
 
+            if (WidgetTitleIconCustomization.NormalizeOverrides(widget))
+            {
+                changed = true;
+            }
+
+            if (WidgetBackgroundCustomization.NormalizeOverrides(widget))
+            {
+                changed = true;
+            }
+
+            if (WidgetBorderCustomization.NormalizeOverrides(widget))
+            {
+                changed = true;
+            }
+
             if (widget.IsDisabled && widget.WidgetKind != WidgetKind.Glance)
             {
                 widget.IsDisabled = false;
@@ -3260,6 +3288,13 @@ settings.FocusClickedWidgetOnRaise = false;
         if (!string.Equals(settings.WeatherSkin, normalizedSkin, StringComparison.Ordinal))
         {
             settings.WeatherSkin = normalizedSkin;
+            changed = true;
+        }
+
+        string normalizedIconStyle = WeatherOptionKinds.NormalizeIconStyle(settings.WeatherIconStyle);
+        if (!string.Equals(settings.WeatherIconStyle, normalizedIconStyle, StringComparison.Ordinal))
+        {
+            settings.WeatherIconStyle = normalizedIconStyle;
             changed = true;
         }
 

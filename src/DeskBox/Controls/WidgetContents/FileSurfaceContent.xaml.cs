@@ -222,6 +222,7 @@ public sealed partial class FileSurfaceContent :
         RegisterRenderWindowScrollTracking();
         Root.DataContext = ViewModel;
         Root.IsTabStop = true;
+        EmptyAddButtonText.Text = T("Widget.AddFile");
         InitializeEmptyStateHelp();
         OpenSelectionButton.Label = T("Common.Open");
         CopySelectionButton.Label = T("Common.Copy");
@@ -784,6 +785,11 @@ public sealed partial class FileSurfaceContent :
         await RunAsync(RefreshAsync);
     }
 
+    private async void AddButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunAsync(PickAndImportFilesAsync);
+    }
+
     private void EmptyStateHelpButton_Click(object sender, RoutedEventArgs e)
     {
         FlyoutBase.ShowAttachedFlyout(EmptyStateHelpButton);
@@ -1329,6 +1335,10 @@ public sealed partial class FileSurfaceContent :
         bool hasStorageItems = _activeDragHasStorageItems;
         bool handledAsStackMembership =
             _activeDragHandledAsStackMembership;
+        // Captured before the resets below: the drag-out result hint runs
+        // after the session fields are cleared and still needs the set this
+        // gesture advertised to decide whether modifiers could flip it.
+        DataPackageOperation allowedOperations = _activeDragAllowedOperations;
         string? dragSessionId = _activeDragSessionId;
         bool releaseRecoveryPending = _sourceDragSession.ReleaseRecoveryPending;
         _sourceDragSession.Complete(dragSessionId);
@@ -1420,6 +1430,7 @@ public sealed partial class FileSurfaceContent :
 
             MaybeShowDragOutResultHint(
                 dropResult,
+                allowedOperations,
                 observation,
                 handledAsStackMembership);
         }
@@ -2573,9 +2584,12 @@ public sealed partial class FileSurfaceContent :
     // None covers optimized moves and cancels alike): explains what just
     // happened and names the modifier that would have flipped it. A drag
     // advertised with a single effect (Windows 10) could not be flipped, so
-    // the receipt stays a plain statement there.
+    // the receipt stays a plain statement there. The advertised set arrives
+    // as a parameter captured before the session fields were reset — reading
+    // them here would always see None.
     private void MaybeShowDragOutResultHint(
         DataPackageOperation dropResult,
+        DataPackageOperation allowedOperations,
         ExternalDragObservation observation,
         bool handledAsStackMembership)
     {
@@ -2586,19 +2600,7 @@ public sealed partial class FileSurfaceContent :
             return;
         }
 
-        bool modifiersCouldFlip = _activeDragAllowedOperations
-            .HasFlag(DataPackageOperation.Copy) &&
-            _activeDragAllowedOperations.HasFlag(DataPackageOperation.Move);
-        string? key = dropResult switch
-        {
-            DataPackageOperation.Copy => modifiersCouldFlip
-                ? "Widget.DragOutTip.AfterCopy"
-                : "Widget.DragOutTip.AfterCopy.NoModifiers",
-            DataPackageOperation.Move => modifiersCouldFlip
-                ? "Widget.DragOutTip.AfterMove"
-                : "Widget.DragOutTip.AfterMove.NoModifiers",
-            _ => null
-        };
+        string? key = GetDragOutResultHintKey(dropResult, allowedOperations);
         if (key is null)
         {
             return;
@@ -2608,6 +2610,30 @@ public sealed partial class FileSurfaceContent :
             T(key),
             WidgetFeedbackSeverity.Info,
             "drag-out-result-tip"));
+    }
+
+    // Pure key choice for the receipt above, extracted for unit tests: only
+    // a Copy+Move advertisement can be flipped with Shift/Ctrl, and only a
+    // reported Copy or Move says anything definitive — None is an optimized
+    // move or a cancel, and Link is not an outcome this surface's drag-out
+    // produces.
+    internal static string? GetDragOutResultHintKey(
+        DataPackageOperation dropResult,
+        DataPackageOperation allowedOperations)
+    {
+        bool modifiersCouldFlip =
+            allowedOperations.HasFlag(DataPackageOperation.Copy) &&
+            allowedOperations.HasFlag(DataPackageOperation.Move);
+        return dropResult switch
+        {
+            DataPackageOperation.Copy => modifiersCouldFlip
+                ? "Widget.DragOutTip.AfterCopy"
+                : "Widget.DragOutTip.AfterCopy.NoModifiers",
+            DataPackageOperation.Move => modifiersCouldFlip
+                ? "Widget.DragOutTip.AfterMove"
+                : "Widget.DragOutTip.AfterMove.NoModifiers",
+            _ => null
+        };
     }
 
     private void ShowSameDirectoryDropFeedback()
@@ -3891,6 +3917,30 @@ public sealed partial class FileSurfaceContent :
         {
             await CompleteTrackedImportAsync(ImportCompletionState.Canceled);
             throw;
+        }
+        catch (FileService.FileTransferPartialFailureException ex) when (
+            ex.InnerException is FileService.FileTransferSourceCleanupException)
+        {
+            // The copy itself completed and the destination is intact; only
+            // the source deletion was blocked (typically a file still held
+            // open by another app). The view model already applied the
+            // receipts and the organizer recorded an undoable history entry,
+            // so report a completed import with a warning instead of a
+            // failure — the failure card reads as "nothing was imported"
+            // and drives duplicate retries (feedback 316). Sources that
+            // still physically exist stay out of the moved-out list so the
+            // source widget keeps showing them.
+            await CompleteTrackedImportAsync(ImportCompletionState.Completed);
+            ShowFeedback(new(
+                _localizationService.T("Widget.Import.SourceCleanupPending"),
+                WidgetFeedbackSeverity.Warning,
+                "file-import-source-cleanup-pending"));
+            movedSourcePaths.AddRange(ex.CompletedResults
+                .Where(result =>
+                    !File.Exists(result.SourcePath) &&
+                    !Directory.Exists(result.SourcePath))
+                .Select(result => result.SourcePath));
+            return movedSourcePaths;
         }
         catch
         {
@@ -5380,6 +5430,8 @@ public sealed partial class FileSurfaceContent :
 
         UpdateItemSurfaceVisuals();
     }
+
+    public Task AddFromTitleButtonAsync() => RunAsync(PickAndImportFilesAsync);
 
     private async Task PickAndImportFilesAsync()
     {

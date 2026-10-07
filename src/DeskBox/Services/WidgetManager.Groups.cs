@@ -86,12 +86,6 @@ public sealed partial class WidgetManager
 
     public bool IsWidgetGroupingEnabled => true;
 
-    public void NotifyWidgetGroupingAvailabilityChanged()
-    {
-        // Retained for compatibility with older callers. Grouping is always
-        // available now, so there is no runtime capability to refresh.
-    }
-
     public async Task<bool> DissolveAllWidgetGroupsAsync()
     {
         if (!HasUiThreadAccess())
@@ -216,6 +210,14 @@ public sealed partial class WidgetManager
                 glyph = "\uE8A5";
             }
 
+            string customEmoji =
+                WidgetTitleIconCustomization.GetEmojiOverride(config) ??
+                string.Empty;
+            string? customImagePath = customEmoji.Length == 0
+                ? WidgetTitleIconAssetStore.Current.ResolveImagePath(
+                    config.Id,
+                    WidgetTitleIconCustomization.GetImageFileNameOverride(config))
+                : null;
             members.Add(new WidgetGroupMemberPresentation(
                 config.Id,
                 ResolveGroupMemberDisplayName(config),
@@ -226,7 +228,9 @@ public sealed partial class WidgetManager
                         config.FollowsDefaultStoragePath)
                     : WidgetTitleIconKindNames.FromWidgetKind(
                         config.WidgetKind),
-                string.Equals(group.ActiveMemberId, config.Id, StringComparison.Ordinal)));
+                string.Equals(group.ActiveMemberId, config.Id, StringComparison.Ordinal),
+                customEmoji,
+                customImagePath));
         }
 
         return members.Count < 2

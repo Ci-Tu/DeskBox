@@ -146,6 +146,9 @@ public sealed partial class WidgetGroupTitleSwitcher
                 }
                 row.Icon.Glyph = member.Glyph;
                 row.Icon.IconKind = member.IconKind;
+                row.Icon.CustomEmoji = member.CustomTitleIconEmoji;
+                row.Icon.CustomImageSource = WidgetTitleIconImageSourceFactory
+                    .TryCreate(member.CustomTitleIconImagePath);
                 row.Icon.Mode = TitleIconMode;
                 row.Icon.AccentColor = TitleIconAccentColor;
                 row.Icon.IconSize = IconSize;

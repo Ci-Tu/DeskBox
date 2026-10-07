@@ -17,12 +17,10 @@ public partial class SettingsViewModel
     public string DistributionChannelText => _localizationService.T(IsStoreUpdateDelivery
         ? "Settings.About.Channel.Store"
         : "Settings.About.Channel.Direct");
-    public string OpenSourceRepositoryUrl => RepositoryUrl;
     public string OfficialWebsiteDisplayText => OfficialWebsiteUrl.Replace("https://", string.Empty).TrimEnd('/');
     public string OfficialWebsiteLink => OfficialWebsiteUrl;
     public string MicrosoftStoreLink => MicrosoftStoreUrl;
     public string MicrosoftStoreAppLink => MicrosoftStoreAppUrl;
-    public string DomesticMirrorDownloadUrl => AppUpdateService.DefaultManualDownloadUrl;
     public Visibility StoreSupportCardVisibility => IsDirectInstallerUpdateDelivery ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>

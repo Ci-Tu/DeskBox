@@ -9,9 +9,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Windows.Storage.Pickers;
+using Microsoft.Windows.Storage.Pickers;
 using Windows.System;
-using WinRT.Interop;
 
 namespace DeskBox.Views.SettingsSections;
 
@@ -342,15 +341,12 @@ private void UpdateEverythingDashboard(EverythingConnectionSnapshot snapshot)
         CancellationToken visit = editor.VisitToken;
         try
         {
-            var picker = new FileOpenPicker
-            {
-                SuggestedStartLocation = PickerLocationId.ComputerFolder
-            };
-            picker.FileTypeFilter.Add(".exe");
-            InitializeWithWindow.Initialize(picker, _ownerWindow);
-            Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-            if (file is null || visit.IsCancellationRequested) return;
-            await editor.SelectExecutableAsync(file.Path);
+            string? executablePath = await FileOpenPickerService.PickSingleFileAsync(
+                _ownerWindow,
+                [".exe"],
+                PickerLocationId.ComputerFolder);
+            if (executablePath is null || visit.IsCancellationRequested) return;
+            await editor.SelectExecutableAsync(executablePath);
         }
         catch (Exception ex)
         {

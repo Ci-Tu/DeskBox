@@ -169,7 +169,7 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LoadAsync_MigratesLegacySchemaFiveProfileThroughTheFullChainToNine()
+    public async Task LoadAsync_MigratesLegacySchemaFiveProfileThroughTheFullChainToEleven()
     {
         // A realistic settings.json as an older DeskBox build would have left
         // it on disk: widgets with geometry, Everything consent captured under
@@ -227,7 +227,7 @@ public sealed class SettingsServiceTests : IDisposable
 
         Assert.Equal(SettingsLoadRecoveryState.Primary, service.LastLoadRecoveryState);
         Assert.Equal(SettingsMigrationPipeline.CurrentSchemaVersion, service.Settings.SchemaVersion);
-        Assert.Equal(9, service.Settings.SchemaVersion);
+        Assert.Equal(11, service.Settings.SchemaVersion);
 
         // Widgets survive the chain (and the layout-store adoption): both
         // instances keep their identity, kind, and legacy geometry — the 5→6
@@ -279,7 +279,7 @@ public sealed class SettingsServiceTests : IDisposable
         // The migrated profile is persisted back at the current schema.
         using JsonDocument persisted = JsonDocument.Parse(
             await File.ReadAllTextAsync(settingsPath));
-        Assert.Equal(9, persisted.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(11, persisted.RootElement.GetProperty("schemaVersion").GetInt32());
         Assert.True(persisted.RootElement.GetProperty("fileStacksEnabled").GetBoolean());
         Assert.False(persisted.RootElement.GetProperty("fileStackAutoStacking").GetBoolean());
 
@@ -288,7 +288,7 @@ public sealed class SettingsServiceTests : IDisposable
         var reloaded = new SettingsService(_settingsRoot);
         await reloaded.LoadAsync();
         Assert.Equal(SettingsLoadRecoveryState.Primary, reloaded.LastLoadRecoveryState);
-        Assert.Equal(9, reloaded.Settings.SchemaVersion);
+        Assert.Equal(11, reloaded.Settings.SchemaVersion);
         Assert.True(reloaded.Settings.FileStacksEnabled);
         Assert.False(reloaded.Settings.FileStackAutoStacking);
         Assert.Equal(2, reloaded.Settings.Widgets.Count);
@@ -1837,6 +1837,11 @@ public sealed class SettingsServiceTests : IDisposable
         if (type == typeof(double))
         {
             return (double)(defaultValue ?? 0d) + 0.137;
+        }
+
+        if (type == typeof(double?))
+        {
+            return (defaultValue as double? ?? 0d) + 0.137;
         }
 
         if (type == typeof(long))

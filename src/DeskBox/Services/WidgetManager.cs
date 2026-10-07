@@ -1722,6 +1722,9 @@ public sealed partial class WidgetManager
             }
 
             RemoveMappedWidgetShortcut(config);
+            // Per-widget custom icon/background assets follow the widget out:
+            // nothing under data/widget-assets may outlive its config.
+            WidgetTitleIconAssetStore.Current.DeleteWidgetAssets(config.Id);
         }
 
         _settingsService.RemoveWidgetImmediate(widgetId);
@@ -2078,36 +2081,6 @@ public sealed partial class WidgetManager
         return App.UiDispatcherQueue is not null;
     }
 
-    /// <summary>
-    /// Hide a widget if it is currently loaded.
-    /// </summary>
-    public bool HideWidget(string widgetId)
-    {
-        WidgetGroupConfig? group = WidgetGroupSettings.FindByMember(
-            _settingsService.Settings,
-            widgetId);
-        if (group is not null)
-        {
-            _widgetGroupSwitchRequests.Cancel(group.SurfaceId);
-        }
-
-        if (_fileWidgets.TryGetValue(widgetId, out var fileSession))
-        {
-            fileSession.Host.HideWindow();
-            SetWidgetGroupVisibility(fileSession.Host.Config, isVisible: false);
-            return true;
-        }
-
-        if (_contentWidgets.TryGetValue(widgetId, out var contentWindow))
-        {
-            contentWindow.HideWindow();
-            SetWidgetGroupVisibility(contentWindow.Config, isVisible: false);
-            return true;
-        }
-
-        return false;
-    }
-
     private void RestoreRaisedWidgetsToDesktopLayer(bool force)
     {
         if (!force &&
@@ -2221,18 +2194,6 @@ public sealed partial class WidgetManager
         }
         _settingsService.UpdateWidget(config);
         return true;
-    }
-
-    /// <summary>
-    /// Toggle visibility across all file widgets.
-    /// </summary>
-    public async Task ToggleAllWidgetsAsync()
-    {
-        bool anyVisible = _settingsService.Settings.Widgets.Any(widget =>
-            widget.IsVisible &&
-            IsSessionCandidate(widget));
-
-        await SetAllWidgetsVisibleAsync(!anyVisible);
     }
 
     /// <summary>

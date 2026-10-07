@@ -48,6 +48,15 @@ public sealed partial class SettingsWindow
                 return;
             }
 
+            // The desktop organizer sweeps the desktop on every run; a
+            // storage root there would re-ingest its own managed folders,
+            // so the choice is rejected before any migration is offered.
+            if (ManagedStoragePathService.OverlapsDesktop(normalizedPath))
+            {
+                await ShowManagedStorageDesktopOverlapDialogAsync();
+                continue;
+            }
+
             if (App.Current.WidgetManager is not { } manager) return;
             var choice = await ManagedStorageMigrationDialog.ConfirmAsync(SettingsRoot.XamlRoot, _localizationService,
                 manager.GetDefaultManagedStorageWidgetCount(), ViewModel.ManagedStorageRootPath, normalizedPath,
@@ -78,6 +87,29 @@ public sealed partial class SettingsWindow
         }
     }
 
+    private async Task ShowManagedStorageDesktopOverlapDialogAsync()
+    {
+        if (SettingsRoot.XamlRoot is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = SettingsRoot.XamlRoot,
+            Title = _localizationService.T("Settings.ManagedPath.Error.DesktopOverlapTitle"),
+            CloseButtonText = _localizationService.T("Common.Ok"),
+            DefaultButton = ContentDialogButton.Close,
+            Content = new TextBlock
+            {
+                Text = _localizationService.T("Settings.ManagedPath.Error.DesktopOverlapBody"),
+                TextWrapping = TextWrapping.Wrap
+            }
+        };
+
+        await dialog.ShowAsync();
+    }
+
     private void RefreshManagedStoragePathWarning()
     {
         if (ManagedStoragePathWarningText is null)
@@ -88,6 +120,10 @@ public sealed partial class SettingsWindow
         ManagedStoragePathAssessment assessment =
             ManagedStoragePathService.AssessPath(ViewModel.ManagedStorageRootPath);
         var warnings = new List<string>();
+        if (ManagedStoragePathService.OverlapsDesktop(ViewModel.ManagedStorageRootPath))
+        {
+            warnings.Add(_localizationService.T("Settings.ManagedPath.Warning.DesktopOverlap"));
+        }
         if (assessment.IsSystemDrive)
         {
             warnings.Add(_localizationService.T(assessment.HasSuitableNonSystemDrive
@@ -108,9 +144,7 @@ public sealed partial class SettingsWindow
         }
 
         ManagedStoragePathWarningText.Text = string.Join(Environment.NewLine, warnings);
-        ManagedStoragePathWarningBorder.Visibility = warnings.Count > 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ManagedStoragePathWarningBorder.IsOpen = warnings.Count > 0;
     }
 
     private void RefreshDragOutWin10State()

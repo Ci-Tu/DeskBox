@@ -99,21 +99,17 @@
                 </toolkit:SettingsExpander.Items>
             </toolkit:SettingsExpander>
 
-            <Border Style="{StaticResource SettingsGroupStyle}">
-                <!-- Batch 44 recycled the group-navigation inline selector into
-                     the WidgetGroups section (the group-navigation editor owns
-                     those fields now); the row is a pure drill-down entry. -->
-                <Button Click="NestedSettingsButton_Click" Style="{StaticResource DrillDownRowStyle}" Tag="WidgetGroups">
-                    <Grid ColumnDefinitions="Auto,*,Auto" Style="{StaticResource SettingCardIdentityGridStyle}">
-                        <FontIcon Grid.Column="0" FontSize="18" Glyph="&#xE713;" IsHitTestVisible="False" VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1" IsHitTestVisible="False" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource SettingTitleTextStyle}" svc:Localized.Key="Settings.Section.WidgetGroups" />
-                            <TextBlock Style="{StaticResource SettingDescriptionTextStyle}" svc:Localized.Key="Settings.WidgetGroups.Overview.Description" />
-                        </StackPanel>
-                        <FontIcon Grid.Column="2" FontSize="12" Glyph="&#xE76C;" IsHitTestVisible="False" VerticalAlignment="Center" />
-                    </Grid>
-                </Button>
-            </Border>
+            <toolkit:SettingsCard
+                Click="NestedSettingsButton_Click"
+                IsClickEnabled="True"
+                Tag="WidgetGroups"
+                svc:Localized.DescriptionKey="Settings.WidgetGroups.Overview.Description"
+                svc:Localized.HeaderKey="Settings.Section.WidgetGroups">
+                <toolkit:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE713;" />
+                </toolkit:SettingsCard.HeaderIcon>
+                <FontIcon FontSize="12" Glyph="&#xE76C;" />
+            </toolkit:SettingsCard>
 
             <Border Style="{StaticResource SettingsGroupStyle}">
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="4">

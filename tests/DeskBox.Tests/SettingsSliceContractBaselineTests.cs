@@ -200,6 +200,7 @@ public sealed class SettingsSliceContractBaselineTests
         Assert.Equal("MSN", s.WeatherDataSource);
         Assert.Equal("Today", s.WeatherDefaultView);
         Assert.Equal("Standard", s.WeatherSkin);
+        Assert.Equal("Fluent", s.WeatherIconStyle);
         Assert.True(s.WeatherShowForecast);
         Assert.True(s.WeatherShowSunrise);
         Assert.True(s.WeatherShowUvIndex);
@@ -347,6 +348,7 @@ public sealed class SettingsSliceContractBaselineTests
         "widgetForegroundColor",
         "widgetBorderColorMode",
         "widgetBorderStyle",
+        "widgetTextShadowEnabled",
         "widgetCornerPreference",
         "widgetAnimationEffect",
         "widgetAnimationSpeed",
@@ -444,6 +446,7 @@ public sealed class SettingsSliceContractBaselineTests
         "weatherDataSource",
         "weatherDefaultView",
         "weatherSkin",
+        "weatherIconStyle",
         "weatherShowForecast",
         "weatherShowSunrise",
         "weatherShowUvIndex",

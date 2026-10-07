@@ -363,6 +363,7 @@ public sealed class WeatherSettingsEditorTests : IDisposable
         Assert.Equal(3, editor.AvailableWindSpeedUnitOptions.Count);
         Assert.Equal(2, editor.AvailableDefaultViewOptions.Count);
         Assert.Equal(2, editor.AvailableSkinOptions.Count);
+        Assert.Equal(4, editor.AvailableIconStyleOptions.Count);
         Assert.Equal(2, editor.AvailableDataSourceOptions.Count);
         Assert.Equal(4, editor.AvailableRefreshIntervalOptions.Count);
     }
@@ -379,6 +380,8 @@ public sealed class WeatherSettingsEditorTests : IDisposable
         Assert.Equal(WeatherOptionKinds.DefaultViewWeek, SettingsService.WeatherDefaultViewWeek);
         Assert.Equal(WeatherOptionKinds.SkinStandard, SettingsService.WeatherSkinStandard);
         Assert.Equal(WeatherOptionKinds.SkinRich, SettingsService.WeatherSkinRich);
+        Assert.Equal(WeatherOptionKinds.IconStyleFlat, SettingsService.WeatherIconStyleFlat);
+        Assert.Equal(WeatherOptionKinds.IconStyleFluent, SettingsService.WeatherIconStyleFluent);
         Assert.Equal(WeatherOptionKinds.DataSourceMsn, SettingsService.WeatherDataSourceMsn);
         Assert.Equal(WeatherOptionKinds.DataSourceOpenMeteo, SettingsService.WeatherDataSourceOpenMeteo);
         Assert.Equal(WeatherOptionKinds.RefreshMinMinutes, SettingsService.WeatherRefreshMinMinutes);
@@ -528,6 +531,10 @@ public sealed class WeatherSettingsEditorTests : IDisposable
             windowXaml,
             StringComparison.Ordinal);
         Assert.Contains(
+            "controls:SettingsComboBox.Value=\"{Binding SelectedIconStyle, Mode=TwoWay}\"",
+            windowXaml,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "controls:SettingsComboBox.Value=\"{Binding SelectedDataSource, Mode=TwoWay}\"",
             windowXaml,
             StringComparison.Ordinal);
@@ -570,7 +577,7 @@ public sealed class WeatherSettingsEditorTests : IDisposable
         Assert.Contains("[WinRT.GeneratedBindableCustomProperty([", bridge, StringComparison.Ordinal);
         Assert.Contains("nameof(SelectedLocationMode)", bridge, StringComparison.Ordinal);
         Assert.Contains("nameof(CitySuggestionItems)", bridge, StringComparison.Ordinal);
-        Assert.Equal(23, Regex.Matches(bridge, @"nameof\(").Count);
+        Assert.Equal(25, Regex.Matches(bridge, @"nameof\(").Count);
         Assert.DoesNotContain("nameof(AvailableDisplayOptions)", bridge, StringComparison.Ordinal);
         Assert.Equal(34, Regex.Matches(bindableShell, @"nameof\(").Count);
     }

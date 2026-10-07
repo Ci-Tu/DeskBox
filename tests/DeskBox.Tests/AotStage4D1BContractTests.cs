@@ -58,18 +58,13 @@ public sealed class AotStage4D1BContractTests
         // Localized.cs deliberately ignores them at runtime because those
         // containers have no Header/Description property.
         IReadOnlyDictionary<string, int> usages = ReadLocalizedXamlUsages();
-        Assert.Equal(10, usages.Count);
-        Assert.Equal(185, usages["toolkit:SettingsCard|HeaderKey"]);
-        Assert.Equal(156, usages["toolkit:SettingsCard|DescriptionKey"]);
-        Assert.Equal(20, usages["toolkit:SettingsExpander|HeaderKey"]);
-        Assert.Equal(7, usages["toolkit:SettingsExpander|DescriptionKey"]);
+        Assert.Equal(5, usages.Count);
+        Assert.Equal(203, usages["toolkit:SettingsCard|HeaderKey"]);
+        Assert.Equal(169, usages["toolkit:SettingsCard|DescriptionKey"]);
+        Assert.Equal(22, usages["toolkit:SettingsExpander|HeaderKey"]);
+        Assert.Equal(9, usages["toolkit:SettingsExpander|DescriptionKey"]);
         Assert.Equal(2, usages["TextBox|HeaderKey"]);
-        Assert.Equal(2, usages["Grid|HeaderKey"]);
-        Assert.Equal(1, usages["Grid|DescriptionKey"]);
-        Assert.Equal(1, usages["StackPanel|HeaderKey"]);
-        Assert.Equal(1, usages["Expander|HeaderKey"]);
-        Assert.Equal(1, usages["Expander|DescriptionKey"]);
-        Assert.Equal(376, usages.Values.Sum());
+        Assert.Equal(405, usages.Values.Sum());
     }
 
     [Fact]
