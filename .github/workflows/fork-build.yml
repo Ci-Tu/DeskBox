@@ -1,14 +1,14 @@
 name: Fork Build
 
-# 每日定时检查上游(Tianyu199509/DeskBox)是否有新提交;
-# 有则同步到 fork 的 main 分支,然后用上游自带的分发脚本
+# 手动/推送时同步上游(Tianyu199509/DeskBox)并用上游自带的分发脚本
 # (审计构建 + Full Native AOT 零售载荷 + Inno 安装包)构建,
-# 并发布 DeskBox_Setup_<版本>_x64.exe 到本 fork 的 Releases。
+# 发布 DeskBox_Setup_<版本>_x64.exe 到本 fork 的 Releases。
 # 应用内置更新器读取的正是 releases/latest 下的 DeskBox_Setup_*_x64.exe。
+# 每日定时同步已于 2026-10-07 移除:fork 补丁固定改动设置契约测试的
+# 数量预算,上游每加设置字段必冲突,定时任务只会天天报错。
+# 想跟随上游时在 Actions 页手动运行 Fork Build(冲突时需本地人工合并)。
 
 on:
-  schedule:
-    - cron: "20 1 * * *" # 每天 01:20 UTC(北京 09:20)
   workflow_dispatch:
   push:
     branches:
